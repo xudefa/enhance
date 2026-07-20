@@ -1,0 +1,130 @@
+# ==================== Go 项目 ====================
+
+# 测试产生的二进制文件
+*.test
+*.exe
+*.out
+*.prof
+
+# 测试覆盖率
+coverage.out
+coverage.html
+*.coverprofile
+
+# 构建产物
+bin/
+dist/
+build/
+
+# 依赖
+vendor/
+
+# Go 工作区
+go.work
+go.work.sum
+
+# ==================== 操作系统 ====================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==================== IDE 和编辑器 ====================
+
+# JetBrains (GoLand, IntelliJ)
+.idea/
+*.iml
+*.iws
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# ==================== AI 开发工具 ====================
+
+# Trae IDE
+.trae/
+.trae-cache/
+
+# Cursor
+.cursor/
+.cursorrules
+.cursorignore
+
+# GitHub Copilot
+.github/copilot-instructions.md
+
+# Roo Code (原 Cline)
+.roo/
+.cline/
+
+# Windsurf / Codeium
+.windsurf/
+.codeium/
+
+# Augment Code
+.augment/
+
+# Qwen / Tongyi
+.qwen/
+.tongyi/
+
+# CodeBuddy
+.codebuddy/
+
+# Devin
+.devin/
+
+# Sourcegraph Cody
+.cody/
+
+# ==================== 临时文件 ====================
+
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# ==================== 日志文件 ====================
+
+*.log
+logs/
+
+# ==================== 环境变量和配置 ====================
+
+.env
+.env.local
+.env.*.local
+*.secret
+*.key
+
+# ==================== 其他 ====================
+
+# Git 自身（不应被跟踪）
+.git/
+
+# Shelf（IDE 功能）
+/shelf/
+
+# 工作区配置（IDE 本地）
+/workspace.xml
+
+# Editor-based HTTP Client requests
+/httpRequests/
+
+# Datasource local storage
+/dataSources/
+/dataSources.local.xml
