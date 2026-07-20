@@ -1,0 +1,46 @@
+{
+  "app": {
+    "name": "enhance-gorm-demo",
+    "version": "1.0.0",
+    "description": "Enhance GORM Demo Application"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "mode": "debug"
+  },
+  "viper": {
+    "enabled": true,
+    "config-name": "application",
+    "config-type": "json",
+    "config-paths": "./,./config",
+    "env-prefix": "ENHANCE"
+  },
+  "gorm": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 3306,
+    "username": "scott",
+    "password": "123456",
+    "database": "demo",
+    "charset": "utf8mb4",
+    "max-open-conns": 100,
+    "max-idle-conns": 10,
+    "conn-max-lifetime": 3600
+  },
+  "actuator": {
+    "enabled": true,
+    "endpoints": {
+      "health": {
+        "enabled": true,
+        "show-details": "when-authorized"
+      },
+      "info": {
+        "enabled": true
+      },
+      "metrics": {
+        "enabled": true
+      }
+    }
+  }
+}

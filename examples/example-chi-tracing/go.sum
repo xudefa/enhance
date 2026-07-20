@@ -1,0 +1,6 @@
+github.com/go-chi/chi/v5 v5.0.12 h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=
+github.com/go-chi/chi/v5 v5.0.12/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
+github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
+github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance/starter/chi v0.0.2 h1:e2rJW8gnNlx1AxitRj+MRGJG2HBYHD0NNZnCd7oEf0Y=
+github.com/xudefa/enhance/starter/chi v0.0.2/go.mod h1:vSH8FvkY9vY1mh5hv/1fe/rhFm5ZTEXY4P+d4Z/wSGY=

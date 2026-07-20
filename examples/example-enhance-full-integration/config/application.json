@@ -1,0 +1,53 @@
+{
+  "enhance": {
+    "debug": true
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "log": {
+    "zerolog": {
+      "enabled": true,
+      "level": "debug",
+      "format": "console",
+      "time-format": "2006-01-02 15:04:05",
+      "add-source": true,
+      "output-path": "log/app.log"
+    }
+  },
+  "db": {
+    "gorm": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 3306,
+      "username": "scott",
+      "password": "123456",
+      "database": "demo",
+      "charset": "utf8mb4",
+      "max-open-conns": 10,
+      "max-idle-conns": 5,
+      "conn-max-lifetime": 60
+    }
+  },
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "enabled": true,
+      "secret-key": "my-secret-key-for-jwt-authentication",
+      "expiration": 3600,
+      "exclude-paths": "/login,/register,/public/**"
+    },
+    "casbin": {
+      "enabled": true,
+      "model-type": "file",
+      "model-path": "config/casbin_model.conf",
+      "policy-type": "gorm",
+      "table-name": "casbin_rule",
+      "auto-create-table": true,
+      "auto-load": true,
+      "auto-load-interval": 5
+    },
+    "rules": "/public/**->permitAll,/login->permitAll,/api/profile->authenticated,/api/admin/**->hasRole('admin'),/api/users/**->hasRole('admin')"
+  }
+}
