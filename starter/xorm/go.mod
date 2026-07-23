@@ -14,7 +14,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
-	github.com/xudefa/enhance v0.0.2
+	github.com/xudefa/enhance v0.0.3
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect

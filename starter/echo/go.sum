@@ -19,8 +19,8 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
-github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
-github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance v0.0.3 h1:T5vZLtOFaRQkGm8vncIB8tlXlfBTfhjdtk9gd3bMT0Q=
+github.com/xudefa/enhance v0.0.3/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
 golang.org/x/crypto v0.33.0 h1:IOBPskki6Lysi0lo9qQvbxiQ+FvsCC/YWOecCHAixus=
 golang.org/x/crypto v0.33.0/go.mod h1:bVdXmD7IV/4GdElGPozy6U7lWdRXA4qyRVGJV57uQ5M=
 golang.org/x/net v0.35.0 h1:T5GQRQb2y08kTAByq9L4/bz8cipCdA8FbRTXewonqY8=

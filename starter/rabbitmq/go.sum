@@ -10,8 +10,8 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
-github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
-github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance v0.0.3 h1:T5vZLtOFaRQkGm8vncIB8tlXlfBTfhjdtk9gd3bMT0Q=
+github.com/xudefa/enhance v0.0.3/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
 go.uber.org/goleak v1.2.1/go.mod h1:qlT2yGI9QafXHhZZLxlSuNsMw3FFLxBr+tBRlmO1xH4=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=

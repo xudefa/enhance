@@ -1,4 +1,4 @@
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
-github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
-github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance v0.0.3 h1:T5vZLtOFaRQkGm8vncIB8tlXlfBTfhjdtk9gd3bMT0Q=
+github.com/xudefa/enhance v0.0.3/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=

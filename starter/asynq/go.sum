@@ -46,8 +46,8 @@ github.com/spf13/cast v1.6.0/go.mod h1:ancEpBxwJDODSW/UG4rDrAqiKolqNNh2DX3mk86cA
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
-github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance v0.0.3 h1:T5vZLtOFaRQkGm8vncIB8tlXlfBTfhjdtk9gd3bMT0Q=
+github.com/xudefa/enhance v0.0.3/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 go.uber.org/goleak v1.1.12/go.mod h1:cwTWslyiVhfpKIDGSZEM2HlOvcqm+tG4zioyIeLoqMQ=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
