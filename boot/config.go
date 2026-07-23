@@ -9,6 +9,53 @@ import (
 	"github.com/xudefa/enhance/lifecycle"
 )
 
+// ==================== BootConfig 结构体 ====================
+
+// BootConfig 启动配置。
+//
+// 包含应用的核心配置信息。通过 BootOption 函数式选项模式进行配置。
+type BootConfig struct {
+	// 核心配置
+	AppName     string   // 应用名称
+	Version     string   // 版本号
+	Profiles    []string // 激活的 Profile
+	ConfigPaths []string // 配置文件搜索路径列表
+	Port        int      // 服务端口（默认 8080）
+	Debug       bool     // 调试模式（默认 false）
+
+	// 配置文件
+	ConfigLocation string // 配置文件路径（向后兼容，优先使用 ConfigPaths）
+	ConfigType     string // 配置文件类型 (json)
+
+	// 自动配置
+	AutoExecute bool // 是否自动执行自动配置（默认 true）
+	Starters    bool // 是否自动管理启动器生命周期（默认 true）
+
+	// 排除的自动配置列表（按类型名匹配）
+	ExcludedAutoConfigs []string // 需要排除的自动配置类型名
+
+	// 自定义配置源
+	CustomPropertySources []environment.PropertySource // 用户自定义配置源
+
+	// 配置中心配置
+	ConfigCenterEnabled bool          // 是否启用配置中心（默认 false）
+	ConfigCenterType    string        // 配置中心类型 (nacos/etcd/consul)
+	ConfigCenterAddr    []string      // 配置中心地址
+	ConfigCenterDataID  string        // 配置中心数据ID
+	ConfigCenterGroup   string        // 配置中心分组
+	ConfigCenterPrefix  string        // 配置中心前缀
+	ConfigCenterTimeout time.Duration // 配置中心超时时间
+
+	// 显式模块（Go 风格组合，替代全局 init() 注册）
+	Modules []Module // 用户显式传入的模块列表
+
+	// 生命周期钩子（Go 风格 3 阶段：OnInit/OnStart/OnStop）
+	Hooks []lifecycle.Hook // 用户注册的生命周期钩子
+}
+
+// BootOption 启动选项函数。
+type BootOption func(*BootConfig)
+
 // defaultBootConfig 返回默认启动配置。
 func defaultBootConfig() *BootConfig {
 	return &BootConfig{

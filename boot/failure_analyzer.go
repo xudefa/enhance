@@ -4,7 +4,42 @@ package boot
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
+
+// ==================== FailureReport 结构体 ====================
+
+// FailureReport 失败报告。
+//
+// 参考 Spring Boot 的 FailureAnalysis，在应用启动失败时提供结构化的错误信息。
+// 包含错误描述、建议动作、根因和可能的解决方案。
+type FailureReport struct {
+	Headline          string         `json:"headline"`                    // 报告标题
+	Description       string         `json:"description"`                 // 错误描述
+	Action            string         `json:"action"`                      // 建议动作
+	Cause             string         `json:"cause"`                       // 根因
+	Details           map[string]any `json:"details,omitempty"`           // 附加详情
+	StackTrace        string         `json:"stackTrace,omitempty"`        // 堆栈跟踪
+	PossibleSolutions []string       `json:"possibleSolutions,omitempty"` // 可能的解决方案列表
+}
+
+// ==================== FailureAnalyzerRegistry 结构体 ====================
+
+// FailureAnalyzerRegistry 失败分析器注册表。
+//
+// 管理所有 FailureAnalyzer 的注册和查询。
+// 分析时按注册顺序遍历，返回第一个匹配的失败报告。
+type FailureAnalyzerRegistry struct {
+	mu        sync.RWMutex
+	analyzers []FailureAnalyzer
+}
+
+// SimpleFailureAnalyzer 简单的失败分析器。
+//
+// 通过传入的分析函数创建分析器，适用于简单的错误分析场景。
+type SimpleFailureAnalyzer struct {
+	analyzeFn func(err error) *FailureReport
+}
 
 // NewSimpleFailureAnalyzer 创建简单失败分析器
 //

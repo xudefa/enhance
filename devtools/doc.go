@@ -82,6 +82,8 @@ type HotReloaderOption func(HotReloader)
 // HotReloader 热重载管理器接口。
 //
 // 通过轮询方式监控指定目录的文件变更，
+// HotReloader 热重载器核心接口。
+//
 // 当检测到文件创建、修改或删除时触发回调函数。
 type HotReloader interface {
 	// OnReload 注册重载回调。
@@ -92,7 +94,13 @@ type HotReloader interface {
 
 	// Stop 停止文件监控。
 	Stop()
+}
 
+// HotReloaderInfo 热重载信息接口。
+//
+// 提供热重载状态查询功能。
+type HotReloaderInfo interface {
+	HotReloader
 	// IsRunning 检查是否正在运行。
 	IsRunning() bool
 

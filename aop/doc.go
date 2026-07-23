@@ -41,8 +41,6 @@ package aop
 import (
 	"context"
 	"reflect"
-
-	"github.com/xudefa/enhance/core"
 )
 
 // ==================== 核心接口 ====================
@@ -58,64 +56,117 @@ type Advice interface {
 	// Type 返回通知类型。
 	Type() AdviceType
 
-	// Apply 应用通知。
+	// Order 返回执行顺序。
+	Order() int
+
+	// Execute 执行通知。
 	//
-	// 执行通知的增强逻辑。对于 Around 通知，需要通过 proceed 参数
+	// 执行通知的增强逻辑。对于 Around 通知，需要通过 joinPoint.Proceed()
 	// 调用目标方法或下一个通知。
 	//
 	// 参数:
-	//   - jp: 连接点，包含方法调用的上下文信息（方法名、参数、目标对象等）
-	//   - proceed: 继续执行函数，调用它会执行目标方法或下一个通知
+	//   - ctx: 调用上下文
+	//   - joinPoint: 连接点，包含方法调用的上下文信息
 	//
 	// 返回值:
-	//   - any: 通知的返回值。对于 Around 通知，通常返回目标方法的执行结果；
-	//     对于其他通知类型，返回值通常被忽略。
-	Apply(jp JoinPoint, proceed ProceedFunc) any
+	//   - any: 通知的返回值
+	//   - error: 执行错误
+	Execute(ctx context.Context, joinPoint JoinPoint) (any, error)
 }
+
+// AdviceType 通知类型枚举。
+//
+// 定义 AOP 框架中的五种标准通知类型，对应 Spring AOP 的通知模型。
+// 每种通知类型决定了增强逻辑在目标方法执行生命周期中的介入时机。
+type AdviceType int
+
+const (
+	// AdviceTypeBefore 前置通知。
+	//
+	// 在目标方法执行之前调用增强逻辑。
+	// 适用于日志记录、参数校验、权限检查等场景。
+	// 前置通知无法阻止目标方法的执行。
+	AdviceTypeBefore AdviceType = iota
+
+	// AdviceTypeAfter 后置通知。
+	//
+	// 在目标方法执行之后调用，无论方法是否抛出异常。
+	// 适用于资源清理、状态重置等场景。
+	// 注意：后置通知在异常通知之前执行。
+	AdviceTypeAfter
+
+	// AdviceTypeAround 环绕通知。
+	//
+	// 最强大的通知类型，完全控制目标方法的执行。
+	// 可以决定是否执行目标方法、何时执行、执行几次，甚至可以替换返回值。
+	// 必须调用 joinPoint.Proceed() 使调用链继续，否则目标方法不会执行。
+	// 适用于事务管理、性能监控、重试逻辑等场景。
+	AdviceTypeAround
+
+	// AdviceTypeAfterReturning 返回后通知。
+	//
+	// 在目标方法正常返回后调用（未抛出异常）。
+	// 可以访问方法的返回值，适用于结果缓存、响应增强等场景。
+	// 如果方法抛出异常，此通知不会执行。
+	AdviceTypeAfterReturning
+
+	// AdviceTypeAfterThrowing 异常后通知。
+	//
+	// 在目标方法抛出异常后调用。
+	// 可以访问错误对象，适用于错误日志、异常转换、告警通知等场景。
+	// 如果方法正常返回，此通知不会执行。
+	AdviceTypeAfterThrowing
+)
 
 // PointCut 切点接口。
 //
 // 定义 AOP 中用于匹配目标方法的规则。切点决定了哪些类或方法需要被拦截，
 // 是 AOP 框架的核心组件之一。
-//
-// 匹配流程:
-//  1. 调用 MatchClass 检查目标类型是否匹配（如果类匹配器存在）
-//  2. 调用 MatchMethod 检查目标方法是否匹配（如果方法匹配器存在）
-//  3. 如果都匹配（或对应匹配器为 nil），则该方法会被拦截
 type PointCut interface {
-	// MatchClass 匹配类。
+	// Matches 是否匹配。
 	//
-	// 检查给定类型是否匹配切点条件。
-	// 如果返回 true，表示该类型的所有方法都可能被拦截（还需通过方法匹配）。
-	// 如果返回 false，则该类型的所有方法都不会被拦截。
-	MatchClass(c reflect.Type) bool
+	// 检查给定目标对象和方法名是否匹配切点条件。
+	//
+	// 参数:
+	//   - target: 目标对象
+	//   - methodName: 方法名
+	//
+	// 返回值:
+	//   - bool: 是否匹配
+	Matches(target any, methodName string) bool
 
-	// MatchMethod 匹配方法。
+	// MatchClass 是否匹配类。
 	//
-	// 检查给定方法是否匹配切点条件。
-	// 只有匹配的方法才会被代理拦截。
-	MatchMethod(m reflect.Method) bool
+	// 检查给定类型是否匹配切点的类级别条件，不考虑方法名。
+	// 用于预筛选切面，减少不必要的方法级匹配开销。
+	//
+	// 参数:
+	//   - t: 目标类型
+	//
+	// 返回值:
+	//   - bool: 是否匹配
+	MatchClass(t reflect.Type) bool
 
-	// String 返回切点的字符串表示。
+	// Expression 返回切点表达式。
 	//
-	// 用于调试和日志输出，返回切点的类型和匹配规则。
-	String() string
+	// 用于调试和日志输出，返回切点的匹配规则。
+	Expression() string
 }
 
-// Advisor 顾问器接口。
+// Advisor 通知器接口。
 //
-// 顾问是 AOP 中的基本单元，包含一个切点和一个通知。
+// 通知器是 AOP 中的基本单元，包含一个切点和一个通知。
 // 类似于 Spring 中的 Advisor 概念。
 //
 // 使用场景:
 //   - 细粒度的切面控制，为每个通知指定独立的切点和执行顺序
 //   - 精确控制通知执行顺序和匹配规则
 type Advisor interface {
-	// GetPointCut 获取切点。
-	GetPointCut() PointCut
+	// Advice 获取通知。
+	Advice() Advice
 
-	// GetAdvice 获取通知。
-	GetAdvice() Advice
+	// PointCut 获取切点。
+	PointCut() PointCut
 
 	// Order 获取执行顺序。
 	Order() int
@@ -126,51 +177,34 @@ type Advisor interface {
 // AOP 核心概念，代表程序执行的某个位置。在 enhance AOP 框架中，
 // 连接点通常指方法调用，通知（Advice）可以通过 JoinPoint 访问方法调用的上下文。
 type JoinPoint interface {
-	// Method 获取被拦截的方法。
-	Method() any
-
-	// Args 获取方法调用时的参数。
-	Args() []any
-
-	// Signature 获取方法签名。
-	Signature() MethodSignature
-
-	// This 获取代理对象。
-	This() any
-
 	// Target 获取目标对象。
 	Target() any
 
-	// Context 获取调用上下文。
-	Context() context.Context
+	// Method 获取方法名。
+	Method() string
+
+	// Args 获取参数。
+	Args() []any
+
+	// Proceed 执行原方法。
+	Proceed() (any, error)
+
+	// ProceedWithArgs 带参数执行原方法。
+	ProceedWithArgs(args []any) (any, error)
 }
 
-// MethodSignature 方法签名接口。
+// Invocation 调用接口。
 //
-// 描述方法的元数据信息，包括方法名和声明类型。
-type MethodSignature interface {
-	// Name 获取方法名。
-	Name() string
-
-	// DeclaringType 获取方法声明的类型。
-	DeclaringType() reflect.Type
-}
-
-// Invocation 调用信息接口。
-//
-// 继承自 JoinPoint，并添加了 Proceed 方法。
-// 用于在 Around 通知中控制方法的执行流程。
+// 用于在通知链中控制方法的执行流程。
 type Invocation interface {
-	JoinPoint
+	// JoinPoint 获取连接点。
+	JoinPoint() JoinPoint
 
-	// Proceed 继续执行。
-	//
-	// 调用此方法可以执行目标方法或通知链中的下一个通知。
-	// 可以传递自定义参数，这些参数会传递给下游的调用。
-	Proceed(args ...any) any
+	// Arguments 获取参数。
+	Arguments() []any
 
-	// SetContext 设置调用上下文。
-	SetContext(ctx context.Context)
+	// Proceed 执行。
+	Proceed() (any, error)
 }
 
 // ChainExecutor 通知链执行器接口。
@@ -259,50 +293,6 @@ type Interceptor func(inv Invocation, next func(Invocation) any) any
 
 // ==================== 枚举类型 ====================
 
-// AdviceType 通知类型枚举。
-//
-// 定义 AOP 框架中的五种标准通知类型，对应 Spring AOP 的通知模型。
-// 每种通知类型决定了增强逻辑在目标方法执行生命周期中的介入时机。
-type AdviceType string
-
-const (
-	// AdviceBefore 前置通知。
-	//
-	// 在目标方法执行之前调用增强逻辑。
-	// 适用于日志记录、参数校验、权限检查等场景。
-	// 前置通知无法阻止目标方法的执行。
-	AdviceBefore AdviceType = "before"
-
-	// AdviceAfter 后置通知。
-	//
-	// 在目标方法执行之后调用，无论方法是否抛出异常。
-	// 适用于资源清理、状态重置等场景。
-	// 注意：后置通知在异常通知之前执行。
-	AdviceAfter AdviceType = "after"
-
-	// AdviceAfterReturning 返回通知。
-	//
-	// 在目标方法正常返回后调用（未抛出异常）。
-	// 可以访问方法的返回值，适用于结果缓存、响应增强等场景。
-	// 如果方法抛出异常，此通知不会执行。
-	AdviceAfterReturning AdviceType = "after_returning"
-
-	// AdviceAfterThrowing 异常通知。
-	//
-	// 在目标方法抛出异常后调用。
-	// 可以访问错误对象，适用于错误日志、异常转换、告警通知等场景。
-	// 如果方法正常返回，此通知不会执行。
-	AdviceAfterThrowing AdviceType = "after_throwing"
-
-	// AdviceAround 环绕通知。
-	//
-	// 最强大的通知类型，完全控制目标方法的执行。
-	// 可以决定是否执行目标方法、何时执行、执行几次，甚至可以替换返回值。
-	// 必须调用 proceed 函数使调用链继续，否则目标方法不会执行。
-	// 适用于事务管理、性能监控、重试逻辑等场景。
-	AdviceAround AdviceType = "around"
-)
-
 // AopMode AOP 模式枚举。
 type AopMode string
 
@@ -351,18 +341,8 @@ type AopConfig struct {
 	EnableCache bool    // 是否启用代理缓存
 }
 
-// AopContainer AOP 容器。
-//
-// 集成 AOP 功能的 IoC 容器。
-type AopContainer struct {
-	core.Container
-	integration *AopIntegration
-	factory     *AopBeanFactory
-	processor   *AopBeanPostProcessor
-}
-
-// AopManager AOP 管理器。
-type AopManager struct {
-	config  *AopConfig
-	aspects []*AspectMeta
-}
+// 以下类型定义在其他文件中，此处仅作文档说明：
+// - AopContainer: container.go（AOP 容器结构体）
+// - AopManager: config.go（AOP 管理器结构体）
+// - ClassMatcher: point_cut.go
+// - MethodMatcher: point_cut.go

@@ -53,19 +53,30 @@ func WithOutputPath(path string) Option {
 			return
 		}
 		l.output = f
+		if l.file != nil && l.file != os.Stdout {
+			l.file.Close()
+		}
 		l.file = f
 	}
 }
 
 // SlogLogger 是 slog 日志适配器,实现 Logger 接口
 type SlogLogger struct {
-	logger     *slog.Logger
-	level      Level
-	format     string
-	timeFormat string
-	addSource  bool
-	output     io.Writer
-	file       *os.File
+	logger      *slog.Logger
+	level       Level
+	format      string
+	timeFormat  string
+	addSource   bool
+	output      io.Writer
+	file        *os.File
+	development bool // 开发模式标志，DPanic 在开发模式下会 panic
+}
+
+// WithDevelopment 设置开发模式
+func WithDevelopment(development bool) Option {
+	return func(l *SlogLogger) {
+		l.development = development
+	}
 }
 
 // NewSlogLogger 创建 slog 日志适配器
@@ -130,7 +141,7 @@ func (l *SlogLogger) toSlogLevel(level Level) slog.Level {
 // log 记录日志
 func (l *SlogLogger) log(ctx context.Context, level Level, msg string, keys []KeyValue) {
 	slogLevel := l.toSlogLevel(level)
-	var attrs []any
+	attrs := make([]any, 0, len(keys)*2)
 
 	for _, kv := range keys {
 		attrs = append(attrs, kv.Key, kv.Value)
@@ -158,10 +169,15 @@ func (l *SlogLogger) Error(ctx context.Context, msg string, keys ...KeyValue) {
 	l.log(ctx, ErrorLevel, msg, keys)
 }
 
-// DPanic 记录致命错误日志并 panic
+// DPanic 记录致命错误日志
+//
+// 在开发模式下会 panic，在生产模式下仅记录 Error 级别日志。
+// 这符合 DPanic 的标准语义：用于检测不应发生的编程错误。
 func (l *SlogLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
 	l.log(ctx, DPanicLevel, msg, keys)
-	panic(msg)
+	if l.development {
+		panic(msg)
+	}
 }
 
 // Panic 记录日志并 panic
@@ -193,7 +209,7 @@ func (l *SlogLogger) Close() error {
 
 // With 返回带有额外字段的日志记录器
 func (l *SlogLogger) With(ctx context.Context, keys ...KeyValue) Logger {
-	var attrs []any
+	attrs := make([]any, 0, len(keys)*2)
 	for _, kv := range keys {
 		attrs = append(attrs, kv.Key, kv.Value)
 	}

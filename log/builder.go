@@ -70,17 +70,23 @@ func (l *SampledLogger) Error(ctx context.Context, msg string, keys ...KeyValue)
 
 // DPanic 记录致命错误日志并 panic
 func (l *SampledLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
-	l.logger.DPanic(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.DPanic(ctx, msg, keys...)
+	}
 }
 
 // Panic 记录日志并 panic
 func (l *SampledLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
-	l.logger.Panic(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.Panic(ctx, msg, keys...)
+	}
 }
 
 // Fatal 记录致命级别日志
 func (l *SampledLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
-	l.logger.Fatal(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.Fatal(ctx, msg, keys...)
+	}
 }
 
 // Sync 同步日志缓冲区

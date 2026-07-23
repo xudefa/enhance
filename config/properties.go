@@ -130,9 +130,11 @@ func (b *PropertyBinder) bindField(v reflect.Value, key string, field reflect.St
 func (b *PropertyBinder) setDefaultValue(v reflect.Value, defaultVal string, targetType reflect.Type) error {
 	// 特殊处理 time.Duration
 	if targetType == reflect.TypeOf(time.Duration(0)) {
-		if val, err := time.ParseDuration(defaultVal); err == nil {
-			v.Set(reflect.ValueOf(val))
+		val, err := time.ParseDuration(defaultVal)
+		if err != nil {
+			return fmt.Errorf("invalid duration value %q: %w", defaultVal, err)
 		}
+		v.Set(reflect.ValueOf(val))
 		return nil
 	}
 
@@ -141,21 +143,29 @@ func (b *PropertyBinder) setDefaultValue(v reflect.Value, defaultVal string, tar
 	case reflect.String:
 		v.SetString(defaultVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if val, err := strconv.ParseInt(defaultVal, 10, 64); err == nil {
-			v.SetInt(val)
+		val, err := strconv.ParseInt(defaultVal, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid integer value %q: %w", defaultVal, err)
 		}
+		v.SetInt(val)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if val, err := strconv.ParseUint(defaultVal, 10, 64); err == nil {
-			v.SetUint(val)
+		val, err := strconv.ParseUint(defaultVal, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid unsigned integer value %q: %w", defaultVal, err)
 		}
+		v.SetUint(val)
 	case reflect.Float32, reflect.Float64:
-		if val, err := strconv.ParseFloat(defaultVal, 64); err == nil {
-			v.SetFloat(val)
+		val, err := strconv.ParseFloat(defaultVal, 64)
+		if err != nil {
+			return fmt.Errorf("invalid float value %q: %w", defaultVal, err)
 		}
+		v.SetFloat(val)
 	case reflect.Bool:
-		if val, err := strconv.ParseBool(defaultVal); err == nil {
-			v.SetBool(val)
+		val, err := strconv.ParseBool(defaultVal)
+		if err != nil {
+			return fmt.Errorf("invalid boolean value %q: %w", defaultVal, err)
 		}
+		v.SetBool(val)
 	case reflect.Slice:
 		// 逗号分隔的字符串转切片
 		parts := strings.Split(defaultVal, ",")

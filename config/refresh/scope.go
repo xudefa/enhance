@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/core"
 )
 
@@ -125,7 +126,7 @@ func (m *RefreshScopeManager) incrementBeanVersion(beanID string) int64 {
 //
 // 遍历所有已注册的可刷新 Bean，逐一通知配置变更。
 // 如果某个 Bean 通知失败，记录错误日志但不中断其他 Bean 的通知。
-func (m *RefreshScopeManager) OnConfigChange(event ConfigChangeEvent) {
+func (m *RefreshScopeManager) OnConfigChange(event environment.ConfigChangeEvent) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

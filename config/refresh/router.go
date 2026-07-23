@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/event"
 )
 
@@ -51,7 +52,7 @@ func (r *EventRouter) RegisterBean(beanID string, configKeys []string) {
 //
 // 查找受影响的 Bean，为每个 Bean 发布 BeanRefreshEvent。
 func (r *EventRouter) onConfigChange(e event.ApplicationEvent) {
-	event, ok := e.(*ConfigChangeEvent)
+	event, ok := e.(*environment.ConfigChangeEvent)
 	if !ok {
 		return
 	}

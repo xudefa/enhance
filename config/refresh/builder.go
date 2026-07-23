@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/core"
 )
 
@@ -151,13 +152,13 @@ func (b *RefreshProxyBuilder) MustBuild() *RefreshProxy {
 
 // ConfigChangeEventBuilder 配置变更事件构建器
 type ConfigChangeEventBuilder struct {
-	event ConfigChangeEvent
+	event environment.ConfigChangeEvent
 }
 
 // NewConfigChangeEventBuilder 创建配置变更事件构建器
 func NewConfigChangeEventBuilder() *ConfigChangeEventBuilder {
 	return &ConfigChangeEventBuilder{
-		event: ConfigChangeEvent{
+		event: environment.ConfigChangeEvent{
 			OldValues: make(map[string]any),
 			NewValues: make(map[string]any),
 			Metadata:  make(map[string]string),
@@ -202,6 +203,6 @@ func (b *ConfigChangeEventBuilder) Metadata(metadata map[string]string) *ConfigC
 }
 
 // Build 构建配置变更事件
-func (b *ConfigChangeEventBuilder) Build() ConfigChangeEvent {
+func (b *ConfigChangeEventBuilder) Build() environment.ConfigChangeEvent {
 	return b.event
 }

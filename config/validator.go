@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // DefaultValidator 默认验证器实现。
@@ -20,11 +21,15 @@ func (e ValidationErrors) Error() string {
 	if len(e) == 0 {
 		return ""
 	}
-	msg := "validation errors:"
+	var sb strings.Builder
+	sb.WriteString("validation errors:")
 	for _, err := range e {
-		msg += "\n  - " + err.Field + ": " + err.Message
+		sb.WriteString("\n  - ")
+		sb.WriteString(err.Field)
+		sb.WriteString(": ")
+		sb.WriteString(err.Message)
 	}
-	return msg
+	return sb.String()
 }
 
 // NewValidator 创建默认验证器

@@ -282,14 +282,14 @@ bean, err := manager.GetRefreshedBean("myService")
 
 ```go
 type RefreshableBean interface {
-    OnConfigChange(event refresh.ConfigChangeEvent) error
+    OnConfigChange(event environment.ConfigChangeEvent) error
 }
 
 type MyService struct {
     config *Config
 }
 
-func (s *MyService) OnConfigChange(event refresh.ConfigChangeEvent) error {
+func (s *MyService) OnConfigChange(event environment.ConfigChangeEvent) error {
     // 自定义配置变更处理逻辑
     s.config.Reload()
     return nil
@@ -299,7 +299,9 @@ func (s *MyService) OnConfigChange(event refresh.ConfigChangeEvent) error {
 ### 配置变更事件
 
 ```go
-event := refresh.NewConfigChangeEvent(
+import "github.com/xudefa/enhance/config/environment"
+
+event := environment.NewConfigChangeEvent(
     "modify",
     []string{"db.host", "db.port"},
     oldValues,
@@ -307,6 +309,8 @@ event := refresh.NewConfigChangeEvent(
     "nacos",
 )
 ```
+
+> **注**: `refresh.ConfigChangeEvent` 是 `environment.ConfigChangeEvent` 的类型别名，两者等价。`refresh.NewConfigChangeEvent` 同样可用，内部委托给 `environment.NewConfigChangeEvent`。
 
 ---
 

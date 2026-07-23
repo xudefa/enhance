@@ -270,6 +270,11 @@ func setFieldValue(fieldVal reflect.Value, targetType reflect.Type, strVal strin
 // 返回：
 //   - error: 验证错误
 func Validate(target any) error {
+	// 检查 nil 值，避免反射操作 panic
+	if target == nil {
+		return fmt.Errorf("target must be a pointer to struct")
+	}
+
 	v := reflect.ValueOf(target)
 	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("target must be a pointer to struct")
@@ -353,6 +358,14 @@ func validateRequired(fieldVal reflect.Value, fieldName string) error {
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if fieldVal.Int() == 0 {
+			return ValidationError{Field: fieldName, Message: "required field is zero"}
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if fieldVal.Uint() == 0 {
+			return ValidationError{Field: fieldName, Message: "required field is zero"}
+		}
+	case reflect.Float32, reflect.Float64:
+		if fieldVal.Float() == 0 {
 			return ValidationError{Field: fieldName, Message: "required field is zero"}
 		}
 	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:

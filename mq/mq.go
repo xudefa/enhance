@@ -239,13 +239,8 @@ func (q *InMemoryQueue) ReceiveWithTimeout(timeout time.Duration) (*Message, err
 
 		q.cond.Wait()
 
-		// Stop 返回 false 表示 timer 已经触发并执行了 goroutine
-		// 此时需要等待 goroutine 完成以避免泄漏
-		if !timer.Stop() {
-			// timer 已经触发，等待 Broadcast 完成
-			// 由于我们在持有锁的情况下 Wait，Broadcast 会等待我们释放锁
-			// 所以这里不需要额外等待
-		}
+		// 确保清理定时器，避免泄漏
+		timer.Stop()
 	}
 
 	elem := q.messages.Front()

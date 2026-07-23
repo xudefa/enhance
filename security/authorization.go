@@ -3,6 +3,8 @@ package security
 import (
 	"context"
 	"strings"
+
+	"github.com/xudefa/enhance/security/authorization"
 )
 
 // 访问决策投票结果常量
@@ -12,9 +14,10 @@ const (
 	ACCESS_ABSTAIN = 0  // 投票结果为 abstain 弃权
 )
 
+// DefaultRolePrefix is the standard prefix prepended to role names.
+const DefaultRolePrefix = "ROLE_"
+
 // WebExpressionVoter Web表达式投票者
-// 支持Spring Security风格的Web表达式语言
-// 用于解析和执行权限表达式（如hasRole、hasAuthority等）
 type WebExpressionVoter struct{}
 
 func NewWebExpressionVoter() *WebExpressionVoter {
@@ -22,15 +25,7 @@ func NewWebExpressionVoter() *WebExpressionVoter {
 }
 
 // Vote 投票决定访问权限
-// 支持的表达式:
-//   - permitAll: 允许所有人访问
-//   - denyAll: 拒绝所有人访问
-//   - authenticated: 仅允许已认证用户
-//   - hasRole('ROLE'): 检查是否具有指定角色
-//   - hasAnyRole('ROLE1','ROLE2'): 检查是否具有任一指定角色
-//   - hasAuthority('AUTHORITY'): 检查是否具有指定权限
-//   - hasAnyAuthority('AUTH1','AUTH2'): 检查是否具有任一指定权限
-func (v *WebExpressionVoter) Vote(ctx context.Context, authentication Authentication, object any, attributes []string) int {
+func (v *WebExpressionVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
 	if len(attributes) == 0 {
 		return ACCESS_ABSTAIN
 	}
@@ -93,28 +88,28 @@ func (v *WebExpressionVoter) Vote(ctx context.Context, authentication Authentica
 	return ACCESS_ABSTAIN
 }
 
-// hasRole 检查是否具有指定角色
-// 支持带ROLE_前缀和不带前缀两种写法
-func (v *WebExpressionVoter) hasRole(authentication Authentication, role string) bool {
+// Supports 是否支持该属性
+func (v *WebExpressionVoter) Supports(attribute string) bool {
+	return true
+}
+
+func (v *WebExpressionVoter) hasRole(authentication authorization.Authentication, role string) bool {
 	if authentication == nil {
 		return false
 	}
-
 	authorities := authentication.Authorities()
 	for _, auth := range authorities {
-		if auth == "ROLE_"+role || auth == role {
+		if auth == DefaultRolePrefix+role || auth == role {
 			return true
 		}
 	}
 	return false
 }
 
-// hasAnyRole 检查是否具有任一指定角色
-func (v *WebExpressionVoter) hasAnyRole(authentication Authentication, roles []string) bool {
+func (v *WebExpressionVoter) hasAnyRole(authentication authorization.Authentication, roles []string) bool {
 	if authentication == nil {
 		return false
 	}
-
 	for _, role := range roles {
 		if v.hasRole(authentication, role) {
 			return true
@@ -123,12 +118,10 @@ func (v *WebExpressionVoter) hasAnyRole(authentication Authentication, roles []s
 	return false
 }
 
-// hasAuthority 检查是否具有指定权限
-func (v *WebExpressionVoter) hasAuthority(authentication Authentication, authority string) bool {
+func (v *WebExpressionVoter) hasAuthority(authentication authorization.Authentication, authority string) bool {
 	if authentication == nil {
 		return false
 	}
-
 	authorities := authentication.Authorities()
 	for _, auth := range authorities {
 		if auth == authority {
@@ -138,12 +131,10 @@ func (v *WebExpressionVoter) hasAuthority(authentication Authentication, authori
 	return false
 }
 
-// hasAnyAuthority 检查是否具有任一指定权限
-func (v *WebExpressionVoter) hasAnyAuthority(authentication Authentication, authorities []string) bool {
+func (v *WebExpressionVoter) hasAnyAuthority(authentication authorization.Authentication, authorities []string) bool {
 	if authentication == nil {
 		return false
 	}
-
 	for _, authority := range authorities {
 		if v.hasAuthority(authentication, authority) {
 			return true
@@ -153,28 +144,23 @@ func (v *WebExpressionVoter) hasAnyAuthority(authentication Authentication, auth
 }
 
 // RoleVoter 角色投票者
-// 只处理具有指定前缀(默认ROLE_)的角色
-// 用于基于角色的访问控制（RBAC）
 type RoleVoter struct {
 	rolePrefix string
 }
 
-// NewRoleVoter 创建角色投票者，默认前缀为ROLE_
 func NewRoleVoter() *RoleVoter {
 	return &RoleVoter{
-		rolePrefix: "ROLE_",
+		rolePrefix: DefaultRolePrefix,
 	}
 }
 
 // Vote 投票决定访问权限
-// 只处理rolePrefix前缀的属性，其他属性返回ABSTAIN
-func (v *RoleVoter) Vote(ctx context.Context, authentication Authentication, object any, attributes []string) int {
+func (v *RoleVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
 	if len(attributes) == 0 {
 		return ACCESS_ABSTAIN
 	}
-
 	for _, attribute := range attributes {
-		if v.supports(attribute) {
+		if v.Supports(attribute) {
 			role := strings.TrimPrefix(attribute, v.rolePrefix)
 			if v.hasRole(authentication, role) {
 				return ACCESS_GRANTED
@@ -182,21 +168,18 @@ func (v *RoleVoter) Vote(ctx context.Context, authentication Authentication, obj
 			return ACCESS_DENIED
 		}
 	}
-
 	return ACCESS_ABSTAIN
 }
 
-// supports 检查属性是否以此投票者支持的前缀开头
-func (v *RoleVoter) supports(attribute string) bool {
+// Supports 是否支持该属性
+func (v *RoleVoter) Supports(attribute string) bool {
 	return strings.HasPrefix(attribute, v.rolePrefix)
 }
 
-// hasRole 检查是否具有指定角色
-func (v *RoleVoter) hasRole(authentication Authentication, role string) bool {
+func (v *RoleVoter) hasRole(authentication authorization.Authentication, role string) bool {
 	if authentication == nil {
 		return false
 	}
-
 	authorities := authentication.Authorities()
 	for _, auth := range authorities {
 		if auth == v.rolePrefix+role || auth == role {
@@ -206,14 +189,11 @@ func (v *RoleVoter) hasRole(authentication Authentication, role string) bool {
 	return false
 }
 
-// SetRolePrefix 设置角色前缀
 func (v *RoleVoter) SetRolePrefix(prefix string) {
 	v.rolePrefix = prefix
 }
 
 // AuthenticatedVoter 认证投票者
-// 检查用户是否满足特定的认证级别
-// 支持三种认证级别：FULLY（完全认证）、REMEMBERED（记住我）、ANONYMOUSLY（匿名）
 type AuthenticatedVoter struct{}
 
 func NewAuthenticatedVoter() *AuthenticatedVoter {
@@ -221,15 +201,10 @@ func NewAuthenticatedVoter() *AuthenticatedVoter {
 }
 
 // Vote 投票决定访问权限
-// 支持的表达式:
-//   - IS_AUTHENTICATED_FULLY: 要求完全认证（非匿名）
-//   - IS_AUTHENTICATED_REMEMBERED: 允许记住我或完全认证
-//   - IS_AUTHENTICATED_ANONYMOUSLY: 允许匿名用户访问（即所有人都可以访问）
-func (v *AuthenticatedVoter) Vote(ctx context.Context, authentication Authentication, object any, attributes []string) int {
+func (v *AuthenticatedVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
 	if len(attributes) == 0 {
 		return ACCESS_ABSTAIN
 	}
-
 	for _, attribute := range attributes {
 		if attribute == "IS_AUTHENTICATED_FULLY" {
 			if authentication != nil && authentication.Authenticated() {
@@ -237,31 +212,30 @@ func (v *AuthenticatedVoter) Vote(ctx context.Context, authentication Authentica
 			}
 			return ACCESS_DENIED
 		}
-
 		if attribute == "IS_AUTHENTICATED_REMEMBERED" {
 			if authentication != nil && authentication.Authenticated() {
 				return ACCESS_GRANTED
 			}
 			return ACCESS_DENIED
 		}
-
 		if attribute == "IS_AUTHENTICATED_ANONYMOUSLY" {
 			return ACCESS_GRANTED
 		}
 	}
-
 	return ACCESS_ABSTAIN
 }
 
+// Supports 是否支持该属性
+func (v *AuthenticatedVoter) Supports(attribute string) bool {
+	return true
+}
+
 // AffirmativeBased 肯定优先访问决策管理器
-// 只要有一个投票者授予访问权限就允许访问（最宽松策略）
-// 适用场景：多个权限满足其一即可访问
 type AffirmativeBased struct {
 	decisionVoters             []AccessDecisionVoter
 	allowIfAllAbstainDecisions bool
 }
 
-// NewAffirmativeBased 创建肯定优先决策管理器
 func NewAffirmativeBased(voters ...AccessDecisionVoter) *AffirmativeBased {
 	return &AffirmativeBased{
 		decisionVoters:             voters,
@@ -270,14 +244,13 @@ func NewAffirmativeBased(voters ...AccessDecisionVoter) *AffirmativeBased {
 }
 
 // Decide 决定是否授予访问权限
-// 策略: 只要有一个投票者授予权限就通过，有一个拒绝就拒绝
-func (m *AffirmativeBased) Decide(ctx context.Context, authentication Authentication, object any, attributes []string) error {
+func (m *AffirmativeBased) Decide(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) error {
 	grant := 0
 	deny := 0
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, object, attributes)
+		result := voter.Vote(ctx, authentication, resource, attributes)
 		switch result {
 		case ACCESS_GRANTED:
 			grant++
@@ -291,37 +264,34 @@ func (m *AffirmativeBased) Decide(ctx context.Context, authentication Authentica
 	if grant > 0 {
 		return nil
 	}
-
 	if deny > 0 {
 		return ErrAccessDenied
 	}
-
 	if m.allowIfAllAbstainDecisions {
 		return nil
 	}
-
 	return ErrAccessDenied
 }
 
-// AddVoter 添加投票者
+// Supports 是否支持该决策属性
+func (m *AffirmativeBased) Supports(attribute string) bool {
+	return true
+}
+
 func (m *AffirmativeBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
-// SetAllowIfAllAbstainDecisions 设置是否在所有投票者都弃权时允许访问
 func (m *AffirmativeBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }
 
 // UnanimousBased 一致通过访问决策管理器
-// 只有所有投票者都不拒绝才允许访问（最严格策略）
-// 适用场景：需要满足所有权限要求才能访问
 type UnanimousBased struct {
 	decisionVoters             []AccessDecisionVoter
 	allowIfAllAbstainDecisions bool
 }
 
-// NewUnanimousBased 创建一致通过决策管理器
 func NewUnanimousBased(voters ...AccessDecisionVoter) *UnanimousBased {
 	return &UnanimousBased{
 		decisionVoters:             voters,
@@ -330,14 +300,13 @@ func NewUnanimousBased(voters ...AccessDecisionVoter) *UnanimousBased {
 }
 
 // Decide 决定是否授予访问权限
-// 策略: 所有投票者都不拒绝，且至少有一个授予权限时通过
-func (m *UnanimousBased) Decide(ctx context.Context, authentication Authentication, object any, attributes []string) error {
+func (m *UnanimousBased) Decide(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) error {
 	deny := 0
 	grant := 0
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, object, attributes)
+		result := voter.Vote(ctx, authentication, resource, attributes)
 		switch result {
 		case ACCESS_GRANTED:
 			grant++
@@ -351,38 +320,35 @@ func (m *UnanimousBased) Decide(ctx context.Context, authentication Authenticati
 	if deny > 0 {
 		return ErrAccessDenied
 	}
-
 	if grant > 0 {
 		return nil
 	}
-
 	if m.allowIfAllAbstainDecisions {
 		return nil
 	}
-
 	return ErrAccessDenied
 }
 
-// AddVoter 添加投票者
+// Supports 是否支持该决策属性
+func (m *UnanimousBased) Supports(attribute string) bool {
+	return true
+}
+
 func (m *UnanimousBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
-// SetAllowIfAllAbstainDecisions 设置是否在所有投票者都弃权时允许访问
 func (m *UnanimousBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }
 
 // ConsensusBased 共识优先访问决策管理器
-// 根据多数投票结果决定访问权限（民主策略）
-// 适用场景：需要综合考虑多个权限维度
 type ConsensusBased struct {
 	decisionVoters             []AccessDecisionVoter
 	allowIfEqualGrantedDenied  bool
 	allowIfAllAbstainDecisions bool
 }
 
-// NewConsensusBased 创建共识优先决策管理器
 func NewConsensusBased(voters ...AccessDecisionVoter) *ConsensusBased {
 	return &ConsensusBased{
 		decisionVoters:             voters,
@@ -392,14 +358,13 @@ func NewConsensusBased(voters ...AccessDecisionVoter) *ConsensusBased {
 }
 
 // Decide 决定是否授予访问权限
-// 策略: 根据多数票决定，相同数量时按配置处理
-func (m *ConsensusBased) Decide(ctx context.Context, authentication Authentication, object any, attributes []string) error {
+func (m *ConsensusBased) Decide(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) error {
 	grant := 0
 	deny := 0
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, object, attributes)
+		result := voter.Vote(ctx, authentication, resource, attributes)
 		switch result {
 		case ACCESS_GRANTED:
 			grant++
@@ -413,36 +378,34 @@ func (m *ConsensusBased) Decide(ctx context.Context, authentication Authenticati
 	if grant > deny {
 		return nil
 	}
-
 	if deny > grant {
 		return ErrAccessDenied
 	}
-
 	if grant == deny {
 		if m.allowIfEqualGrantedDenied {
 			return nil
 		}
 		return ErrAccessDenied
 	}
-
 	if m.allowIfAllAbstainDecisions {
 		return nil
 	}
-
 	return ErrAccessDenied
 }
 
-// AddVoter 添加投票者
+// Supports 是否支持该决策属性
+func (m *ConsensusBased) Supports(attribute string) bool {
+	return true
+}
+
 func (m *ConsensusBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
-// SetAllowIfEqualGrantedDenied 设置当授权和拒绝票数相同时的处理方式
 func (m *ConsensusBased) SetAllowIfEqualGrantedDenied(allow bool) {
 	m.allowIfEqualGrantedDenied = allow
 }
 
-// SetAllowIfAllAbstainDecisions 设置是否在所有投票者都弃权时允许访问
 func (m *ConsensusBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }

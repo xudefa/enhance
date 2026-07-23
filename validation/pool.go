@@ -12,16 +12,21 @@ import (
 var regexCache sync.Map // map[string]*regexp.Regexp
 
 // compileRegex 获取或编译正则表达式
+//
+// 使用 regexp.Compile 而非 regexp.MustCompile，避免无效正则表达式导致 panic。
+// 如果编译失败，返回 nil 而非 panic。
 func compileRegex(pattern string) *regexp.Regexp {
 	if cached, ok := regexCache.Load(pattern); ok {
 		return cached.(*regexp.Regexp)
 	}
 
-	// 使用 LoadOrStore 避免并发重复编译
-	actual, loaded := regexCache.LoadOrStore(pattern, regexp.MustCompile(pattern))
-	if loaded {
-		return actual.(*regexp.Regexp)
+	// 使用 regexp.Compile 安全编译，无效模式返回 nil
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
 	}
+
+	actual, _ := regexCache.LoadOrStore(pattern, re)
 	return actual.(*regexp.Regexp)
 }
 

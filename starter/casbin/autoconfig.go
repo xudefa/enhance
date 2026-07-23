@@ -38,6 +38,8 @@ func init() {
 //  3. 如果 casbin-gorm（-1300）已注册 CasbinEnforcer，则直接使用，否则创建默认实例
 type CasbinAutoConfiguration struct {
 	logger log.Logger
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // CasbinConfig Casbin 授权配置。
@@ -125,6 +127,7 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if cfg.AutoLoad {
+		c.ctx, c.cancel = context.WithCancel(context.Background())
 		c.startAutoReload(enforcer, cfg)
 	}
 
@@ -182,16 +185,28 @@ func (c *CasbinAutoConfiguration) startAutoReload(enforcer security.CasbinEnforc
 		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			if err := enforcer.LoadPolicy(context.Background()); err != nil {
-				c.logger.Warn(context.Background(), "自动刷新 Casbin 策略失败",
-					log.KeyValue{Key: "error", Value: err.Error()},
-				)
-				continue
+		for {
+			select {
+			case <-ticker.C:
+				if err := enforcer.LoadPolicy(context.Background()); err != nil {
+					c.logger.Warn(context.Background(), "自动刷新 Casbin 策略失败",
+						log.KeyValue{Key: "error", Value: err.Error()},
+					)
+					continue
+				}
+				c.logger.Info(context.Background(), "Casbin 策略已自动刷新")
+			case <-c.ctx.Done():
+				return
 			}
-			c.logger.Info(context.Background(), "Casbin 策略已自动刷新")
 		}
 	}()
+}
+
+// Close 停止自动刷新定时器，释放 goroutine 资源。
+func (c *CasbinAutoConfiguration) Close() {
+	if c.cancel != nil {
+		c.cancel()
+	}
 }
 
 // loadConfig 从 Environment 加载 Casbin 配置。

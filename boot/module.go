@@ -2,12 +2,28 @@ package boot
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/xudefa/enhance/condition"
 	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/core/registry"
 	"github.com/xudefa/enhance/lifecycle"
 )
+
+// ==================== Module 结构体 ====================
+
+// Module 可组合的配置单元。
+//
+// Module 是 Go 风格的显式组合方式，替代全局 init() 注册。
+// 每个 Module 可以独立测试、独立复用。
+type Module struct {
+	moduleName string                       // 模块名称，用于日志和调试
+	beans      []BeanProvider               // 要注册的 Bean 提供者列表
+	invokes    []func(core.Container) error // 安装时立即调用的函数列表
+	hooks      []lifecycle.Hook             // 生命周期钩子列表
+	starters   []Starter                    // 要启动的 Starter 列表
+	conditions []condition.Condition        // 模块生效的条件
+}
 
 // Provide 通过构造函数注册 Bean
 //
@@ -240,7 +256,11 @@ func MergeModules(modules ...Module) Module {
 				result.moduleName = mod.moduleName
 				continue
 			}
-			result.moduleName += "+" + mod.moduleName
+			var sb strings.Builder
+			sb.WriteString(result.moduleName)
+			sb.WriteString("+")
+			sb.WriteString(mod.moduleName)
+			result.moduleName = sb.String()
 		}
 	}
 	return result
@@ -432,7 +452,7 @@ func (b *ModuleBuilder) Install(c core.Container) error {
 
 // ApplicationOption 应用级选项函数
 //
-// 用于 NewApplicationWithOptions 中，在应用创建后执行自定义逻辑。
+// 用于 NewApplication 中，在应用创建后执行自定义逻辑。
 type ApplicationOption func(*Boot) error
 
 // WithModulesOption 通过 ApplicationOption 方式添加模块
@@ -441,7 +461,7 @@ type ApplicationOption func(*Boot) error
 //
 // 示例:
 //
-//	app, err := boot.NewApplicationWithOptions(
+//	app, err := boot.NewApplication(
 //	    boot.WithAppName("my-app"),
 //	    boot.WithModulesOption(DatabaseModule, WebModule),
 //	)

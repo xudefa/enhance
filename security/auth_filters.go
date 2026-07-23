@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/xudefa/enhance/log"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 // UsernamePasswordAuthenticationFilter 用户名密码认证过滤器
@@ -17,7 +18,6 @@ type UsernamePasswordAuthenticationFilter struct {
 	logger                log.Logger
 }
 
-// NewUsernamePasswordAuthenticationFilterWithDefaults 创建带默认值的用户名密码认证过滤器
 func NewUsernamePasswordAuthenticationFilterWithDefaults(
 	loginProcessingURL,
 	defaultSuccessURL,
@@ -34,8 +34,15 @@ func NewUsernamePasswordAuthenticationFilterWithDefaults(
 	}
 }
 
-// DoFilter 处理用户名密码认证
-func (f *UsernamePasswordAuthenticationFilter) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error {
+// DoFilter 实现 filter.Filter 接口
+func (f *UsernamePasswordAuthenticationFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+	ctxVal, _ := ctx.(context.Context)
+	req, _ := request.(SecurityRequest)
+	resp, _ := response.(SecurityResponse)
+	return f.doFilter(ctxVal, req, resp, chain)
+}
+
+func (f *UsernamePasswordAuthenticationFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	if request.GetMethod() != "POST" {
 		return chain.DoFilter(ctx, request, response)
 	}
@@ -83,13 +90,15 @@ func (f *UsernamePasswordAuthenticationFilter) DoFilter(ctx context.Context, req
 	return nil
 }
 
+// Order 实现 filter.Filter 接口
+func (f *UsernamePasswordAuthenticationFilter) Order() int { return 0 }
+
 // BasicAuthenticationEntryPointWithRealm Basic认证入口点（带Realm）
 type BasicAuthenticationEntryPointWithRealm struct {
 	realmName string
 	logger    log.Logger
 }
 
-// NewBasicAuthenticationEntryPointWithRealm 创建带Realm的Basic认证入口点
 func NewBasicAuthenticationEntryPointWithRealm(realmName string, logger log.Logger) *BasicAuthenticationEntryPointWithRealm {
 	return &BasicAuthenticationEntryPointWithRealm{
 		realmName: realmName,
@@ -97,7 +106,6 @@ func NewBasicAuthenticationEntryPointWithRealm(realmName string, logger log.Logg
 	}
 }
 
-// Commence 返回Basic认证失败响应
 func (e *BasicAuthenticationEntryPointWithRealm) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	e.logger.Debug(ctx, "Basic 认证入口点被触发", log.KeyValue{Key: "realm", Value: e.realmName})
 	response.SetStatusCode(401)
@@ -105,7 +113,6 @@ func (e *BasicAuthenticationEntryPointWithRealm) Commence(ctx context.Context, r
 	if writeErr := response.Write([]byte("Authentication required")); writeErr != nil {
 		e.logger.Error(ctx, "写入认证响应失败", log.KeyValue{Key: "error", Value: writeErr.Error()})
 	}
-
 	if err == nil {
 		return ErrBadCredentials
 	}
@@ -119,7 +126,6 @@ type BasicAuthenticationFilterWithRealm struct {
 	logger                log.Logger
 }
 
-// NewBasicAuthenticationFilterWithRealm 创建带Realm的Basic认证过滤器
 func NewBasicAuthenticationFilterWithRealm(authManager AuthenticationManager, realmName string, logger log.Logger) *BasicAuthenticationFilterWithRealm {
 	entryPoint := NewBasicAuthenticationEntryPointWithRealm(realmName, logger)
 	return &BasicAuthenticationFilterWithRealm{
@@ -129,8 +135,15 @@ func NewBasicAuthenticationFilterWithRealm(authManager AuthenticationManager, re
 	}
 }
 
-// DoFilter 处理Basic认证
-func (f *BasicAuthenticationFilterWithRealm) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error {
+// DoFilter 实现 filter.Filter 接口
+func (f *BasicAuthenticationFilterWithRealm) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+	ctxVal, _ := ctx.(context.Context)
+	req, _ := request.(SecurityRequest)
+	resp, _ := response.(SecurityResponse)
+	return f.doFilter(ctxVal, req, resp, chain)
+}
+
+func (f *BasicAuthenticationFilterWithRealm) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	authHeader := request.GetHeader("Authorization")
 	if authHeader == "" {
 		f.logger.Debug(ctx, "请求缺少 Authorization 头")
@@ -181,3 +194,6 @@ func (f *BasicAuthenticationFilterWithRealm) DoFilter(ctx context.Context, reque
 
 	return chain.DoFilter(ctx, request, response)
 }
+
+// Order 实现 filter.Filter 接口
+func (f *BasicAuthenticationFilterWithRealm) Order() int { return 0 }

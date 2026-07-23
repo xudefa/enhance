@@ -234,7 +234,7 @@ func TestExample_NewApplication_StartStop(t *testing.T) {
 func TestExample_NewApplication_DeprecatedFunction(t *testing.T) {
 	t.Parallel()
 	// 测试向后兼容的函数
-	app, err := NewApplicationWithOptions(
+	app, err := NewApplication(
 		WithAppName("deprecated-app"),
 	)
 	if err != nil {

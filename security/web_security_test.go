@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/xudefa/enhance/log"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 func TestCsrfFilter(t *testing.T) {
@@ -87,7 +88,7 @@ func TestCookieCsrfTokenRepository(t *testing.T) {
 
 	t.Run("Validate token", func(t *testing.T) {
 		req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
-		req.SetAttribute("_csrf_token", "test-token")
+		req.SetAttribute("csrf.token", "test-token")
 		valid := repo.ValidateToken(ctx, req, "test-token")
 		if !valid {
 			t.Error("Expected token to be valid")
@@ -284,8 +285,8 @@ func TestUsernamePasswordAuthenticationFilter(t *testing.T) {
 		if auth == nil {
 			t.Error("Expected authentication to be set")
 		}
-		if auth.Name() != "admin" {
-			t.Errorf("Expected username 'admin', got '%s'", auth.Name())
+		if extractPrincipalName(auth) != "admin" {
+			t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
 		}
 	})
 
@@ -364,8 +365,8 @@ func TestBasicAuthenticationFilter(t *testing.T) {
 		if auth == nil {
 			t.Error("Expected authentication to be set")
 		}
-		if auth.Name() != "admin" {
-			t.Errorf("Expected username 'admin', got '%s'", auth.Name())
+		if extractPrincipalName(auth) != "admin" {
+			t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
 		}
 	})
 
@@ -564,7 +565,13 @@ type mockSecurityFilterChain struct {
 	called bool
 }
 
-func (m *mockSecurityFilterChain) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse) error {
+func (m *mockSecurityFilterChain) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
 	m.called = true
+	return nil
+}
+
+func (m *mockSecurityFilterChain) AddFilter(filter filter.Filter) {}
+
+func (m *mockSecurityFilterChain) GetFilters() []filter.Filter {
 	return nil
 }

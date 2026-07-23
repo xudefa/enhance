@@ -6,8 +6,8 @@ github.com/casbin/govaluate v1.3.0 h1:VA0eSY0M2lA86dYd5kPPuNZMUD9QkWnOCnavGrw9my
 github.com/casbin/govaluate v1.3.0/go.mod h1:G/UnbIjZk/0uMNaLwZZmFQrR72tYRZWQkO70si/iR7A=
 github.com/golang-jwt/jwt/v5 v5.3.1 h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=
 github.com/golang-jwt/jwt/v5 v5.3.1/go.mod h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=
-github.com/golang/mock v1.4.4 h1:l75CXGRSwbaYNpl/Z2X1XIIAMSCquvXgpVZDhwEIJsc=
 github.com/golang/mock v1.4.4/go.mod h1:l3mdAwkq5BuhzHwde/uurv3sEJeZMXNpwsxVWU71h+4=
+github.com/golang/mock v1.6.0 h1:ErTB+efbowRARo13NNdxyJji2egdxLGQhRaY+DUumQc=
 github.com/xudefa/enhance v0.0.2 h1:tFuTPpBJUIvBFqbKoKkQ7TKX/Zr01Q/wi3Nh7a+jjg8=
 github.com/xudefa/enhance v0.0.2/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
 github.com/xudefa/enhance/starter/casbin v0.0.2 h1:b9dnYOXA4eNvJLOrYDsVS6tGCMYEmrO1gy8blHfkx5Q=

@@ -17,18 +17,29 @@ type GroupRule struct {
 type GroupedTagValidator struct {
 	registry      *ValidatorRegistry
 	defaultGroups []string
+	groups        map[string]bool // 存储已定义的组名
 }
 
 // NewGroupedValidator 创建新的分组验证器
 func NewGroupedValidator(registry *ValidatorRegistry) *GroupedTagValidator {
 	return &GroupedTagValidator{
 		registry: registry,
+		groups:   make(map[string]bool),
 	}
 }
 
 // SetDefaultGroups 设置默认验证组
 func (v *GroupedTagValidator) SetDefaultGroups(groups ...string) {
 	v.defaultGroups = groups
+	// 将默认组添加到组注册表
+	for _, g := range groups {
+		v.groups[g] = true
+	}
+}
+
+// RegisterGroup 注册一个验证组
+func (v *GroupedTagValidator) RegisterGroup(name string) {
+	v.groups[name] = true
 }
 
 // ValidateWithGroups 使用指定组验证对象
@@ -174,7 +185,8 @@ func (v *GroupedTagValidator) resolveInheritedRules(rules []GroupRule, groups []
 
 // GetGroup 获取组是否存在
 func (v *GroupedTagValidator) GetGroup(name string) (bool, bool) {
-	return false, false
+	exists := v.groups[name]
+	return exists, exists
 }
 
 // validateFieldWithRules 使用指定规则验证字段

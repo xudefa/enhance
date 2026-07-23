@@ -39,23 +39,25 @@ func TestPanicInfo_ContainsStack(t *testing.T) {
 	// 创建一个会触发 panic 的代理
 	executor := NewChainExecutor(WithRecovery())
 
-	// 创建一个会 panic 的目标函数
-	targetFunc := func(args ...any) any {
-		panic("test panic message")
+	// 创建一个 mock JoinPoint
+	joinPoint := &mockJoinPointForPanicTest{
+		proceedFunc: func() (any, error) {
+			panic("test panic message")
+		},
 	}
 
-	// 创建空的 invocation
-	inv := &invocation{
-		method: nil,
-		this:   nil,
-		target: targetFunc,
-		sig:    nil,
-		args:   []any{},
-		ctx:    nil,
-	}
+	// 创建 Invocation
+	inv := NewInvocation(
+		joinPoint,
+		func() (any, error) {
+			panic("test panic message")
+		},
+	)
 
 	// 执行会触发 panic
-	executor.Execute(inv, nil, targetFunc)
+	executor.Execute(inv, nil, func(args ...any) any {
+		panic("test panic message")
+	})
 
 	t.Fatal("should have panicked")
 }
@@ -103,4 +105,17 @@ func containsStrMiddle(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// mockJoinPointForPanicTest 用于 panic 测试的 mock JoinPoint
+type mockJoinPointForPanicTest struct {
+	proceedFunc func() (any, error)
+}
+
+func (m *mockJoinPointForPanicTest) Target() any           { return nil }
+func (m *mockJoinPointForPanicTest) Method() string        { return "" }
+func (m *mockJoinPointForPanicTest) Args() []any           { return nil }
+func (m *mockJoinPointForPanicTest) Proceed() (any, error) { return m.proceedFunc() }
+func (m *mockJoinPointForPanicTest) ProceedWithArgs(args []any) (any, error) {
+	return m.proceedFunc()
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/event"
 )
 
@@ -17,13 +18,12 @@ func (m *mockBeanCreator) CreateBean(beanID string) (any, error) {
 
 func TestConfigChangeEvent(t *testing.T) {
 	t.Parallel()
-	event := ConfigChangeEvent{
+	event := environment.ConfigChangeEvent{
 		EventType: "modify",
 		Keys:      []string{"server.port", "server.host"},
 		OldValues: map[string]any{"server.port": 8080},
 		NewValues: map[string]any{"server.port": 9090},
 		Source:    "viper",
-		timestamp: time.Now(),
 	}
 
 	if event.EventType != "modify" {
@@ -153,7 +153,7 @@ func TestRefreshScopeManager_IncrementBeanVersion(t *testing.T) {
 // mockRefreshableBean 测试用的可刷新 Bean
 type mockRefreshableBean struct{}
 
-func (m *mockRefreshableBean) OnConfigChange(event ConfigChangeEvent) error {
+func (m *mockRefreshableBean) OnConfigChange(event environment.ConfigChangeEvent) error {
 	return nil
 }
 

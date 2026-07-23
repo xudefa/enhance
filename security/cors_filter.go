@@ -3,9 +3,11 @@ package security
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/xudefa/enhance/log"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 // CorsConfig CORS配置
@@ -25,7 +27,6 @@ type CorsFilter struct {
 	logger log.Logger
 }
 
-// NewCorsFilter 创建CORS过滤器
 func NewCorsFilter(config CorsConfig) *CorsFilter {
 	if len(config.AllowedMethods) == 0 {
 		config.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
@@ -42,8 +43,15 @@ func NewCorsFilter(config CorsConfig) *CorsFilter {
 	}
 }
 
-// DoFilter 处理CORS请求
-func (f *CorsFilter) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error {
+// DoFilter 实现 filter.Filter 接口
+func (f *CorsFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+	ctxVal, _ := ctx.(context.Context)
+	req, _ := request.(SecurityRequest)
+	resp, _ := response.(SecurityResponse)
+	return f.doFilter(ctxVal, req, resp, chain)
+}
+
+func (f *CorsFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	origin := request.GetHeader("Origin")
 	if origin == "" {
 		return chain.DoFilter(ctx, request, response)
@@ -72,7 +80,7 @@ func (f *CorsFilter) DoFilter(ctx context.Context, request SecurityRequest, resp
 			response.SetHeader("Access-Control-Expose-Headers", strings.Join(f.config.ExposedHeaders, ", "))
 		}
 		if f.config.MaxAge > 0 {
-			response.SetHeader("Access-Control-Max-Age", string(rune(f.config.MaxAge)))
+			response.SetHeader("Access-Control-Max-Age", strconv.Itoa(f.config.MaxAge))
 		}
 		response.SetStatusCode(http.StatusNoContent)
 		return nil
@@ -80,6 +88,9 @@ func (f *CorsFilter) DoFilter(ctx context.Context, request SecurityRequest, resp
 
 	return chain.DoFilter(ctx, request, response)
 }
+
+// Order 实现 filter.Filter 接口
+func (f *CorsFilter) Order() int { return -100 }
 
 func (f *CorsFilter) isOriginAllowed(origin string) bool {
 	if len(f.config.AllowedOrigins) == 0 {

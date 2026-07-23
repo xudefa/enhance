@@ -4,8 +4,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/xudefa/enhance/config/refresh"
 )
 
 func TestEnvironment_GetProperty(t *testing.T) {
@@ -357,12 +355,12 @@ func TestEnvironment_ConfigChangeListener(t *testing.T) {
 	var called int32
 	done := make(chan struct{})
 
-	env.AddConfigChangeListener(func(event refresh.ConfigChangeEvent) {
+	env.AddConfigChangeListener(func(event ConfigChangeEvent) {
 		atomic.StoreInt32(&called, 1)
 		close(done)
 	})
 
-	event := refresh.NewConfigChangeEvent(
+	event := NewConfigChangeEvent(
 		"modify",
 		[]string{"test.key"},
 		map[string]any{"test.key": "old"},

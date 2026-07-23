@@ -137,7 +137,8 @@ func ParseCronExpression(expr string) (*CronExpression, error) {
 	ce := &CronExpression{}
 
 	var err error
-	ce.second, err = parseField(fields[0], 0, 59, dayOfWeekMap)
+	// 秒字段只接受数值，不接受星期名称
+	ce.second, err = parseField(fields[0], 0, 59, nil)
 	if err != nil {
 		return nil, fmt.Errorf("invalid second field: %w", err)
 	}

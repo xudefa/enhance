@@ -31,7 +31,7 @@ func TestStarterRegistry_Add(t *testing.T) {
 	registry := NewStarterRegistry()
 	s := newMockStarter("test")
 
-	registry.Add(s)
+	registry.Register(s)
 	if len(registry.GetAll()) != 1 {
 		t.Fatal("expected 1 starter in registry")
 	}
@@ -40,8 +40,8 @@ func TestStarterRegistry_Add(t *testing.T) {
 func TestStarterRegistry_GetAll(t *testing.T) {
 	t.Parallel()
 	registry := NewStarterRegistry()
-	registry.Add(newMockStarter("s1"))
-	registry.Add(newMockStarter("s2"))
+	registry.Register(newMockStarter("s1"))
+	registry.Register(newMockStarter("s2"))
 
 	all := registry.GetAll()
 	if len(all) != 2 {
@@ -49,11 +49,31 @@ func TestStarterRegistry_GetAll(t *testing.T) {
 	}
 }
 
+func TestStarterRegistry_Get(t *testing.T) {
+	t.Parallel()
+	registry := NewStarterRegistry()
+	registry.Register(newMockStarter("s1"))
+	registry.Register(newMockStarter("s2"))
+
+	s := registry.Get("s1")
+	if s == nil {
+		t.Fatal("expected to find starter 's1'")
+	}
+	if s.Name() != "s1" {
+		t.Fatalf("expected name 's1', got '%s'", s.Name())
+	}
+
+	missing := registry.Get("nonexistent")
+	if missing != nil {
+		t.Fatal("expected nil for nonexistent starter")
+	}
+}
+
 func TestStarterRegistry_GetOrdered(t *testing.T) {
 	t.Parallel()
 	registry := NewStarterRegistry()
-	registry.Add(newMockStarter("s1", "s2"))
-	registry.Add(newMockStarter("s2"))
+	registry.Register(newMockStarter("s1", "s2"))
+	registry.Register(newMockStarter("s2"))
 
 	ordered := registry.GetOrdered()
 	if len(ordered) != 2 {
@@ -74,13 +94,13 @@ func TestStarterRegistry_Empty(t *testing.T) {
 }
 
 func TestRegisterStarterGlobal(t *testing.T) {
-	orig := GlobalStarterRegistry()
-	registry := NewStarterRegistry()
-	globalStarterRegistry.Store(registry)
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
 	defer func() { globalStarterRegistry.Store(orig) }()
 
 	RegisterStarter(newMockStarter("global"))
-	if len(registry.GetAll()) != 1 {
+	if len(testReg.GetAll()) != 1 {
 		t.Fatal("expected 1 starter registered globally")
 	}
 }

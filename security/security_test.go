@@ -134,8 +134,8 @@ func TestDaoAuthenticationProvider(t *testing.T) {
 		t.Errorf("Expected authentication to be successful")
 	}
 
-	if authenticated.Name() != "admin" {
-		t.Errorf("Expected username 'admin', got '%s'", authenticated.Name())
+	if extractPrincipalName(authenticated) != "admin" {
+		t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(authenticated))
 	}
 
 	wrongAuthToken := NewUsernamePasswordAuthenticationToken("admin", "wrongPassword")
@@ -364,8 +364,8 @@ func TestSecurityContext(t *testing.T) {
 		t.Errorf("Expected authentication to be set")
 	}
 
-	if ctx.Authentication().Name() != "user" {
-		t.Errorf("Expected username 'user', got '%s'", ctx.Authentication().Name())
+	if extractPrincipalName(ctx.Authentication()) != "user" {
+		t.Errorf("Expected username 'user', got '%s'", extractPrincipalName(ctx.Authentication()))
 	}
 
 	ctx.ClearAuthentication()

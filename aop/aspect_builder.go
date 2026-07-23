@@ -56,7 +56,7 @@ func (b *AspectBuilder) After(fn func(JoinPoint)) *AspectBuilder {
 }
 
 // Around 设置环绕通知
-func (b *AspectBuilder) Around(fn func(JoinPoint, ProceedFunc) any) *AspectBuilder {
+func (b *AspectBuilder) Around(fn func(JoinPoint, func() any) any) *AspectBuilder {
 	b.advice = Around(fn)
 	return b
 }
@@ -122,7 +122,7 @@ func CreateAfterAspect(methodName string, fn func(JoinPoint), order int) *Aspect
 }
 
 // CreateAroundAspect 创建环绕切面的便捷函数
-func CreateAroundAspect(methodName string, fn func(JoinPoint, ProceedFunc) any, order int) *AspectMeta {
+func CreateAroundAspect(methodName string, fn func(JoinPoint, func() any) any, order int) *AspectMeta {
 	return CreateAspect(MatchByName(methodName), Around(fn), order)
 }
 

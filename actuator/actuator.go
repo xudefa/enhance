@@ -102,8 +102,9 @@ func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 			Priority: int(s.Priority()),
 		}
 		if mp, ok := s.(*environment.MapPropertySource); ok {
-			props := make([]propertyItem, 0)
-			for _, k := range mp.Keys() {
+			keys := mp.Keys()
+			props := make([]propertyItem, 0, len(keys))
+			for _, k := range keys {
 				v, _ := mp.GetProperty(k)
 				// 脱敏处理敏感值
 				sanitizedValue := a.sanitizer.Sanitize(k, v)

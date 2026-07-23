@@ -9,6 +9,23 @@ import (
 	"github.com/xudefa/enhance/condition"
 )
 
+// ==================== AutoConfigEntry 结构体 ====================
+
+// AutoConfigEntry 自动配置条目。
+type AutoConfigEntry struct {
+	Config         AutoConfiguration     // 自动配置实例
+	Conditions     []condition.Condition // 条件列表
+	Order          int                   // 执行顺序，值越小优先级越高
+	Dependencies   []string              // 依赖的配置名称
+	Override       bool                  // 是否为覆盖配置（用户自定义优先）
+	OverrideTarget string                // 被覆盖的自动配置类型名
+	Before         []string              // 此配置应在哪些配置之前执行
+	After          []string              // 此配置应在哪些配置之后执行
+}
+
+// AutoConfigurationOption 自动配置选项函数。
+type AutoConfigurationOption func(entry *AutoConfigEntry)
+
 // OrderPriority 定义自动配置执行顺序的优先级枚举。
 //
 // 值越小优先级越高，越先执行。

@@ -31,7 +31,7 @@ func (b *EventBusWithOrdering) SubscribeWithConfig(eventType string, config List
 		oldValue, _ := b.listeners.LoadOrStore(eventType, &listenerSlice{})
 		old := oldValue.(*listenerSlice)
 
-		b.mu.Lock()
+		// 在锁外创建新列表，减少锁持有时间
 		newList := make([]orderedListener, len(old.list)+1)
 		copy(newList, old.list)
 		newList[len(old.list)] = orderedListener{
@@ -40,7 +40,6 @@ func (b *EventBusWithOrdering) SubscribeWithConfig(eventType string, config List
 			wrapperID: id,
 		}
 		newSlice := &listenerSlice{list: newList}
-		b.mu.Unlock()
 
 		if b.listeners.CompareAndSwap(eventType, old, newSlice) {
 			return
@@ -65,7 +64,7 @@ func (b *EventBusWithOrdering) SubscribeOnce(eventType string, listener EventLis
 		oldValue, _ := b.listeners.LoadOrStore(eventType, &listenerSlice{})
 		old := oldValue.(*listenerSlice)
 
-		b.mu.Lock()
+		// 在锁外创建新列表，减少锁持有时间
 		newList := make([]orderedListener, len(old.list)+1)
 		copy(newList, old.list)
 		newList[len(old.list)] = orderedListener{
@@ -74,7 +73,6 @@ func (b *EventBusWithOrdering) SubscribeOnce(eventType string, listener EventLis
 			wrapperID: id,
 		}
 		newSlice := &listenerSlice{list: newList}
-		b.mu.Unlock()
 
 		if b.listeners.CompareAndSwap(eventType, old, newSlice) {
 			return
@@ -98,7 +96,7 @@ func (b *EventBusWithOrdering) Unsubscribe(eventType string, target EventListene
 		}
 		old := oldValue.(*listenerSlice)
 
-		b.mu.Lock()
+		// 在锁外查找索引
 		found := -1
 		for i, ol := range old.list {
 			if reflect.ValueOf(ol.original).Pointer() == targetPtr {
@@ -108,15 +106,14 @@ func (b *EventBusWithOrdering) Unsubscribe(eventType string, target EventListene
 		}
 
 		if found == -1 {
-			b.mu.Unlock()
 			return
 		}
 
+		// 在锁外创建新列表
 		newList := make([]orderedListener, len(old.list)-1)
 		copy(newList, old.list[:found])
 		copy(newList[found:], old.list[found+1:])
 		newSlice := &listenerSlice{list: newList}
-		b.mu.Unlock()
 
 		if b.listeners.CompareAndSwap(eventType, old, newSlice) {
 			return

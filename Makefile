@@ -16,6 +16,12 @@ VERSION := $(or $(VERSION),$(DEFAULT_VERSION))
 # Auto-discover all sub-modules (excluding root)
 SUB_MODULES := $(shell find . -name "go.mod" -not -path "./go.mod" -exec dirname {} \; | sort)
 
+# Starter modules only (for release/tag operations)
+STARTER_MODULES := $(shell find ./starter -name "go.mod" -exec dirname {} \; | sort)
+
+# Example modules only (for release update)
+EXAMPLE_MODULES := $(shell find ./examples -name "go.mod" -exec dirname {} \; | sort)
+
 # ============================================================================
 # Help
 # ============================================================================
@@ -121,13 +127,14 @@ clean: ## 清理构建产物
 # Release
 # ============================================================================
 
-release: _backup-gowork _phase1-main _phase2-sub _push-code _restore-gowork ## 完整发布流程（两阶段提交）
+release: _backup-gowork _phase1-main _phase2-sub _phase3-examples _push-code _restore-gowork ## 完整发布流程（三阶段提交）
 	@echo ""
 	@echo "✅ 发布完成: $(VERSION)"
 	@echo ""
 	@echo "发布内容:"
 	@echo "  - 主模块 tag: $(VERSION)"
 	@echo "  - 子模块 tags: starter/*/$(VERSION)"
+	@echo "  - examples 依赖已更新"
 	@echo "  - 代码已推送到 $(REMOTE) main"
 	@echo "  - go.work 已恢复"
 
@@ -186,7 +193,7 @@ _phase2-sub: _update-sub-deps _tidy-sub-modules _commit-sub-modules _create-sub-
 
 _update-sub-deps: ## [内部] 更新子模块依赖到主模块新版本
 	@echo "=== 阶段2: 更新子模块依赖到 $(VERSION) ==="
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		modfile="$$dir/go.mod"; \
 		if grep -q "$(MAIN_MODULE) " "$$modfile"; then \
 			sed -i '' 's|$(MAIN_MODULE) v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*|$(MAIN_MODULE) $(VERSION)|g' "$$modfile"; \
@@ -196,7 +203,7 @@ _update-sub-deps: ## [内部] 更新子模块依赖到主模块新版本
 
 _tidy-sub-modules: ## [内部] 子模块 go mod tidy
 	@echo "=== 子模块 go mod tidy ==="
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		echo "[tidy] $$dir"; \
 		$(GO) -C "$$dir" mod tidy 2>&1 || echo "  [失败] $$dir"; \
 	done
@@ -208,7 +215,7 @@ _commit-sub-modules: ## [内部] 提交子模块代码
 
 _create-sub-tags: ## [内部] 创建子模块 tags
 	@echo "=== 创建子模块 tags ==="
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		echo "  [tag] $$tag"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
@@ -220,12 +227,49 @@ _create-sub-tags: ## [内部] 创建子模块 tags
 
 _push-sub-tags: ## [内部] 推送子模块 tags
 	@echo "=== 推送子模块 tags ==="
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
 			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || echo "  [失败] $$tag"; \
 		fi; \
 	done
+
+# ============================================================================
+# Phase 3: Examples 更新
+# ============================================================================
+
+_phase3-examples: _update-example-deps _tidy-example-modules _commit-examples ## 阶段3：更新 examples 依赖并提交
+	@echo ""
+	@echo "✅ 阶段3完成: examples 依赖已更新"
+
+_update-example-deps: ## [内部] 更新 examples 中的 starter 依赖版本
+	@echo "=== 阶段3: 更新 examples 依赖到 $(VERSION) ==="
+	@for dir in $(EXAMPLE_MODULES); do \
+		modfile="$$dir/go.mod"; \
+		updated=false; \
+		for starter in $(STARTER_MODULES); do \
+			starter_path=$$(grep "^module " "$$starter/go.mod" | awk '{print $$2}'); \
+			if grep -q "$$starter_path " "$$modfile"; then \
+				sed -i '' "s|$$starter_path v[0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*|$$starter_path $(VERSION)|g" "$$modfile"; \
+				updated=true; \
+			fi; \
+		done; \
+		if [ "$$updated" = true ]; then \
+			echo "  [更新] $$dir"; \
+		fi; \
+	done
+
+_tidy-example-modules: ## [内部] examples go mod tidy
+	@echo "=== examples go mod tidy ==="
+	@for dir in $(EXAMPLE_MODULES); do \
+		echo "[tidy] $$dir"; \
+		$(GO) -C "$$dir" mod tidy 2>&1 || echo "  [失败] $$dir"; \
+	done
+
+_commit-examples: ## [内部] 提交 examples 变更
+	@echo "=== 提交 examples 变更 ==="
+	@git add examples/*/go.mod examples/*/go.sum
+	@git commit -m "release: update examples dependencies to $(VERSION)" || echo "  [跳过] examples 无变更"
 
 # ============================================================================
 # Tag Management
@@ -241,7 +285,7 @@ create-tags: ## 创建本地 git tags
 		git tag -a "$(VERSION)" -m "Release $(VERSION)" && echo "  [创建] ✅"; \
 	fi
 	@echo ""
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		echo "子模块: $$tag"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
@@ -260,7 +304,7 @@ delete-tags: ## 删除本地 git tags
 	else \
 		echo "  [跳过] $(VERSION) 不存在"; \
 	fi
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
 			git tag -d "$$tag" && echo "  [删除] $$tag ✅"; \
@@ -273,7 +317,7 @@ push-tags: ## 推送 tags 到远端
 	@if git rev-parse "$(VERSION)" >/dev/null 2>&1; then \
 		git push $(REMOTE) "$(VERSION)" && echo "  [推送] $(VERSION) ✅" || echo "  [失败] $(VERSION)"; \
 	fi
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
 			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || echo "  [失败] $$tag"; \
@@ -293,7 +337,7 @@ delete-remote-tags: ## 删除远端 tags
 	@if git ls-remote --tags $(REMOTE) 2>/dev/null | grep -q "$(VERSION)$$"; then \
 		git push $(REMOTE) --delete "$(VERSION)" && echo "  [删除] $(VERSION) ✅"; \
 	fi
-	@for dir in $(SUB_MODULES); do \
+	@for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git ls-remote --tags $(REMOTE) 2>/dev/null | grep -q "$$tag$$"; then \
 			git push $(REMOTE) --delete "$$tag" 2>/dev/null && echo "  [删除] $$tag ✅"; \

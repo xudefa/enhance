@@ -246,7 +246,7 @@ func (idx *propertyIndexImpl) Has(name string) bool {
 
 // GetAll 获取所有属性。
 func (idx *propertyIndexImpl) GetAll() []PropertyMetadata {
-	var props []PropertyMetadata
+	props := make([]PropertyMetadata, 0, len(idx.properties))
 	for _, prop := range idx.properties {
 		props = append(props, prop)
 	}

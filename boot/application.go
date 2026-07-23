@@ -95,9 +95,4 @@ func NewApplication(opts ...any) (*Boot, error) {
 	return b, nil
 }
 
-// NewApplicationWithOptions 是 NewApplication 的别名，保持向后兼容。
-//
-// Deprecated: 使用 NewApplication 替代。
-func NewApplicationWithOptions(opts ...any) (*Boot, error) {
-	return NewApplication(opts...)
-}
+

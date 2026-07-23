@@ -48,8 +48,7 @@ func GetSecurityContext() SecurityContext {
 // SetSecurityContext 设置全局安全上下文。
 func SetSecurityContext(ctx SecurityContext) {
 	if sc, ok := ctx.(*securityContext); ok {
-		auth := sc.Authentication()
-		globalSecurityContext.Load().SetAuthentication(auth)
+		globalSecurityContext.Store(sc)
 	}
 }
 

@@ -4,43 +4,102 @@ package aop
 import (
 	"context"
 	"reflect"
-	"sync"
 )
 
-// invocationPool 复用 invocation 对象。
-//
-// 性能优化：减少每次方法调用时的内存分配和 GC 压力。
-var invocationPool = sync.Pool{
-	New: func() any {
-		return &invocation{
-			args: make([]any, 0, 8),
-		}
-	},
+// joinPointImpl 连接点实现。
+type joinPointImpl struct {
+	target          any
+	method          string
+	args            []any
+	proceed         func() (any, error)
+	proceedWithArgs func([]any) (any, error)
+	ctx             context.Context
 }
 
-// acquireInvocation 从池中获取 invocation 对象。
-func acquireInvocation() *invocation {
-	inv := invocationPool.Get().(*invocation)
-	inv.args = inv.args[:0]
-	return inv
+// NewJoinPoint 创建连接点。
+func NewJoinPoint(target any, method string, args []any, proceed func() (any, error), proceedWithArgs func([]any) (any, error)) JoinPoint {
+	return &joinPointImpl{
+		target:          target,
+		method:          method,
+		args:            args,
+		proceed:         proceed,
+		proceedWithArgs: proceedWithArgs,
+		ctx:             context.Background(),
+	}
 }
 
-// releaseInvocation 归还 invocation 对象到池中。
-func releaseInvocation(inv *invocation) {
-	inv.method = nil
-	inv.args = inv.args[:0]
-	inv.this = nil
-	inv.target = nil
-	inv.sig = nil
-	inv.proceed = nil
-	inv.ctx = nil
-	invocationPool.Put(inv)
+func (j *joinPointImpl) Target() any {
+	return j.target
 }
 
-// methodSignature 方法签名内部实现。
+func (j *joinPointImpl) Method() string {
+	return j.method
+}
+
+func (j *joinPointImpl) Args() []any {
+	return j.args
+}
+
+func (j *joinPointImpl) Proceed() (any, error) {
+	if j.proceed != nil {
+		return j.proceed()
+	}
+	return nil, nil
+}
+
+func (j *joinPointImpl) ProceedWithArgs(args []any) (any, error) {
+	if j.proceedWithArgs != nil {
+		return j.proceedWithArgs(args)
+	}
+	return nil, nil
+}
+
+// invocationImpl 调用实现。
+type invocationImpl struct {
+	joinPoint JoinPoint
+	args      []any
+	proceed   func() (any, error)
+	lastErr   error
+}
+
+// NewInvocation 创建调用。
+func NewInvocation(joinPoint JoinPoint, proceed func() (any, error)) Invocation {
+	return &invocationImpl{
+		joinPoint: joinPoint,
+		args:      joinPoint.Args(),
+		proceed:   proceed,
+	}
+}
+
+func (i *invocationImpl) JoinPoint() JoinPoint {
+	return i.joinPoint
+}
+
+func (i *invocationImpl) Arguments() []any {
+	return i.args
+}
+
+func (i *invocationImpl) Proceed() (any, error) {
+	if i.proceed != nil {
+		return i.proceed()
+	}
+	return nil, nil
+}
+
+// SetError 在调用上存储错误信息。
+func (i *invocationImpl) SetError(err error) {
+	i.lastErr = err
+}
+
+// Error 返回已存储的错误信息。
+func (i *invocationImpl) Error() error {
+	return i.lastErr
+}
+
+// methodSignature 方法签名实现。
 type methodSignature struct {
-	name          string       // 方法名
-	declaringType reflect.Type // 方法声明的类型
+	name          string
+	declaringType reflect.Type
 }
 
 func (m *methodSignature) Name() string {
@@ -52,71 +111,9 @@ func (m *methodSignature) DeclaringType() reflect.Type {
 }
 
 // NewMethodSignature 创建方法签名。
-//
-// 参数:
-//   - name: 方法名
-//   - t: 方法声明的类型
-//
-// 返回值:
-//   - MethodSignature: 方法签名实例
-func NewMethodSignature(name string, t reflect.Type) MethodSignature {
+func NewMethodSignature(name string, t reflect.Type) *methodSignature {
 	return &methodSignature{
 		name:          name,
 		declaringType: t,
 	}
-}
-
-// invocation 调用信息内部实现。
-//
-// 存储方法调用的完整上下文，包括方法本身、参数、代理对象、目标对象和继续执行函数。
-type invocation struct {
-	method  any             // 被调用的方法
-	args    []any           // 调用参数列表
-	this    any             // 代理对象
-	target  any             // 原始目标对象
-	sig     MethodSignature // 方法签名
-	proceed ProceedFunc     // 继续执行函数（用于通知链）
-	ctx     context.Context // 调用上下文
-}
-
-func (i *invocation) Method() any {
-	return i.method
-}
-
-func (i *invocation) Args() []any {
-	return i.args
-}
-
-func (i *invocation) This() any {
-	return i.this
-}
-
-func (i *invocation) Target() any {
-	return i.target
-}
-
-func (i *invocation) Signature() MethodSignature {
-	return i.sig
-}
-
-func (i *invocation) Proceed(args ...any) any {
-	if i.proceed != nil {
-		return i.proceed(args...)
-	}
-	return nil
-}
-
-func (i *invocation) SetProceed(p ProceedFunc) {
-	i.proceed = p
-}
-
-func (i *invocation) Context() context.Context {
-	if i.ctx != nil {
-		return i.ctx
-	}
-	return context.Background()
-}
-
-func (i *invocation) SetContext(ctx context.Context) {
-	i.ctx = ctx
 }

@@ -8,8 +8,8 @@ import (
 // benchAuthManager 测试用认证管理器
 type benchAuthManager struct{}
 
-func (m *benchAuthManager) Authenticate(ctx context.Context, auth Authentication) (Authentication, error) {
-	return auth, nil
+func (m *benchAuthManager) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
+	return &testAuth{principal: "bench"}, nil
 }
 
 // benchUserDetails 测试用用户详情

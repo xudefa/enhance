@@ -332,12 +332,15 @@ func TestBuilder_Build_WithBeanRegistration(t *testing.T) {
 		t.Fatalf("Build should succeed: %v", err)
 	}
 
-	bean, err := ctx.GetByType(tt)
+	bean, err := ctx.Container().Get(tt)
 	if err != nil {
-		t.Fatalf("GetByType should succeed: %v", err)
+		t.Fatalf("Container.Get should succeed: %v", err)
+	}
+	if len(bean) == 0 {
+		t.Fatal("expected at least one bean")
 	}
 
-	ts, ok := bean.(*TestService)
+	ts, ok := bean[0].(*TestService)
 	if !ok {
 		t.Fatal("bean should be *TestService")
 	}
@@ -540,8 +543,8 @@ func TestApplicationContextHelper_GetBean(t *testing.T) {
 	}
 
 	svc := &TestService{Value: "hello"}
-	if err := ctx.Register(reflect.TypeOf(svc), beanInstance(svc)); err != nil {
-		t.Fatalf("Register failed: %v", err)
+	if err := ctx.Container().RegisterInstance(svc, reflect.TypeOf(svc)); err != nil {
+		t.Fatalf("RegisterInstance failed: %v", err)
 	}
 
 	bean, err := helper.GetBeanByType(reflect.TypeOf(svc))
@@ -570,8 +573,8 @@ func TestApplicationContextHelper_GetBeanByTypeOrDefault(t *testing.T) {
 	defaultVal := &TestService{Value: "default"}
 	actual := &TestService{Value: "actual"}
 
-	if err := ctx.Register(reflect.TypeOf(actual), beanInstance(actual)); err != nil {
-		t.Fatalf("Register failed: %v", err)
+	if err := ctx.Container().RegisterInstance(actual, reflect.TypeOf(actual)); err != nil {
+		t.Fatalf("RegisterInstance failed: %v", err)
 	}
 
 	bean := helper.GetBeanByTypeOrDefault(reflect.TypeOf(actual), defaultVal)
@@ -601,8 +604,8 @@ func TestApplicationContextHelper_HasBean(t *testing.T) {
 
 	type testBean struct{}
 	bean := &testBean{}
-	if err := ctx.Register(reflect.TypeOf(bean), beanInstance(bean)); err != nil {
-		t.Fatalf("Register failed: %v", err)
+	if err := ctx.Container().RegisterInstance(bean, reflect.TypeOf(bean)); err != nil {
+		t.Fatalf("RegisterInstance failed: %v", err)
 	}
 
 	if !helper.HasBeanByType(reflect.TypeOf(bean)) {
@@ -684,8 +687,8 @@ func TestApplicationContextHelper_IsRunning(t *testing.T) {
 		t.Error("should not be running initially")
 	}
 
-	if err := ctx.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
+	if err := ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
+		t.Fatalf("SetPhase failed: %v", err)
 	}
 
 	if !helper.IsRunning() {

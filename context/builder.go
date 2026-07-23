@@ -211,22 +211,29 @@ func NewApplicationContextHelper(ctx ApplicationContext) *ApplicationContextHelp
 
 // GetBeanByType 按类型获取Bean
 func (h *ApplicationContextHelper) GetBeanByType(t reflect.Type) (any, error) {
-	return h.ctx.GetByType(t)
+	instances, err := h.ctx.Container().Get(t)
+	if err != nil {
+		return nil, err
+	}
+	if len(instances) == 0 {
+		return nil, core.ErrBeanNotFound
+	}
+	return instances[0], nil
 }
 
 // GetBeanByTypeOrDefault 按类型获取Bean，如果不存在返回默认值
 func (h *ApplicationContextHelper) GetBeanByTypeOrDefault(t reflect.Type, defaultVal any) any {
-	val, err := h.ctx.GetByType(t)
-	if err != nil {
+	val, err := h.ctx.Container().Get(t)
+	if err != nil || len(val) == 0 {
 		return defaultVal
 	}
-	return val
+	return val[0]
 }
 
 // HasBeanByType 检查指定类型的Bean是否存在
 func (h *ApplicationContextHelper) HasBeanByType(t reflect.Type) bool {
-	_, err := h.ctx.GetByType(t)
-	return err == nil
+	instances, err := h.ctx.Container().Get(t)
+	return err == nil && len(instances) > 0
 }
 
 // GetProperty 获取字符串类型属性
@@ -246,7 +253,7 @@ func (h *ApplicationContextHelper) GetBoolProperty(key string, defaultVal bool) 
 
 // IsRunning 检查应用是否运行中
 func (h *ApplicationContextHelper) IsRunning() bool {
-	return h.ctx.IsRunning()
+	return h.ctx.Lifecycle().GetPhase() == lifecycle.PhaseRunning
 }
 
 // GetPhase 获取当前生命周期阶段
@@ -299,7 +306,29 @@ func (h *ApplicationContextHelper) PublishStopped() {
 
 // Invoke 调用函数并自动注入依赖
 func (h *ApplicationContextHelper) Invoke(fn any) error {
-	return h.ctx.Invoke(fn)
+	rv := reflect.ValueOf(fn)
+	if rv.Kind() != reflect.Func {
+		return fmt.Errorf("Invoke: fn must be a function")
+	}
+
+	numIn := rv.Type().NumIn()
+	if numIn == 0 {
+		rv.Call(nil)
+		return nil
+	}
+
+	args := make([]reflect.Value, numIn)
+	for i := 0; i < numIn; i++ {
+		paramType := rv.Type().In(i)
+		instances, err := h.ctx.Container().Get(paramType)
+		if err != nil || len(instances) == 0 {
+			return fmt.Errorf("Invoke: cannot resolve parameter %d of type %s", i+1, paramType)
+		}
+		args[i] = reflect.ValueOf(instances[0])
+	}
+
+	rv.Call(args)
+	return nil
 }
 
 // ApplicationRunner 应用运行器，简化应用的启动和停止
@@ -314,7 +343,7 @@ func NewApplicationRunner(ctx ApplicationContext) *ApplicationRunner {
 
 // Run 运行应用，阻塞直到应用停止
 func (r *ApplicationRunner) Run() error {
-	if err := r.ctx.Start(); err != nil {
+	if err := r.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
 		return fmt.Errorf("failed to start application: %w", err)
 	}
 
@@ -331,7 +360,7 @@ func (r *ApplicationRunner) Run() error {
 
 // Stop 停止应用
 func (r *ApplicationRunner) Stop() error {
-	if err := r.ctx.Stop(); err != nil {
+	if err := r.ctx.Lifecycle().SetPhase(lifecycle.PhaseStopped); err != nil {
 		return fmt.Errorf("failed to stop application: %w", err)
 	}
 

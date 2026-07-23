@@ -42,6 +42,8 @@ func init() {
 //  3. Casbin 基础配置会检测容器中是否已有 CasbinEnforcer，如果有则直接使用
 type CasbinXormAutoConfiguration struct {
 	logger log.Logger
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // CasbinXormConfig Casbin XORM 配置。
@@ -122,6 +124,7 @@ func (c *CasbinXormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 	c.logger.Info(context.Background(), "CasbinVoter 已注册")
 
 	if cfg.AutoLoad {
+		c.ctx, c.cancel = context.WithCancel(context.Background())
 		c.startAutoReload(xormEnforcer, cfg)
 	}
 
@@ -225,16 +228,28 @@ func (c *CasbinXormAutoConfiguration) startAutoReload(enforcer *XormCasbinEnforc
 		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			if err := enforcer.LoadPolicy(context.Background()); err != nil {
-				c.logger.Warn(context.Background(), "自动刷新 Casbin XORM 策略失败",
-					log.KeyValue{Key: "error", Value: err.Error()},
-				)
-			} else {
-				c.logger.Info(context.Background(), "Casbin XORM 策略已自动刷新")
+		for {
+			select {
+			case <-ticker.C:
+				if err := enforcer.LoadPolicy(context.Background()); err != nil {
+					c.logger.Warn(context.Background(), "自动刷新 Casbin XORM 策略失败",
+						log.KeyValue{Key: "error", Value: err.Error()},
+					)
+				} else {
+					c.logger.Info(context.Background(), "Casbin XORM 策略已自动刷新")
+				}
+			case <-c.ctx.Done():
+				return
 			}
 		}
 	}()
+}
+
+// Close 停止自动刷新定时器，释放 goroutine 资源。
+func (c *CasbinXormAutoConfiguration) Close() {
+	if c.cancel != nil {
+		c.cancel()
+	}
 }
 
 // loadConfig 从 ApplicationContext 加载 Casbin XORM 配置。

@@ -93,7 +93,9 @@ func (r *HookRegistry) RegisterFunc(onInit, onStart, onStop func(context.Context
 // InitAll 按注册顺序执行所有 OnInit
 func (r *HookRegistry) InitAll(ctx context.Context) error {
 	r.mu.RLock()
-	hooks := r.hooks
+	// 复制切片内容，避免并发 Register 导致的数据竞争
+	hooks := make([]Hook, len(r.hooks))
+	copy(hooks, r.hooks)
 	r.mu.RUnlock()
 
 	for i, hook := range hooks {
@@ -107,7 +109,9 @@ func (r *HookRegistry) InitAll(ctx context.Context) error {
 // StartAll 按注册顺序执行所有 OnStart
 func (r *HookRegistry) StartAll(ctx context.Context) error {
 	r.mu.RLock()
-	hooks := r.hooks
+	// 复制切片内容，避免并发 Register 导致的数据竞争
+	hooks := make([]Hook, len(r.hooks))
+	copy(hooks, r.hooks)
 	r.mu.RUnlock()
 
 	for i, hook := range hooks {
@@ -121,7 +125,9 @@ func (r *HookRegistry) StartAll(ctx context.Context) error {
 // StopAll 按注册逆序执行所有 OnStop
 func (r *HookRegistry) StopAll(ctx context.Context) error {
 	r.mu.RLock()
-	hooks := r.hooks
+	// 复制切片内容，避免并发 Register 导致的数据竞争
+	hooks := make([]Hook, len(r.hooks))
+	copy(hooks, r.hooks)
 	r.mu.RUnlock()
 
 	for i := len(hooks) - 1; i >= 0; i-- {

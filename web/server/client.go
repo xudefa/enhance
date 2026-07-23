@@ -26,16 +26,20 @@ func (c *NetClient) buildURL(path string, query map[string][]string) string {
 		if strings.Contains(path, "?") {
 			separator = "&"
 		}
-		q := ""
+		var sb strings.Builder
+		first := true
 		for k, v := range query {
 			for _, val := range v {
-				if q != "" {
-					q += "&"
+				if !first {
+					sb.WriteString("&")
 				}
-				q += k + "=" + val
+				sb.WriteString(k)
+				sb.WriteString("=")
+				sb.WriteString(val)
+				first = false
 			}
 		}
-		path = path + separator + q
+		path = path + separator + sb.String()
 	}
 
 	return path
@@ -55,16 +59,20 @@ func (c *NetClient) buildRequest(ctx context.Context, method, path string, body 
 			reqBody = bytes.NewReader(v)
 			contentType = "application/octet-stream"
 		case map[string][]string:
-			q := ""
+			var sb strings.Builder
+			first := true
 			for k, vals := range v {
 				for _, val := range vals {
-					if q != "" {
-						q += "&"
+					if !first {
+						sb.WriteString("&")
 					}
-					q += k + "=" + val
+					sb.WriteString(k)
+					sb.WriteString("=")
+					sb.WriteString(val)
+					first = false
 				}
 			}
-			reqBody = strings.NewReader(q)
+			reqBody = strings.NewReader(sb.String())
 			contentType = "application/x-www-form-urlencoded"
 		default:
 			data, err := json.Marshal(body)

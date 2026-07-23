@@ -9,6 +9,12 @@ import (
 	"github.com/xudefa/enhance/actuator/health"
 )
 
+// Default simulated disk space values for health checks.
+const (
+	defaultTotalDiskBytes = 100 * 1024 * 1024 * 1024 // 100GB
+	defaultUsedDiskBytes  = 50 * 1024 * 1024 * 1024  // 50GB
+)
+
 // DiskSpaceHealthIndicator 磁盘空间健康指标
 //
 // 检查磁盘使用率是否超过阈值，当使用率过高时返回降级状态。
@@ -37,8 +43,8 @@ func (d *DiskSpaceHealthIndicator) Name() string {
 // Health 执行磁盘空间健康检查
 func (d *DiskSpaceHealthIndicator) Health(ctx context.Context) health.Health {
 	// 模拟磁盘空间检查
-	total := uint64(100 * 1024 * 1024 * 1024) // 100GB
-	used := uint64(50 * 1024 * 1024 * 1024)   // 50GB
+	total := uint64(defaultTotalDiskBytes)
+	used := uint64(defaultUsedDiskBytes)
 
 	usagePercent := float64(used) / float64(total)
 

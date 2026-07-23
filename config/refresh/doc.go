@@ -55,28 +55,11 @@
 //   - 功能开关: 动态启用/禁用功能
 package refresh
 
-import "time"
+import (
+	"time"
 
-// ConfigChangeEvent 配置变更事件。
-type ConfigChangeEvent struct {
-	EventType string            // 事件类型："modify"、"delete"、"create"
-	Keys      []string          // 变更的配置键列表
-	OldValues map[string]any    // 变更前的值
-	NewValues map[string]any    // 变更后的值
-	Source    string            // 配置源类型（如 "nacos"、"etcd"）
-	timestamp time.Time         // 事件发生时间
-	Metadata  map[string]string // 额外元数据
-}
-
-// Type 返回事件类型标识
-func (e *ConfigChangeEvent) Type() string {
-	return "ConfigChange"
-}
-
-// Timestamp 返回事件发生时间
-func (e *ConfigChangeEvent) Timestamp() time.Time {
-	return e.timestamp
-}
+	"github.com/xudefa/enhance/config/environment"
+)
 
 // BeanRefreshedEvent Bean 刷新完成事件。
 type BeanRefreshedEvent struct {
@@ -96,9 +79,48 @@ type RefreshFailedEvent struct {
 	Timestamp  time.Time // 失败时间
 }
 
+// ConfigChangeEvent 配置变更事件，别名来自 config/environment 包，保持向后兼容。
+type ConfigChangeEvent = environment.ConfigChangeEvent
+
 // RefreshableBean 可刷新 Bean 接口。
 //
 // 实现此接口的 Bean 会在配置变更时收到 OnConfigChange 回调。
 type RefreshableBean interface {
 	OnConfigChange(event ConfigChangeEvent) error
+}
+
+// RefreshManager 配置刷新管理器接口。
+//
+// 负责配置的动态刷新，依赖 config/environment 包。
+// 依赖方向：config/refresh → config/environment（正确方向）。
+type RefreshManager interface {
+	// Start 启动刷新管理器。
+	Start() error
+
+	// Stop 停止刷新管理器。
+	Stop() error
+
+	// Refresh 刷新配置。
+	Refresh() error
+
+	// AddRefreshListener 添加刷新监听器。
+	AddRefreshListener(listener RefreshListener)
+}
+
+// RefreshListener 刷新监听器接口。
+type RefreshListener interface {
+	// OnRefresh 刷新时回调。
+	OnRefresh(event RefreshEvent) error
+}
+
+// RefreshEvent 刷新事件。
+type RefreshEvent struct {
+	// Environment 关联的环境配置。
+	Environment *environment.Environment
+
+	// ChangedKeys 变更的配置键列表。
+	ChangedKeys []string
+
+	// Timestamp 事件发生时间戳（毫秒）。
+	Timestamp int64
 }

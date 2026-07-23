@@ -2,13 +2,17 @@
 package aop
 
 import (
-	"context"
 	"reflect"
 )
 
-// Method 获取方法。
-func (m *MethodInvocation) Method() any {
-	return m.Func
+// Target 获取目标对象
+func (m *MethodInvocation) Target() any {
+	return m.Object
+}
+
+// Method 获取方法名
+func (m *MethodInvocation) Method() string {
+	return m.MethodName
 }
 
 // Args 获取参数
@@ -16,59 +20,32 @@ func (m *MethodInvocation) Args() []any {
 	return m.Params
 }
 
-// This 获取代理对象
-func (m *MethodInvocation) This() any {
-	return m.Proxy
-}
-
-// Target 获取目标对象
-func (m *MethodInvocation) Target() any {
-	return m.Object
-}
-
-// Signature 获取方法签名
-func (m *MethodInvocation) Signature() MethodSignature {
-	if m.Func == nil {
-		return nil
-	}
-	fnValue := reflect.ValueOf(m.Func)
-	fnType := fnValue.Type()
-	return NewMethodSignature(m.MethodName, fnType)
-}
-
-// Context 获取上下文
-//
-// 如果已设置上下文,则返回该上下文;否则返回 context.Background()。
-func (m *MethodInvocation) Context() context.Context {
-	if m.Ctx != nil {
-		return m.Ctx
-	}
-	return context.Background()
-}
-
-// SetContext 设置上下文
-//
-// 设置后,后续通知链中的 JoinPoint.Context() 将返回新的上下文。
-func (m *MethodInvocation) SetContext(ctx context.Context) {
-	m.Ctx = ctx
-}
-
-// Proceed 继续执行
-//
-// 如果已通过 SetProceed 设置了执行函数，则调用它；
-// 否则通过反射调用目标方法。
-func (m *MethodInvocation) Proceed(args ...any) any {
+// Proceed 执行原方法
+func (m *MethodInvocation) Proceed() (any, error) {
 	if m.proceed != nil {
-		return m.proceed(args...)
+		result := m.proceed(m.Params...)
+		return result, nil
 	}
-	return m.callMethod(args...)
+	return m.callMethod(m.Params...), nil
 }
 
-// SetProceed 设置继续执行函数
-//
-// 在Around通知中,用于设置继续执行目标方法或下一个通知的函数。
-func (m *MethodInvocation) SetProceed(p ProceedFunc) {
-	m.proceed = p
+// ProceedWithArgs 带参数执行原方法
+func (m *MethodInvocation) ProceedWithArgs(args []any) (any, error) {
+	if m.proceed != nil {
+		result := m.proceed(args...)
+		return result, nil
+	}
+	return m.callMethod(args...), nil
+}
+
+// Arguments 实现 Invocation.Arguments
+func (m *MethodInvocation) Arguments() []any {
+	return m.Params
+}
+
+// JoinPoint 实现 Invocation.JoinPoint
+func (m *MethodInvocation) JoinPoint() JoinPoint {
+	return m
 }
 
 // callMethod 通过反射调用目标方法

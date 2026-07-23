@@ -19,7 +19,7 @@ func TestProxyFactory_SetAspects(t *testing.T) {
 	aspects := []*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 	}
@@ -84,12 +84,12 @@ func TestProxyFactory_filterAspects(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    1,
 		},
 		{
 			PointCut: MatchByName("DoAnother"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    2,
 		},
 	})
@@ -108,17 +108,17 @@ func TestProxyFactory_filterAspects_SortedByOrder(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    10,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    1,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    5,
 		},
 	})
@@ -140,13 +140,13 @@ func TestProxyFactory_buildAdviceChain(t *testing.T) {
 	callOrder := []int{}
 
 	advices := []Advice{
-		Around(func(jp JoinPoint, proceed ProceedFunc) any {
+		Around(func(jp JoinPoint, proceed func() any) any {
 			callOrder = append(callOrder, 1)
-			return proceed(jp.Args()...)
+			return proceed()
 		}),
-		Around(func(jp JoinPoint, proceed ProceedFunc) any {
+		Around(func(jp JoinPoint, proceed func() any) any {
 			callOrder = append(callOrder, 2)
-			return proceed(jp.Args()...)
+			return proceed()
 		}),
 	}
 
@@ -156,7 +156,11 @@ func TestProxyFactory_buildAdviceChain(t *testing.T) {
 	}
 
 	chain := buildAdviceChain(advices, targetFunc)
-	inv := &invocation{args: nil, target: nil}
+
+	// 创建 mock Invocation
+	inv := &mockInvocationForProxyTest{
+		args: nil,
+	}
 
 	result := chain(inv)
 
@@ -175,7 +179,7 @@ func TestProxyFactory_filterAspects_NoMatch(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -194,7 +198,7 @@ func TestProxyFactory_SetAspects_ClearsMethodCache(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -209,7 +213,7 @@ func TestProxyFactory_SetAspects_ClearsMethodCache(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoAnother"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -230,4 +234,46 @@ func TestProxyFactory_NonStructuralType(t *testing.T) {
 	if proxy != "string" {
 		t.Error("GetProxy should return original for non-struct type")
 	}
+}
+
+// mockInvocationForProxyTest 用于测试的 mock Invocation
+type mockInvocationForProxyTest struct {
+	args []any
+}
+
+func (m *mockInvocationForProxyTest) JoinPoint() JoinPoint {
+	return &mockJoinPointForProxyTest{args: m.args}
+}
+
+func (m *mockInvocationForProxyTest) Arguments() []any {
+	return m.args
+}
+
+func (m *mockInvocationForProxyTest) Proceed() (any, error) {
+	return nil, nil
+}
+
+// mockJoinPointForProxyTest 用于测试的 mock JoinPoint
+type mockJoinPointForProxyTest struct {
+	args []any
+}
+
+func (m *mockJoinPointForProxyTest) Target() any {
+	return nil
+}
+
+func (m *mockJoinPointForProxyTest) Method() string {
+	return "Test"
+}
+
+func (m *mockJoinPointForProxyTest) Args() []any {
+	return m.args
+}
+
+func (m *mockJoinPointForProxyTest) Proceed() (any, error) {
+	return nil, nil
+}
+
+func (m *mockJoinPointForProxyTest) ProceedWithArgs(args []any) (any, error) {
+	return nil, nil
 }

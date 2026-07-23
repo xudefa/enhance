@@ -41,6 +41,7 @@ func (c *defaultContainer) RegisterBean(def registry.BeanDef) error {
 	return c.reg.Register(def, beanID)
 }
 
+// RegisterInstance 注册一个已存在的 Bean 实例。
 func (c *defaultContainer) RegisterInstance(instance any, typ reflect.Type) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -70,11 +71,15 @@ func (c *defaultContainer) Get(typ reflect.Type) ([]any, error) {
 		return nil, ErrBeanNotFound
 	}
 
+	// 复制beanIDs到本地切片，避免释放锁后被修改
+	beanIDsCopy := make([]string, len(beanIDs))
+	copy(beanIDsCopy, beanIDs)
+
 	// 释放读锁，避免在 resolveBean 中死锁
 	c.mu.RUnlock()
 
-	var instances []any
-	for _, beanID := range beanIDs {
+	instances := make([]any, 0, len(beanIDsCopy))
+	for _, beanID := range beanIDsCopy {
 		instance, err := c.resolveBean(beanID, typ)
 		if err != nil {
 			return nil, err
@@ -111,6 +116,7 @@ func (c *defaultContainer) GetByTypeAndName(name string, typ reflect.Type) (any,
 	return c.resolveBean(name, typ)
 }
 
+// GetAll 获取所有 Bean 实例列表。
 func (c *defaultContainer) GetAll() []any {
 	c.mu.RLock()
 
@@ -120,12 +126,13 @@ func (c *defaultContainer) GetAll() []any {
 	}
 
 	mapInstances := c.reg.ListInstances()
-	c.mu.RUnlock()
-
-	var instances []any
+	// 复制mapInstances到本地切片，避免释放锁后被修改
+	instances := make([]any, 0, len(mapInstances))
 	for _, v := range mapInstances {
 		instances = append(instances, v)
 	}
+	c.mu.RUnlock()
+
 	return instances
 }
 
@@ -163,6 +170,7 @@ func (c *defaultContainer) ListBeans() map[string]*registry.BeanDef {
 	return c.reg.ListBeans()
 }
 
+// Generate 生成 Bean ID。
 func (c *defaultContainer) Generate(typ reflect.Type, customName ...string) string {
 	// 处理指针类型，获取实际类型
 	actualType := typ
@@ -187,6 +195,7 @@ func (c *defaultContainer) Generate(typ reflect.Type, customName ...string) stri
 	return prefix + "#" + customName[0]
 }
 
+// Parse 解析 Bean ID 为包路径、类型名和自定义名称。
 func (c *defaultContainer) Parse(beanID string) (pkgPath, typeName, customName string) {
 	// 解析自定义名称
 	parts := strings.SplitN(beanID, "#", 2)
@@ -364,157 +373,6 @@ func (c *defaultContainer) createAndInitialize(beanID string, def *registry.Bean
 	}
 
 	return instance, nil
-}
-
-// Validate 验证所有已注册Bean的依赖是否可解析，检测循环依赖。
-func (c *defaultContainer) Validate() error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.initialized {
-		return fmt.Errorf("container already initialized, cannot validate")
-	}
-
-	// 1. 检查所有Bean的依赖是否已注册
-	if err := c.validateDependencies(); err != nil {
-		return err
-	}
-
-	// 2. 检测循环依赖
-	if err := c.detectCircularDependencies(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateDependencies 检查所有Bean的依赖是否已注册
-func (c *defaultContainer) validateDependencies() error {
-	types := c.Types()
-	typeSet := make(map[reflect.Type]bool)
-	for _, typ := range types {
-		typeSet[typ] = true
-	}
-
-	for _, typ := range types {
-		if err := c.validateTypeDependencies(typ, typeSet); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// validateTypeDependencies 检查指定类型的依赖
-func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet map[reflect.Type]bool) error {
-	actualType := typ
-	if typ.Kind() == reflect.Ptr {
-		actualType = typ.Elem()
-	}
-
-	if actualType.Kind() != reflect.Struct {
-		return nil
-	}
-
-	for i := 0; i < actualType.NumField(); i++ {
-		field := actualType.Field(i)
-		if !field.IsExported() {
-			continue
-		}
-
-		// 检查是否有 inject 标签（包括空标签）
-		if _, ok := field.Tag.Lookup("inject"); !ok {
-			continue
-		}
-
-		fieldType := field.Type
-		if typeSet[fieldType] {
-			continue
-		}
-
-		if c.parent == nil {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		ext, ok := c.parent.(ContainerExt)
-		if !ok {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		parentTypes := ext.Types()
-		found := false
-		for _, pt := range parentTypes {
-			if pt == fieldType {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-	}
-
-	return nil
-}
-
-// detectCircularDependencies 检测循环依赖
-func (c *defaultContainer) detectCircularDependencies() error {
-	types := c.Types()
-	visited := make(map[reflect.Type]bool)
-	recStack := make(map[reflect.Type]bool)
-
-	for _, typ := range types {
-		if !visited[typ] {
-			if err := c.detectCircularDFS(typ, visited, recStack, []string{}); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// detectCircularDFS 深度优先搜索检测循环依赖
-func (c *defaultContainer) detectCircularDFS(typ reflect.Type, visited, recStack map[reflect.Type]bool, path []string) error {
-	visited[typ] = true
-	recStack[typ] = true
-	path = append(path, typ.String())
-
-	actualType := typ
-	if typ.Kind() == reflect.Ptr {
-		actualType = typ.Elem()
-	}
-
-	if actualType.Kind() == reflect.Struct {
-		for i := 0; i < actualType.NumField(); i++ {
-			field := actualType.Field(i)
-			if !field.IsExported() {
-				continue
-			}
-
-			if _, ok := field.Tag.Lookup("inject"); ok {
-				fieldType := field.Type
-
-				if recStack[fieldType] {
-					path = append(path, fieldType.String())
-					return fmt.Errorf("circular dependency detected: %s", strings.Join(path, " -> "))
-				}
-
-				if !visited[fieldType] {
-					if err := c.detectCircularDFS(fieldType, visited, recStack, path); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-
-	recStack[typ] = false
-	return nil
 }
 
 // NewContainer 创建一个新的 IoC 容器实例。

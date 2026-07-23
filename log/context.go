@@ -82,19 +82,25 @@ func (l *ContextLogger) Error(ctx context.Context, msg string, keys ...KeyValue)
 // DPanic 记录致命错误日志并 panic
 func (l *ContextLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
 	keys = appendContextKeys(ctx, keys)
-	l.logger.DPanic(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.DPanic(ctx, msg, keys...)
+	}
 }
 
 // Panic 记录日志并 panic
 func (l *ContextLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
 	keys = appendContextKeys(ctx, keys)
-	l.logger.Panic(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.Panic(ctx, msg, keys...)
+	}
 }
 
 // Fatal 记录致命级别日志
 func (l *ContextLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
 	keys = appendContextKeys(ctx, keys)
-	l.logger.Fatal(ctx, msg, keys...)
+	if fl, ok := l.logger.(LoggerFatal); ok {
+		fl.Fatal(ctx, msg, keys...)
+	}
 }
 
 // Sync 同步日志缓冲区
@@ -195,17 +201,23 @@ func (d *DynamicLevelLogger) Error(ctx context.Context, msg string, keys ...KeyV
 
 // DPanic 记录致命错误日志并 panic
 func (d *DynamicLevelLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
-	d.logger.DPanic(ctx, msg, keys...)
+	if fl, ok := d.logger.(LoggerFatal); ok {
+		fl.DPanic(ctx, msg, keys...)
+	}
 }
 
 // Panic 记录日志并 panic
 func (d *DynamicLevelLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
-	d.logger.Panic(ctx, msg, keys...)
+	if fl, ok := d.logger.(LoggerFatal); ok {
+		fl.Panic(ctx, msg, keys...)
+	}
 }
 
 // Fatal 记录致命级别日志
 func (d *DynamicLevelLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
-	d.logger.Fatal(ctx, msg, keys...)
+	if fl, ok := d.logger.(LoggerFatal); ok {
+		fl.Fatal(ctx, msg, keys...)
+	}
 }
 
 // Sync 同步日志缓冲区

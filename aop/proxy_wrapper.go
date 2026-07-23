@@ -73,14 +73,11 @@ func (w *InterfaceProxyWrapper) InvokeContext(ctx context.Context, methodName st
 		}
 	}
 
-	inv := &invocation{
-		method: method.Func.Interface(),
-		args:   args,
-		this:   w.target,
-		target: w.target,
-		sig:    NewMethodSignature(methodName, w.iface),
-		ctx:    ctx,
+	proceedFn := func() (any, error) {
+		return targetFunc(args...), nil
 	}
+	joinPoint := NewJoinPoint(w.target, methodName, args, proceedFn, nil)
+	inv := NewInvocation(joinPoint, proceedFn)
 
 	return w.getExecutor().Execute(inv, w.advisors, targetFunc), nil
 }

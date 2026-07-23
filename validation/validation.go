@@ -14,7 +14,7 @@ func (e ValidationError) Error() string {
 }
 
 func (e ValidationErrors) Error() string {
-	var msgs []string
+	msgs := make([]string, 0, len(e))
 	for _, err := range e {
 		msgs = append(msgs, err.Error())
 	}
@@ -91,9 +91,8 @@ func (v *TagValidator) Validate(obj any) error {
 
 // validateField 验证单个字段，解析验证规则并执行验证
 func (v *TagValidator) validateField(field reflect.Value, tag, fieldName string, obj any) []ValidationError {
-	var errs []ValidationError
-
 	rules := strings.Split(tag, ",")
+	errs := make([]ValidationError, 0, len(rules))
 
 	isRequired := false
 	for _, rule := range rules {

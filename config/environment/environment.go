@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/xudefa/enhance/config/refresh"
 )
 
 // Environment 环境配置管理器
@@ -16,10 +14,10 @@ import (
 // 配置源按优先级排序，高优先级覆盖低优先级。
 // 支持命令行参数（最高优先级）> 环境变量 > 配置文件（最低优先级）。
 type Environment struct {
-	mu              sync.RWMutex                      // 保护所有字段的读写锁
-	sources         []PropertySource                  // 配置源列表，按优先级升序排列
-	activeProfiles  []string                          // 当前激活的 Profile 列表
-	configListeners []func(refresh.ConfigChangeEvent) // 配置变更监听器
+	mu              sync.RWMutex              // 保护所有字段的读写锁
+	sources         []PropertySource          // 配置源列表，按优先级升序排列
+	activeProfiles  []string                  // 当前激活的 Profile 列表
+	configListeners []func(ConfigChangeEvent) // 配置变更监听器
 }
 
 // NewEnvironment 创建环境配置管理器
@@ -198,16 +196,16 @@ func (e *Environment) sortSourcesIfNeeded() {
 }
 
 // AddConfigChangeListener 添加配置变更监听器
-func (e *Environment) AddConfigChangeListener(listener func(refresh.ConfigChangeEvent)) {
+func (e *Environment) AddConfigChangeListener(listener func(ConfigChangeEvent)) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.configListeners = append(e.configListeners, listener)
 }
 
 // notifyConfigChange 通知所有配置变更监听器
-func (e *Environment) notifyConfigChange(event refresh.ConfigChangeEvent) {
+func (e *Environment) notifyConfigChange(event ConfigChangeEvent) {
 	e.mu.RLock()
-	listeners := make([]func(refresh.ConfigChangeEvent), len(e.configListeners))
+	listeners := make([]func(ConfigChangeEvent), len(e.configListeners))
 	copy(listeners, e.configListeners)
 	e.mu.RUnlock()
 

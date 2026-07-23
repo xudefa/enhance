@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xudefa/enhance/log"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 // TokenBucket 令牌桶
@@ -19,7 +20,6 @@ type TokenBucket struct {
 	lastTime time.Time
 }
 
-// NewTokenBucket 创建令牌桶
 func NewTokenBucket(capacity, rate int) *TokenBucket {
 	return &TokenBucket{
 		capacity: capacity,
@@ -29,7 +29,6 @@ func NewTokenBucket(capacity, rate int) *TokenBucket {
 	}
 }
 
-// Take 尝试获取令牌
 func (b *TokenBucket) Take() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -74,7 +73,6 @@ type RateLimitFilter struct {
 	logger       log.Logger
 }
 
-// NewRateLimitFilter 创建限流过滤器
 func NewRateLimitFilter(config RateLimitConfig) *RateLimitFilter {
 	if config.Rate == 0 {
 		config.Rate = 100
@@ -89,8 +87,15 @@ func NewRateLimitFilter(config RateLimitConfig) *RateLimitFilter {
 	}
 }
 
-// DoFilter 处理限流
-func (f *RateLimitFilter) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error {
+// DoFilter 实现 filter.Filter 接口
+func (f *RateLimitFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+	ctxVal, _ := ctx.(context.Context)
+	req, _ := request.(SecurityRequest)
+	resp, _ := response.(SecurityResponse)
+	return f.doFilter(ctxVal, req, resp, chain)
+}
+
+func (f *RateLimitFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	if !f.config.Enabled {
 		return chain.DoFilter(ctx, request, response)
 	}
@@ -130,6 +135,9 @@ func (f *RateLimitFilter) DoFilter(ctx context.Context, request SecurityRequest,
 	f.logger.Debug(ctx, "请求通过限流检查", log.KeyValue{Key: "ip", Value: clientIP}, log.KeyValue{Key: "uri", Value: uri})
 	return chain.DoFilter(ctx, request, response)
 }
+
+// Order 实现 filter.Filter 接口
+func (f *RateLimitFilter) Order() int { return 0 }
 
 func (f *RateLimitFilter) getClientIP(request SecurityRequest) string {
 	headers := []string{"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP", "WL-Proxy-Client-IP"}

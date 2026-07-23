@@ -30,8 +30,8 @@ func TestWeaverWithBasicAspect(t *testing.T) {
 	weaver.AddAspects(&AspectMeta{
 		Instance: &TestAspect{},
 		PointCut: MatchByNamePrefix("Do"),
-		Advice: Around(func(jp JoinPoint, proceed ProceedFunc) any {
-			return proceed(jp.Args()...)
+		Advice: Around(func(jp JoinPoint, proceed func() any) any {
+			return proceed()
 		}),
 		Order: 0,
 	})
@@ -56,12 +56,12 @@ func TestWeaverWithMultipleAspects(t *testing.T) {
 	weaver.AddAspects(
 		&AspectMeta{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    2,
 		},
 		&AspectMeta{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 	)
@@ -83,17 +83,17 @@ func TestWeaverWithOrderSorting(t *testing.T) {
 	weaver.AddAspects(
 		&AspectMeta{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    10,
 		},
 		&AspectMeta{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    5,
 		},
 		&AspectMeta{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 	)
@@ -114,8 +114,8 @@ func TestWeaverWithInterfaceTarget(t *testing.T) {
 	weaver := NewWeaver()
 	weaver.AddAspects(&AspectMeta{
 		PointCut: MatchInterface((*TestServiceInterface)(nil)),
-		Advice: Around(func(jp JoinPoint, proceed ProceedFunc) any {
-			return proceed(jp.Args()...)
+		Advice: Around(func(jp JoinPoint, proceed func() any) any {
+			return proceed()
 		}),
 		Order: 0,
 	})
@@ -149,7 +149,7 @@ func TestAopRegistry(t *testing.T) {
 
 	aspect := &AspectMeta{
 		PointCut: MatchAll(),
-		Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+		Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 	}
 	registry.RegisterAspect(aspect)
 
@@ -164,7 +164,7 @@ func TestAopRegistryMatchAspectsForType(t *testing.T) {
 	registry := NewAopRegistry()
 	registry.RegisterAspect(&AspectMeta{
 		PointCut: MatchByName("DoSomething"),
-		Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+		Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 	})
 
 	matched := registry.MatchAspectsForType(reflect.TypeFor[*TestUserService]())

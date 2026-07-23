@@ -176,7 +176,7 @@ func ValidateStarters(starters []StarterModule) error {
 		return nil
 	}
 
-	var msgs []string
+	msgs := make([]string, 0, len(conflicts))
 	for _, c := range conflicts {
 		msgs = append(msgs, c.String())
 	}

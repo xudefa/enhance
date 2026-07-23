@@ -8,10 +8,10 @@ func TestCounterBuilder_Build(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	counter := NewCounterBuilder(registry, "requests").
+	counter := NewMetricBuilder(registry, "requests").
 		Tag("method", "GET").
 		Tag("status", "200").
-		Build()
+		BuildCounter()
 
 	counter.Inc()
 	if counter.Value() != 1 {
@@ -35,9 +35,9 @@ func TestGaugeBuilder_Build(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	gauge := NewGaugeBuilder(registry, "memory").
+	gauge := NewMetricBuilder(registry, "memory").
 		Tag("type", "heap").
-		Build()
+		BuildGauge()
 
 	gauge.Set(1024.5)
 	if gauge.Value() != 1024.5 {
@@ -58,9 +58,9 @@ func TestHistogramBuilder_Build(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	hist := NewHistogramBuilder(registry, "duration").
+	hist := NewMetricBuilder(registry, "duration").
 		Tag("endpoint", "/api").
-		Build()
+		BuildHistogram()
 
 	hist.Record(100.5)
 	if hist.Count() != 1 {
@@ -84,12 +84,12 @@ func TestCounterBuilder_Tags(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	counter := NewCounterBuilder(registry, "requests").
+	counter := NewMetricBuilder(registry, "requests").
 		Tags(map[string]string{
 			"method": "POST",
 			"status": "201",
 		}).
-		Build()
+		BuildCounter()
 
 	counter.Inc()
 	metrics := registry.Collect()
@@ -108,8 +108,8 @@ func TestCounterBuilder_NoTags(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	counter := NewCounterBuilder(registry, "simple_counter").
-		Build()
+	counter := NewMetricBuilder(registry, "simple_counter").
+		BuildCounter()
 
 	counter.Inc()
 	if counter.Value() != 1 {
@@ -129,11 +129,11 @@ func TestCounterBuilder_ChainMultipleTags(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	counter := NewCounterBuilder(registry, "http_requests").
+	counter := NewMetricBuilder(registry, "http_requests").
 		Tag("service", "api").
 		Tag("method", "GET").
 		Tag("status", "200").
-		Build()
+		BuildCounter()
 
 	counter.Inc()
 	counter.Inc()
@@ -156,13 +156,13 @@ func TestCounterBuilder_SameNameDifferentTags(t *testing.T) {
 	t.Parallel()
 	registry := NewSimpleRegistry()
 
-	counter1 := NewCounterBuilder(registry, "requests").
+	counter1 := NewMetricBuilder(registry, "requests").
 		Tag("method", "GET").
-		Build()
+		BuildCounter()
 
-	counter2 := NewCounterBuilder(registry, "requests").
+	counter2 := NewMetricBuilder(registry, "requests").
 		Tag("method", "POST").
-		Build()
+		BuildCounter()
 
 	counter1.Inc()
 	counter2.Inc()

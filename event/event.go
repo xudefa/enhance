@@ -103,24 +103,31 @@ func (b *EventBus) Unsubscribe(eventType string, target EventListener) {
 	}
 	targetPtr := reflect.ValueOf(target).Pointer()
 
-	value, ok := b.listeners.Load(eventType)
-	if !ok {
-		return
-	}
-	list := value.(*listenerList)
-	listeners := list.listeners
-	for i, listener := range listeners {
-		if reflect.ValueOf(listener).Pointer() == targetPtr {
-			newListeners := make([]EventListener, len(listeners)-1)
-			copy(newListeners, listeners[:i])
-			copy(newListeners[i:], listeners[i+1:])
-			if len(newListeners) == 0 {
-				b.listeners.Delete(eventType)
-				return
-			}
-			b.listeners.CompareAndSwap(eventType, list, &listenerList{listeners: newListeners})
+	for {
+		value, ok := b.listeners.Load(eventType)
+		if !ok {
 			return
 		}
+		list := value.(*listenerList)
+		listeners := list.listeners
+		for i, listener := range listeners {
+			if reflect.ValueOf(listener).Pointer() == targetPtr {
+				newListeners := make([]EventListener, len(listeners)-1)
+				copy(newListeners, listeners[:i])
+				copy(newListeners[i:], listeners[i+1:])
+				if len(newListeners) == 0 {
+					b.listeners.Delete(eventType)
+					return
+				}
+				if b.listeners.CompareAndSwap(eventType, list, &listenerList{listeners: newListeners}) {
+					return
+				}
+				// CAS失败，说明列表已被其他goroutine修改，重试
+				continue
+			}
+		}
+		// 未找到目标监听器
+		return
 	}
 }
 

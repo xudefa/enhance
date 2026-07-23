@@ -21,6 +21,7 @@ type AsyncExecutor struct {
 	mu          sync.Mutex
 	running     bool
 	started     bool // 标记 worker 是否已启动
+	done        chan struct{} // 标记执行器是否已关闭
 }
 
 // asyncTask 异步任务内部结构。
@@ -98,6 +99,7 @@ func NewAsyncExecutor(workerCount, queueSize int) *AsyncExecutor {
 		cancel:      cancel,
 		running:     true,  // 默认允许提交（懒启动模式）
 		started:     false, // worker 未启动
+		done:        make(chan struct{}),
 	}
 
 	return executor
@@ -185,16 +187,14 @@ func (e *AsyncExecutor) Submit(fn func() (any, error)) *Future {
 	}
 	e.mu.Unlock()
 
-	// 使用 defer recover 防止向已关闭的 channel 发送导致 panic
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				// channel 已关闭，设置错误
-				future.setResult(nil, fmt.Errorf("executor is shutdown"))
-			}
-		}()
-		e.taskQueue <- task
-	}()
+	// 使用 done channel 安全检测关闭状态，避免向已关闭的 channel 发送
+	select {
+	case e.taskQueue <- task:
+		// 任务成功提交
+	case <-e.done:
+		// 执行器已关闭，设置错误
+		future.setResult(nil, fmt.Errorf("executor is shutdown"))
+	}
 
 	return future
 }
@@ -222,7 +222,8 @@ func (e *AsyncExecutor) Shutdown() {
 	e.mu.Unlock()
 
 	e.cancel()
-	close(e.taskQueue)
+	close(e.done)      // 先通知所有等待者
+	close(e.taskQueue) // 再关闭任务队列
 	e.wg.Wait()
 }
 
@@ -237,7 +238,8 @@ func (e *AsyncExecutor) ShutdownWithTimeout(timeout time.Duration) error {
 	e.mu.Unlock()
 
 	e.cancel()
-	close(e.taskQueue)
+	close(e.done)      // 先通知所有等待者
+	close(e.taskQueue) // 再关闭任务队列
 
 	done := make(chan struct{})
 	go func() {

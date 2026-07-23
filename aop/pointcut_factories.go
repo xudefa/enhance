@@ -7,111 +7,6 @@ import (
 	"strings"
 )
 
-// pointCutImpl 切点实现。
-type pointCutImpl struct {
-	classMatcher  ClassMatcher
-	methodMatcher MethodMatcher
-	regexPattern  string
-	regex         *regexp.Regexp
-	interfaceType reflect.Type
-}
-
-func (p *pointCutImpl) MatchClass(c reflect.Type) bool {
-	if p.classMatcher == nil {
-		return true
-	}
-	return p.classMatcher(c)
-}
-
-func (p *pointCutImpl) MatchMethod(m reflect.Method) bool {
-	if p.methodMatcher == nil {
-		return true
-	}
-	return p.methodMatcher(m)
-}
-
-func (p *pointCutImpl) String() string {
-	if p.regexPattern != "" {
-		return "ByRegex(" + p.regexPattern + ")"
-	}
-	if p.interfaceType != nil {
-		return "ByInterface(" + p.interfaceType.String() + ")"
-	}
-	if p.classMatcher != nil && p.methodMatcher != nil {
-		return "ByClassAndMethod"
-	}
-	if p.classMatcher != nil {
-		return "ByClass"
-	}
-	if p.methodMatcher != nil {
-		return "ByMethod"
-	}
-	return "MatchAll"
-}
-
-// ClassMatcher 类匹配器类型
-//
-// 函数类型，接收一个反射类型，返回是否匹配。
-// 用于定义切点的类级别匹配规则。
-type ClassMatcher func(reflect.Type) bool
-
-// MethodMatcher 方法匹配器类型
-//
-// 函数类型，接收一个反射方法，返回是否匹配。
-// 用于定义切点的方法级别匹配规则。
-type MethodMatcher func(reflect.Method) bool
-
-// PointCutFunc 函数式切点适配器
-//
-// Go 惯用法：使用函数类型替代接口实现，符合 Go 标准库中 http.HandlerFunc 的设计模式。
-// 将函数适配为 PointCut 接口，仅匹配方法（类匹配始终返回 true）。
-type PointCutFunc func(reflect.Method) bool
-
-// MatchClass 实现 PointCut 接口（始终返回 true）
-func (f PointCutFunc) MatchClass(c reflect.Type) bool {
-	return true
-}
-
-// MatchMethod 实现 PointCut 接口
-func (f PointCutFunc) MatchMethod(m reflect.Method) bool {
-	return f(m)
-}
-
-// String 实现 PointCut 接口
-func (f PointCutFunc) String() string {
-	return "PointCutFunc"
-}
-
-// PointCutWithClass 带类匹配的函数式切点
-//
-// 同时支持类和方法匹配的函数式切点适配器。
-// 当需要同时指定类和方法匹配规则时使用。
-type PointCutWithClass struct {
-	Class ClassMatcher
-	Match MethodMatcher
-}
-
-// MatchClass 实现 PointCut 接口
-func (p PointCutWithClass) MatchClass(c reflect.Type) bool {
-	if p.Class == nil {
-		return true
-	}
-	return p.Class(c)
-}
-
-// MatchMethod 实现 PointCut 接口
-func (p PointCutWithClass) MatchMethod(m reflect.Method) bool {
-	if p.Match == nil {
-		return true
-	}
-	return p.Match(m)
-}
-
-// String 实现 PointCut 接口
-func (p PointCutWithClass) String() string {
-	return "PointCutWithClass"
-}
-
 // MatchAll 匹配所有
 //
 // 返回匹配所有类和方法的切点。
@@ -193,10 +88,13 @@ func MatchClassMethod(classMatcher ClassMatcher, methodMatcher MethodMatcher) Po
 
 // MatchByName 按方法名匹配
 //
-// 匹配指定名称的方法。
+// 匹配指定名称的方法。支持以下模式：
+//   - 精确匹配：如 "DoSomething"
+//   - 通配符匹配：如 "Do*" 匹配所有以 Do 开头的方法
+//   - 正则匹配：如 "^Do.*" 匹配所有以 Do 开头的方法
 //
 // 参数:
-//   - name: 方法名
+//   - name: 方法名或模式
 //
 // 返回值:
 //   - PointCut: 匹配指定方法名的切点
@@ -205,11 +103,45 @@ func MatchClassMethod(classMatcher ClassMatcher, methodMatcher MethodMatcher) Po
 //
 //	// 只拦截 DoSomething 方法
 //	aop.MatchByName("DoSomething")
+//
+//	// 拦截所有以 Do 开头的方法
+//	aop.MatchByName("Do*")
 func MatchByName(name string) PointCut {
+	if strings.ContainsAny(name, "*?") {
+		pattern := "^" + strings.ReplaceAll(strings.ReplaceAll(name, "*", ".*"), "?", ".") + "$"
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return &pointCutImpl{
+				methodMatcher: func(m reflect.Method) bool { return false },
+				regexPattern:  name,
+			}
+		}
+		return &pointCutImpl{
+			methodMatcher: func(m reflect.Method) bool {
+				return re.MatchString(m.Name)
+			},
+			regexPattern: name,
+			regex:        re,
+		}
+	}
+	if strings.ContainsAny(name, "^$+[]{}|\\()") {
+		re, err := regexp.Compile(name)
+		if err == nil {
+			return &pointCutImpl{
+				methodMatcher: func(m reflect.Method) bool {
+					return re.MatchString(m.Name)
+				},
+				regexPattern: name,
+				regex:        re,
+			}
+		}
+	}
 	return &pointCutImpl{
 		methodMatcher: func(m reflect.Method) bool {
 			return m.Name == name
 		},
+		regexPattern: "",
+		name:         name,
 	}
 }
 
@@ -304,6 +236,30 @@ func MatchByAnnotation(annotationType reflect.Type) PointCut {
 //	// 拦截所有实现 ServiceInterface 接口的类
 //	aop.MatchInterface((*ServiceInterface)(nil))
 func MatchInterface(y any) PointCut {
+	// 支持两种调用方式：
+	// 1. MatchInterface((*SomeInterface)(nil)) — 传入接口指针
+	// 2. MatchInterface(reflect.TypeFor[SomeInterface]()) — 直接传入 reflect.Type
+	if ifaceType, ok := y.(reflect.Type); ok {
+		if ifaceType == nil || ifaceType.Kind() != reflect.Interface {
+			return &pointCutImpl{
+				classMatcher:  func(t reflect.Type) bool { return false },
+				methodMatcher: func(m reflect.Method) bool { return false },
+			}
+		}
+		return &pointCutImpl{
+			interfaceType: ifaceType,
+			classMatcher: func(t reflect.Type) bool {
+				if t == nil {
+					return false
+				}
+				for t.Kind() == reflect.Pointer {
+					t = t.Elem()
+				}
+				return t.Implements(ifaceType) || reflect.PointerTo(t).Implements(ifaceType)
+			},
+		}
+	}
+
 	yType := reflect.TypeOf(y)
 	if yType == nil {
 		return &pointCutImpl{
@@ -330,7 +286,7 @@ func MatchInterface(y any) PointCut {
 			for t.Kind() == reflect.Pointer {
 				t = t.Elem()
 			}
-			return t.Implements(yType)
+			return t.Implements(yType) || reflect.PointerTo(t).Implements(yType)
 		},
 	}
 }
@@ -445,6 +401,7 @@ func MatchByPackage(packagePath string) PointCut {
 			}
 			return strings.HasPrefix(t.PkgPath(), packagePath)
 		},
+		packagePath: packagePath,
 	}
 }
 
@@ -554,64 +511,4 @@ func ComposeOr(pointcuts ...PointCut) PointCut {
 	}
 }
 
-// compositePointCut 组合切点实现
-type compositePointCut struct {
-	pointcuts []PointCut
-	and       bool // true=AND, false=OR
-}
 
-func (c *compositePointCut) MatchClass(t reflect.Type) bool {
-	if c.and {
-		// AND 逻辑：所有切点都必须匹配类
-		for _, pc := range c.pointcuts {
-			if !pc.MatchClass(t) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// OR 逻辑：只要有一个切点匹配类即可
-	for _, pc := range c.pointcuts {
-		if pc.MatchClass(t) {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *compositePointCut) MatchMethod(m reflect.Method) bool {
-	if c.and {
-		// AND 逻辑：所有切点都必须匹配方法
-		for _, pc := range c.pointcuts {
-			if !pc.MatchMethod(m) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// OR 逻辑：只要有一个切点匹配方法即可
-	for _, pc := range c.pointcuts {
-		if pc.MatchMethod(m) {
-			return true
-		}
-	}
-	return false
-}
-
-func (c *compositePointCut) String() string {
-	if c.and {
-		return "AND(" + strings.Join(pointcutStrings(c.pointcuts), ", ") + ")"
-	}
-	return "OR(" + strings.Join(pointcutStrings(c.pointcuts), ", ") + ")"
-}
-
-// pointcutStrings 获取切点列表的字符串表示
-func pointcutStrings(pointcuts []PointCut) []string {
-	result := make([]string, len(pointcuts))
-	for i, pc := range pointcuts {
-		result[i] = pc.String()
-	}
-	return result
-}

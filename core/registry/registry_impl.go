@@ -115,9 +115,14 @@ func (r *defaultBeanRegistry) SetInstance(beanID string, instance any) {
 }
 
 // GetByType 根据类型获取 Bean ID 列表。
+//
+// 返回切片的副本，避免调用者修改内部数据结构。
 func (r *defaultBeanRegistry) GetByType(typ reflect.Type) []string {
 	if ids, ok := r.typeIndex.Load(typ); ok {
-		return ids.([]string)
+		src := ids.([]string)
+		dst := make([]string, len(src))
+		copy(dst, src)
+		return dst
 	}
 	return nil
 }

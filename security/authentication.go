@@ -3,14 +3,12 @@ package security
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/xudefa/enhance/log"
 )
 
 // UsernamePasswordAuthenticationToken 用户名密码认证令牌
-// 用于在认证过程中传递和存储用户凭证
-// 认证前：包含用户名和密码（authenticated=false）
-// 认证后：包含用户详情和权限列表（authenticated=true）
 type UsernamePasswordAuthenticationToken struct {
 	principal     any
 	credentials   any
@@ -19,7 +17,6 @@ type UsernamePasswordAuthenticationToken struct {
 }
 
 // NewUsernamePasswordAuthenticationToken 创建未认证的用户名密码令牌
-// 用于认证请求的初始阶段
 func NewUsernamePasswordAuthenticationToken(principal, credentials any) *UsernamePasswordAuthenticationToken {
 	return &UsernamePasswordAuthenticationToken{
 		principal:     principal,
@@ -30,7 +27,6 @@ func NewUsernamePasswordAuthenticationToken(principal, credentials any) *Usernam
 }
 
 // NewAuthenticatedUsernamePasswordAuthenticationToken 创建已认证的用户名密码令牌
-// 用于认证成功后的令牌
 func NewAuthenticatedUsernamePasswordAuthenticationToken(principal any, authorities []string) *UsernamePasswordAuthenticationToken {
 	return &UsernamePasswordAuthenticationToken{
 		principal:     principal,
@@ -57,7 +53,6 @@ func (t *UsernamePasswordAuthenticationToken) Authenticated() bool {
 }
 
 // Name 返回认证主体名称
-// 支持字符串和UserDetails两种principal类型
 func (t *UsernamePasswordAuthenticationToken) Name() string {
 	if name, ok := t.principal.(string); ok {
 		return name
@@ -78,9 +73,21 @@ func (t *UsernamePasswordAuthenticationToken) SetAuthorities(authorities []strin
 	t.authorities = authorities
 }
 
+// extractPrincipalName 从 Authentication 提取主体名称（字符串或 UserDetails）
+func extractPrincipalName(auth Authentication) string {
+	if auth == nil {
+		return ""
+	}
+	if name, ok := auth.Principal().(string); ok {
+		return name
+	}
+	if userDetails, ok := auth.Principal().(UserDetails); ok {
+		return userDetails.Username()
+	}
+	return fmt.Sprintf("%v", auth.Principal())
+}
+
 // ProviderManager 认证提供者管理器
-// 管理多个认证提供者，按顺序尝试认证
-// 执行流程：遍历所有支持的提供者，返回第一个成功认证的结果
 type ProviderManager struct {
 	providers []AuthenticationProvider
 }
@@ -93,13 +100,12 @@ func NewProviderManager(providers ...AuthenticationProvider) *ProviderManager {
 }
 
 // Authenticate 尝试通过配置的提供者进行认证
-// 遍历所有提供者，返回第一个成功认证的结果
-func (m *ProviderManager) Authenticate(ctx context.Context, authentication Authentication) (Authentication, error) {
+func (m *ProviderManager) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
 	var lastErr error
 
 	for _, provider := range m.providers {
-		if provider.Supports(authentication) {
-			result, err := provider.Authenticate(ctx, authentication)
+		if provider.Supports(token) {
+			result, err := provider.Authenticate(ctx, token)
 			if err != nil {
 				lastErr = err
 				continue
@@ -123,13 +129,6 @@ func (m *ProviderManager) AddProvider(provider AuthenticationProvider) {
 }
 
 // DaoAuthenticationProvider 基于DAO的认证提供者
-// 从UserDetailsService加载用户并验证密码
-// 认证流程：
-// 1. 从认证令牌中提取用户名
-// 2. 通过UserDetailsService加载用户详情
-// 3. 验证密码是否匹配
-// 4. 检查用户状态（是否启用、是否锁定等）
-// 5. 认证成功后返回包含用户详情的认证令牌
 type DaoAuthenticationProvider struct {
 	userDetailsService UserDetailsService
 	passwordEncoder    PasswordEncoder
@@ -146,11 +145,14 @@ func NewDaoAuthenticationProvider(userDetailsService UserDetailsService, passwor
 }
 
 // Authenticate 执行认证逻辑
-// 1. 根据用户名加载用户信息
-// 2. 验证密码
-// 3. 检查用户状态
-func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, authentication Authentication) (Authentication, error) {
-	username := authentication.Name()
+func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
+	username := ""
+	if name, ok := token.Principal().(string); ok {
+		username = name
+	} else if userDetails, ok := token.Principal().(UserDetails); ok {
+		username = userDetails.Username()
+	}
+
 	if username == "" {
 		p.logger.Debug(ctx, "认证失败：用户名为空")
 		return nil, ErrBadCredentials
@@ -172,7 +174,7 @@ func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, authentica
 
 	p.logger.Debug(ctx, "验证用户密码", log.KeyValue{Key: "username", Value: username})
 	presentedPassword := ""
-	if creds, ok := authentication.Credentials().(string); ok {
+	if creds, ok := token.Credentials().(string); ok {
 		presentedPassword = creds
 	}
 
@@ -196,14 +198,12 @@ func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, authentica
 }
 
 // Supports 判断是否支持该认证方式
-func (p *DaoAuthenticationProvider) Supports(authentication Authentication) bool {
-	_, ok := authentication.(*UsernamePasswordAuthenticationToken)
+func (p *DaoAuthenticationProvider) Supports(token AuthenticationToken) bool {
+	_, ok := token.(*UsernamePasswordAuthenticationToken)
 	return ok
 }
 
 // AnonymousAuthenticationProvider 匿名认证提供者
-// 为匿名用户创建认证令牌，当其他认证提供者都无法处理时使用
-// 使用场景：用户未登录但需要访问某些公开资源时
 type AnonymousAuthenticationProvider struct{}
 
 // NewAnonymousAuthenticationProvider 创建匿名认证提供者
@@ -212,16 +212,15 @@ func NewAnonymousAuthenticationProvider() *AnonymousAuthenticationProvider {
 }
 
 // Authenticate 为匿名用户创建认证令牌
-// 只有当传入的authentication为nil或未认证时，才创建匿名令牌
-func (p *AnonymousAuthenticationProvider) Authenticate(ctx context.Context, authentication Authentication) (Authentication, error) {
-	if authentication == nil || !authentication.Authenticated() {
+func (p *AnonymousAuthenticationProvider) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
+	if token == nil || !token.Authenticated() {
 		return NewAuthenticatedUsernamePasswordAuthenticationToken("anonymousUser", []string{"ROLE_ANONYMOUS"}), nil
 	}
 	return nil, nil
 }
 
 // Supports 只支持UsernamePasswordAuthenticationToken类型
-func (p *AnonymousAuthenticationProvider) Supports(authentication Authentication) bool {
-	_, ok := authentication.(*UsernamePasswordAuthenticationToken)
+func (p *AnonymousAuthenticationProvider) Supports(token AuthenticationToken) bool {
+	_, ok := token.(*UsernamePasswordAuthenticationToken)
 	return ok
 }

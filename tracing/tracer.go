@@ -284,6 +284,8 @@ func (s *AlwaysOffSampler) ShouldSample() bool {
 // ProbabilitySampler 概率采样器。
 type ProbabilitySampler struct {
 	rate float64
+	mu   sync.Mutex
+	rand *mathrand.Rand
 }
 
 // NewProbabilitySampler 创建概率采样器。
@@ -292,12 +294,15 @@ type ProbabilitySampler struct {
 func NewProbabilitySampler(rate float64) *ProbabilitySampler {
 	return &ProbabilitySampler{
 		rate: rate,
+		rand: mathrand.New(mathrand.NewSource(time.Now().UnixNano())),
 	}
 }
 
 // ShouldSample 实现 Sampler 接口，按概率返回是否采样。
 func (s *ProbabilitySampler) ShouldSample() bool {
-	return mathrand.Float64() < s.rate
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rand.Float64() < s.rate
 }
 
 // ConsoleExporter 控制台导出器。

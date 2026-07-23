@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/xudefa/enhance/security/authorization"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 func TestSlidingWindowRateLimiter(t *testing.T) {
@@ -443,11 +446,10 @@ func (a *testAuth) Principal() any        { return a.principal }
 func (a *testAuth) Credentials() any      { return a.credentials }
 func (a *testAuth) Authorities() []string { return []string{"ROLE_USER"} }
 func (a *testAuth) Authenticated() bool   { return true }
-func (a *testAuth) Name() string          { return a.principal }
 
 type testAuthManager struct{}
 
-func (m *testAuthManager) Authenticate(ctx context.Context, auth Authentication) (Authentication, error) {
+func (m *testAuthManager) Authenticate(ctx context.Context, auth AuthenticationToken) (Authentication, error) {
 	return &testAuth{principal: "testuser", credentials: "testpass"}, nil
 }
 
@@ -459,15 +461,21 @@ func (s *testUserDetailsService) LoadUserByUsername(ctx context.Context, usernam
 
 type testAccessDecisionManager struct{}
 
-func (m *testAccessDecisionManager) Decide(ctx context.Context, auth Authentication, object any, attrs []string) error {
+func (m *testAccessDecisionManager) Decide(ctx context.Context, auth authorization.Authentication, resource string, attrs []string) error {
 	return nil
+}
+
+func (m *testAccessDecisionManager) Supports(attribute string) bool {
+	return true
 }
 
 type testSecurityFilter struct{}
 
-func (f *testSecurityFilter) DoFilter(ctx context.Context, req SecurityRequest, resp SecurityResponse, chain SecurityFilterChain) error {
+func (f *testSecurityFilter) DoFilter(ctx interface{}, req interface{}, resp interface{}, chain filter.FilterChain) error {
 	return chain.DoFilter(ctx, req, resp)
 }
+
+func (f *testSecurityFilter) Order() int { return 0 }
 
 type testLogoutSuccessHandler struct{}
 

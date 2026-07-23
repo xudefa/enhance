@@ -105,7 +105,7 @@ func (c *ProfileController) GetProfile(ctx mvc.Context) {
 		"code":    0,
 		"message": "success",
 		"data": map[string]any{
-			"username":    auth.Name(),
+			"username":    auth.Principal(),
 			"authorities": auth.Authorities(),
 		},
 	})
@@ -136,7 +136,7 @@ func (c *AdminController) GetUsers(ctx mvc.Context) {
 		"message": "success",
 		"data": map[string]any{
 			"users":       []string{"alice", "bob"},
-			"requestedBy": auth.Name(),
+			"requestedBy": auth.Principal(),
 		},
 	})
 }

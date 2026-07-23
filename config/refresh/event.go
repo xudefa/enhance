@@ -1,6 +1,6 @@
 package refresh
 
-import "time"
+import "github.com/xudefa/enhance/config/environment"
 
 // NewConfigChangeEvent 创建配置变更事件
 //
@@ -10,14 +10,6 @@ import "time"
 //   - oldValues: 变更前的值
 //   - newValues: 变更后的值
 //   - source: 配置源类型
-func NewConfigChangeEvent(eventType string, keys []string, oldValues, newValues map[string]any, source string) ConfigChangeEvent {
-	return ConfigChangeEvent{
-		EventType: eventType,
-		Keys:      keys,
-		OldValues: oldValues,
-		NewValues: newValues,
-		Source:    source,
-		timestamp: time.Now(),
-		Metadata:  make(map[string]string),
-	}
+func NewConfigChangeEvent(eventType string, keys []string, oldValues, newValues map[string]any, source string) environment.ConfigChangeEvent {
+	return environment.NewConfigChangeEvent(eventType, keys, oldValues, newValues, source)
 }

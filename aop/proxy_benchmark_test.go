@@ -10,7 +10,7 @@ func BenchmarkProxyFactory_GetProxy(b *testing.B) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 	})
@@ -27,7 +27,7 @@ func BenchmarkProxyFactory_ProxyInvocation(b *testing.B) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 	})
@@ -50,17 +50,17 @@ func BenchmarkProxyFactory_ProxyInvocation_MultipleAspects(b *testing.B) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    1,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    2,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed(jp.Args()...) }),
+			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
 			Order:    3,
 		},
 	})

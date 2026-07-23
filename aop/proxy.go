@@ -182,7 +182,13 @@ func (p *ProxyFactory) createInterfaceProxy() any {
 		return p.target
 	}
 
-	return NewInterfaceProxyWrapper(p.target, aspectsSnapshot, iface)
+	return &ReflectiveAopProxy{
+		target:      p.target,
+		targetType:  iface,
+		aspects:     aspectsSnapshot,
+		methodCache: make(map[string][]*AspectMeta),
+		executor:    p.executor,
+	}
 }
 
 // Target 返回原始目标对象。
@@ -225,16 +231,15 @@ func (p *ReflectiveAopProxy) CallContext(ctx context.Context, methodName string,
 		return p.invokeWithMeta(meta, callArgs)
 	}
 
-	inv := acquireInvocation()
-	inv.method = meta.method.Func.Interface()
-	inv.args = append(inv.args, args...)
-	inv.this = p.target
-	inv.target = p.target
-	inv.sig = NewMethodSignature(methodName, p.targetType)
-	inv.ctx = ctx
+	inv := NewInvocation(
+		NewJoinPoint(p.target, methodName, args,
+			func() (any, error) { return targetFunc(args...), nil },
+			func(newArgs []any) (any, error) { return targetFunc(newArgs...), nil },
+		),
+		func() (any, error) { return targetFunc(args...), nil },
+	)
 
 	result := p.getExecutor().Execute(inv, matchedAspects, targetFunc)
-	releaseInvocation(inv)
 	return result, nil
 }
 
@@ -284,14 +289,21 @@ func (p *ReflectiveAopProxy) getOrCacheMethodMeta(methodName string) *methodMeta
 		},
 	}
 
+	// receiverPool 缓存目标对象的 reflect.Value，避免重复反射
+	targetVal := reflect.ValueOf(p.target)
 	meta.receiverPool = &sync.Pool{
 		New: func() any {
-			v := reflect.ValueOf(p.target)
+			v := targetVal
 			return &v
 		},
 	}
 
-	p.metaCache.Store(methodName, meta)
+	// 使用 LoadOrStore 避免并发创建多个元数据对象
+	actual, loaded := p.metaCache.LoadOrStore(methodName, meta)
+	if loaded {
+		// 已有其他goroutine创建了元数据，使用已存在的
+		return actual.(*methodMeta)
+	}
 	return meta
 }
 
@@ -301,8 +313,8 @@ func (p *ReflectiveAopProxy) invokeWithMeta(meta *methodMeta, callArgs []any) an
 	in = in[:0]
 
 	// 使用缓存的 receiver 避免重复反射
-	receiver := *(meta.receiverPool.Get().(*reflect.Value))
-	in = append(in, receiver)
+	receiverPtr := meta.receiverPool.Get().(*reflect.Value)
+	in = append(in, *receiverPtr)
 
 	for _, a := range callArgs {
 		in = append(in, reflect.ValueOf(a))
@@ -311,7 +323,7 @@ func (p *ReflectiveAopProxy) invokeWithMeta(meta *methodMeta, callArgs []any) an
 	results := meta.method.Func.Call(in)
 
 	meta.valuePool.Put(&in)
-	meta.receiverPool.Put(&receiver)
+	meta.receiverPool.Put(receiverPtr)
 
 	switch meta.numOut {
 	case 0:
@@ -345,7 +357,7 @@ func (p *ReflectiveAopProxy) getMatchedAspects(methodName string, method reflect
 
 	var matched []*AspectMeta
 	for _, a := range p.aspects {
-		if a != nil && a.PointCut != nil && a.PointCut.MatchMethod(method) {
+		if a != nil && a.PointCut != nil && a.PointCut.Matches(p.target, method.Name) {
 			matched = append(matched, a)
 		}
 	}
@@ -438,7 +450,7 @@ func (p *ProxyFactory) filterAspects(method reflect.Method) []*AspectMeta {
 
 	var matched []*AspectMeta
 	for _, a := range aspectsSnapshot {
-		if a != nil && a.PointCut != nil && a.PointCut.MatchMethod(method) {
+		if a != nil && a.PointCut != nil && a.PointCut.Matches(p.target, method.Name) {
 			matched = append(matched, a)
 		}
 	}

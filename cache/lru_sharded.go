@@ -181,6 +181,12 @@ func (c *ShardedLRUCache) TTL(ctx context.Context, key string) (time.Duration, e
 	}
 
 	entry := elem.Value.(*lruEntry)
+
+	// 如果没有设置 TTL，返回 -1 表示永不过期
+	if entry.expiresAt.IsZero() {
+		return -1, nil
+	}
+
 	remaining := time.Until(entry.expiresAt)
 	if remaining <= 0 {
 		c.shardRemoveElement(shard, elem)

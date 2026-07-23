@@ -108,7 +108,7 @@ func TestModule_WithApplication(t *testing.T) {
 	)
 
 	// 创建应用并安装模块
-	app, err := NewApplicationWithOptions(
+	app, err := NewApplication(
 		WithAppName("test-app"),
 		WithModulesOption(dbModule),
 	)

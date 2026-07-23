@@ -222,11 +222,15 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 
 		// 设置当前租户
 		_ = m.manager.SetCurrentTenant(tenantID)
-		defer m.manager.ClearCurrentTenant()
 
 		// 将租户信息添加到 context
 		ctx := context.WithValue(r.Context(), tenantContextKey{}, tenant)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		newReq := r.WithContext(ctx)
+
+		// 确保请求处理完成后清除当前租户
+		defer m.manager.ClearCurrentTenant()
+
+		next.ServeHTTP(w, newReq)
 	})
 }
 

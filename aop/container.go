@@ -7,6 +7,18 @@ import (
 	"github.com/xudefa/enhance/core"
 )
 
+// ==================== AopContainer 结构体 ====================
+
+// AopContainer AOP 容器。
+//
+// 集成 AOP 功能的 IoC 容器。
+type AopContainer struct {
+	core.Container
+	integration *AopIntegration
+	factory     *AopBeanFactory
+	processor   *AopBeanPostProcessor
+}
+
 // NewAopContainer 创建AOP容器。
 func NewAopContainer(baseContainer core.Container) *AopContainer {
 	if baseContainer == nil {

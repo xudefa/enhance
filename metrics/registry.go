@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -126,8 +127,9 @@ func (h *simpleHistogram) RecordWithLabels(v float64, labels map[string]string) 
 		if h.tags == nil {
 			h.tags = make(map[string]string)
 		}
-		for k, v := range labels {
-			h.tags[k] = v
+		// 合并标签，避免覆盖已有标签
+		for k, val := range labels {
+			h.tags[k] = val
 		}
 		h.mu.Unlock()
 	}
@@ -190,15 +192,30 @@ func parseTags(tags []string) map[string]string {
 }
 
 // metricKey 生成指标唯一键，由名称和标签组成
+//
+// 通过对标签键进行排序，确保相同标签组合总是生成相同的键，
+// 避免 map 迭代顺序不确定导致的键冲突。
 func metricKey(name string, tags map[string]string) string {
 	if len(tags) == 0 {
 		return name
 	}
-	key := name
-	for k, v := range tags {
-		key += "|" + k + "=" + v
+
+	// 排序标签键以确保确定性
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
 	}
-	return key
+	sort.Strings(keys)
+
+	var sb strings.Builder
+	sb.WriteString(name)
+	for _, k := range keys {
+		sb.WriteString("|")
+		sb.WriteString(k)
+		sb.WriteString("=")
+		sb.WriteString(tags[k])
+	}
+	return sb.String()
 }
 
 // Counter 获取或创建指定名称的计数器

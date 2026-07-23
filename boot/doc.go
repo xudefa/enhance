@@ -5,8 +5,11 @@
 //
 // # 架构设计
 //
+//   - Application: 应用接口，管理完整的应用生命周期
 //   - AutoConfiguration: 自动配置接口，支持条件化配置
 //   - Starter: 启动器接口，支持模块化启动
+//   - StarterRegistry: 启动器注册表接口，管理 Starter 的注册和依赖排序
+//   - BootError: 结构化启动错误接口，提供错误码和错误信息
 //   - FailureAnalyzer: 失败分析器接口，提供友好的错误提示
 //   - Banner: 启动横幅接口，支持多种格式的启动横幅显示
 //   - Module: 可组合的配置单元，包含 Bean 注册和 Starter
@@ -45,12 +48,15 @@
 //
 // 创建应用实例：
 //
-//	app := boot.NewApplication(
-//	    boot.WithName("my-app"),
-//	    boot.WithWeb(true),
-//	    boot.WithPort(8080),
+//	app, err := boot.NewApplication(
+//	    boot.WithAppName("my-app"),
+//	    boot.WithVersion("1.0.0"),
+//	    boot.WithProfiles("dev"),
 //	)
-//	app.Run()
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	app.Start()
 //
 // # 自动配置
 //
@@ -69,23 +75,95 @@
 //
 // # 配置选项
 //
-//   - WithName: 设置应用名称
-//   - WithWeb: 是否启用 Web 模式
-//   - WithPort: 设置服务端口
-//   - WithBanner: 设置启动横幅
+//   - WithAppName: 设置应用名称
+//   - WithVersion: 设置版本号
+//   - WithProfiles: 设置激活的 Profile
+//   - WithConfigLocation: 设置配置文件路径
+//   - WithProperty: 添加单个配置属性
 package boot
 
 import (
 	"reflect"
-	"sync"
-	"time"
 
+	"github.com/xudefa/enhance/boot/banner"
 	"github.com/xudefa/enhance/condition"
 	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/event"
-	"github.com/xudefa/enhance/lifecycle"
 )
+
+// 向后兼容的类型别名，重新导出 banner 子包中的类型。
+type BannerMode = banner.BannerMode
+
+const (
+	BannerModeConsole = banner.BannerModeConsole
+	BannerModeLog     = banner.BannerModeLog
+	BannerModeOff     = banner.BannerModeOff
+)
+
+type TextBanner = banner.TextBanner
+type ASCIIArtBanner = banner.ASCIIArtBanner
+type LegacyBanner = banner.LegacyBanner
+
+// LegacyBannerOption 是 banner.LegacyOption 的类型别名。
+type LegacyBannerOption = banner.LegacyOption
+
+var (
+	NewLegacyBanner    = banner.NewLegacyBanner
+	BannerWithLines    = banner.WithLines
+	BannerWithAppName  = banner.WithAppName
+	BannerWithProfiles = banner.WithProfiles
+)
+
+// ==================== 向后兼容的类型别名 ====================
+
+// BootErrorStruct 是 bootError 实现类型的别名。
+//
+// 在重构前 BootError 是一个导出字段的结构体，现在改为接口。
+// 此别名保留对底层实现类型的访问，便于需要类型断言的场景。
+type BootErrorStruct = bootError
+
+// StarterRegistryStruct 是 starterRegistryImpl 实现类型的别名。
+//
+// 在重构前 StarterRegistry 是一个结构体，现在改为接口。
+// 此别名保留对底层实现类型的访问，便于需要类型断言的场景。
+type StarterRegistryStruct = starterRegistryImpl
+
+// ==================== Application 接口 ====================
+
+// Application 应用接口，管理应用的完整生命周期。
+//
+// Boot 结构体实现了此接口的所有方法（Context() 返回具体类型）。
+// NewApplication 返回 *Boot，可直接调用 Start/Stop/WaitForSignal。
+// 需要接口类型的场景（如测试 mock）可使用此接口。
+//
+// 示例：
+//
+//	app, _ := boot.NewApplication(boot.WithAppName("my-app"))
+//	app.Start()  // 直接使用 *Boot
+//
+//	// 需要接口类型时：
+//	var iface boot.Application = app
+//	iface.Start()
+type Application interface {
+	// Start 启动应用，执行完整的初始化流程。
+	// 包括配置加载、自动配置执行、Starter 配置和启动。
+	Start() error
+
+	// Stop 停止应用，逆序释放所有资源。
+	Stop() error
+
+	// WaitForSignal 阻塞等待 SIGINT/SIGTERM 信号，收到后自动执行优雅关闭。
+	WaitForSignal()
+
+	// Context 返回应用上下文，包含 IoC 容器和环境配置。
+	Context() ApplicationContext
+
+	// Config 返回启动配置。
+	Config() *BootConfig
+}
+
+// ==================== ApplicationContext 接口 ====================
 
 // ApplicationContext 自动配置看到的上下文接口。
 //
@@ -108,6 +186,8 @@ type ApplicationContext interface {
 	EventBus() EventBusResult
 }
 
+// ==================== AutoConfiguration 接口 ====================
+
 // AutoConfiguration 自动配置接口。
 //
 // 参考 Spring Boot 的 @Configuration + @Bean 模式。
@@ -116,6 +196,8 @@ type AutoConfiguration interface {
 	// Configure 执行自动配置逻辑。
 	Configure(ctx ApplicationContext) error
 }
+
+// ==================== Starter 接口 ====================
 
 // Starter 应用启动器接口。
 //
@@ -147,6 +229,59 @@ type Starter interface {
 	GetCondition() condition.Condition
 }
 
+// ==================== StarterRegistry 接口 ====================
+
+// StarterRegistry 启动器注册表接口。
+//
+// 管理所有 Starter 的注册和依赖排序。
+// 使用 Kahn 算法进行拓扑排序，确保依赖的启动器先启动。
+type StarterRegistry interface {
+	// Register 注册一个 Starter 到注册表。
+	Register(starter Starter)
+
+	// Get 根据名称获取已注册的 Starter，未找到返回 nil。
+	Get(name string) Starter
+
+	// GetAll 获取所有已注册的 Starter（返回副本）。
+	GetAll() []Starter
+
+	// GetOrdered 按依赖关系拓扑排序获取 Starter。
+	// 如果存在循环依赖，回退到原始注册顺序。
+	GetOrdered() []Starter
+}
+
+// ==================== BootError 接口 ====================
+
+// BootError 结构化启动错误接口。
+//
+// 提供标准化的错误信息访问方式，包含错误码、错误消息和原始错误。
+// 通过 NewBootErr 创建实例，通过 errors.As 提取。
+//
+// 示例：
+//
+//	var bootErr boot.BootError
+//	if errors.As(err, &bootErr) {
+//	    fmt.Println(bootErr.Code(), bootErr.Message())
+//	}
+type BootError interface {
+	// Code 返回错误码，用于程序化错误处理。
+	Code() string
+
+	// Message 返回人类可读的错误消息。
+	Message() string
+
+	// Cause 返回原始错误，用于错误链追踪。
+	Cause() error
+
+	// Error 实现 error 接口。
+	Error() string
+
+	// Unwrap 实现 errors.Unwrap 接口，支持 errors.Is/As。
+	Unwrap() error
+}
+
+// ==================== FailureAnalyzer 接口 ====================
+
 // FailureAnalyzer 失败分析器接口。
 //
 // 参考 Spring Boot 的 FailureAnalyzer。
@@ -159,171 +294,40 @@ type FailureAnalyzer interface {
 	Analyze(err error) *FailureReport
 }
 
-// Banner 启动横幅接口。
-//
-// 参考 Spring Boot 的 Banner，支持多种格式的启动横幅显示。
-type Banner interface {
-	// Print 输出启动横幅。
-	Print(ctx ApplicationContext)
-}
+// ==================== Banner 类型别名 ====================
 
+// Banner 是 banner.Banner 的类型别名，用于向后兼容。
+//
+// 新代码应直接使用 banner.Banner。
+type Banner = banner.Banner
+
+// ==================== EventBusResult 接口 ====================
+
+// EventBusResult 事件总线访问接口。
 type EventBusResult interface {
 	Publish(event event.ApplicationEvent)
 }
+
+// ==================== BeanProvider 类型 ====================
 
 // BeanProvider Bean 提供者函数类型。
 //
 // 定义如何向容器注册 Bean，是 Module 中 Bean 注册的统一抽象。
 type BeanProvider func(c core.Container) error
 
-// FailureReport 失败报告。
-//
-// 参考 Spring Boot 的 FailureAnalysis，在应用启动失败时提供结构化的错误信息。
-// 包含错误描述、建议动作、根因和可能的解决方案。
-type FailureReport struct {
-	Headline          string         `json:"headline"`                    // 报告标题
-	Description       string         `json:"description"`                 // 错误描述
-	Action            string         `json:"action"`                      // 建议动作
-	Cause             string         `json:"cause"`                       // 根因
-	Details           map[string]any `json:"details,omitempty"`           // 附加详情
-	StackTrace        string         `json:"stackTrace,omitempty"`        // 堆栈跟踪
-	PossibleSolutions []string       `json:"possibleSolutions,omitempty"` // 可能的解决方案列表
-}
-
-// AutoConfigEntry 自动配置条目。
-type AutoConfigEntry struct {
-	Config         AutoConfiguration     // 自动配置实例
-	Conditions     []condition.Condition // 条件列表
-	Order          int                   // 执行顺序，值越小优先级越高
-	Dependencies   []string              // 依赖的配置名称
-	Override       bool                  // 是否为覆盖配置（用户自定义优先）
-	OverrideTarget string                // 被覆盖的自动配置类型名
-	Before         []string              // 此配置应在哪些配置之前执行
-	After          []string              // 此配置应在哪些配置之后执行
-}
-
-// AutoConfigurationOption 自动配置选项函数。
-type AutoConfigurationOption func(entry *AutoConfigEntry)
-
-// BootConfig 启动配置。
-type BootConfig struct {
-	ConfigLocation string   // 配置文件路径
-	ConfigType     string   // 配置文件类型 (json)
-	Profiles       []string // 激活的 Profile
-	AppName        string   // 应用名称
-	Version        string   // 版本号
-
-	AutoExecute bool // 是否自动执行自动配置（默认 true）
-	Starters    bool // 是否自动管理启动器生命周期（默认 true）
-
-	// 排除的自动配置列表（按类型名匹配）
-	ExcludedAutoConfigs []string // 需要排除的自动配置类型名
-
-	CustomPropertySources []environment.PropertySource // 用户自定义配置源
-
-	// 配置中心配置
-	ConfigCenterEnabled bool          // 是否启用配置中心（默认 false）
-	ConfigCenterType    string        // 配置中心类型 (nacos/etcd/consul)
-	ConfigCenterAddr    []string      // 配置中心地址
-	ConfigCenterDataID  string        // 配置中心数据ID
-	ConfigCenterGroup   string        // 配置中心分组
-	ConfigCenterPrefix  string        // 配置中心前缀
-	ConfigCenterTimeout time.Duration // 配置中心超时时间
-
-	// 显式模块（Go 风格组合，替代全局 init() 注册）
-	Modules []Module // 用户显式传入的模块列表
-
-	// 生命周期钩子（Go 风格 3 阶段：OnInit/OnStart/OnStop）
-	Hooks []lifecycle.Hook // 用户注册的生命周期钩子
-}
-
-// BootOption 启动选项函数。
-type BootOption func(*BootConfig)
-
-// Module 可组合的配置单元。
-//
-// Module 是 Go 风格的显式组合方式，替代全局 init() 注册。
-// 每个 Module 可以独立测试、独立复用。
-type Module struct {
-	moduleName string                       // 模块名称，用于日志和调试
-	beans      []BeanProvider               // 要注册的 Bean 提供者列表
-	invokes    []func(core.Container) error // 安装时立即调用的函数列表
-	hooks      []lifecycle.Hook             // 生命周期钩子列表
-	starters   []Starter                    // 要启动的 Starter 列表
-	conditions []condition.Condition        // 模块生效的条件
-}
-
-// StarterRegistry 启动器注册表。
-//
-// 管理所有 Starter 的注册和依赖排序。
-// 使用 Kahn 算法进行拓扑排序，确保依赖的启动器先启动。
-type StarterRegistry struct {
-	mu       sync.RWMutex
-	starters []Starter
-}
-
-// FailureAnalyzerRegistry 失败分析器注册表。
-//
-// 管理所有 FailureAnalyzer 的注册和查询。
-// 分析时按注册顺序遍历，返回第一个匹配的失败报告。
-type FailureAnalyzerRegistry struct {
-	mu        sync.RWMutex
-	analyzers []FailureAnalyzer
-}
-
-// SimpleFailureAnalyzer 简单的失败分析器。
-//
-// 通过传入的分析函数创建分析器，适用于简单的错误分析场景。
-type SimpleFailureAnalyzer struct {
-	analyzeFn func(err error) *FailureReport
-}
-
-// BootError 结构化启动错误。
-//
-// 包含错误发生阶段、原始错误、分析结果和修复建议，便于调试和错误处理。
-//
-// 设计模式: Adapter（适配原始错误为结构化格式）
-type BootError struct {
-	Phase       string   // 错误发生的阶段
-	Original    error    // 原始错误
-	Analyzed    string   // FailureAnalyzer 分析结果
-	Suggestions []string // 修复建议
-}
-
-// TextBanner 文本横幅。
-//
-// 使用模板和属性渲染启动横幅。
-type TextBanner struct {
-	Template   string         // 横幅文本模板
-	Properties map[string]any // 模板属性键值对
-}
-
-// ASCIIArtBanner ASCII 艺术横幅。
-type ASCIIArtBanner struct {
-	Art   string // ASCII 艺术文本
-	Color string // 显示颜色（预留）
-}
-
-// CustomTemplateBanner 自定义模板横幅。
-//
-// 支持从文件加载横幅模板。
-type CustomTemplateBanner struct {
-	TemplatePath string         // 模板文件路径
-	Data         map[string]any // 模板数据
-}
-
-// LegacyBanner 旧版横幅实现。
-//
-// 使用预定义的 ASCII 艺术行列表渲染启动横幅。
-type LegacyBanner struct {
-	lines []string // ASCII 艺术行列表
-}
-
 // 以下类型定义在其他文件中，此处仅作文档说明：
 // - ApplicationOption: application.go（包含完整实现）
-// - Boot: boot.go（包含完整实现）
-// - StarterManager: starter_manager.go（包含完整实现）
+// - Boot: boot.go（包含完整实现，实现 Application 接口方法）
+// - BootConfig: config.go（启动配置结构体）
+// - starterRegistryImpl: starter.go（StarterRegistry 接口的具体实现）
+// - bootError: boot_error.go（BootError 接口的具体实现）
 // - ConfigCenterProvider: configcenter.go（包含完整实现）
 // - ConfigCenterAdapter: configcenter.go（包含完整实现）
 // - FailureAnalyzerAdapter: failure_analyzers.go（包含完整实现）
 // - Report: report.go（包含完整实现）
+// - FailureReport: failure_analyzer.go（失败报告结构体）
+// - FailureAnalyzerRegistry: failure_analyzer.go（失败分析器注册表）
+// - SimpleFailureAnalyzer: failure_analyzer.go（简单失败分析器）
+// - AutoConfigEntry: autoconfig.go（自动配置条目）
+// - AutoConfigurationOption: autoconfig.go（自动配置选项函数）
+// - Module: module.go（可组合的配置单元）

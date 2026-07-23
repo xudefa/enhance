@@ -42,8 +42,9 @@ func (e *Environment) BindPrefix(prefix string, target any) error {
 
 // Validate 验证配置，返回所有错误
 func (e *Environment) Validate() []error {
-	var errs []error
-	for _, src := range e.GetPropertySources() {
+	sources := e.GetPropertySources()
+	errs := make([]error, 0, len(sources))
+	for _, src := range sources {
 		if v, ok := src.(interface{ Validate() []error }); ok {
 			errs = append(errs, v.Validate()...)
 		}

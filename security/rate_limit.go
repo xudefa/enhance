@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/xudefa/enhance/security/filter"
 )
 
 // SlidingWindowRateLimiter 滑动窗口限流器
-// 算法原理：记录每个请求的时间戳，只统计窗口时间范围内的请求数量
-// 优点：避免固定窗口的临界问题，限流更平滑
-// 适用场景：需要精确控制请求频率的场景
 type SlidingWindowRateLimiter struct {
 	windowSize  time.Duration
 	maxRequests int
@@ -23,7 +22,6 @@ type slidingWindow struct {
 	requests []time.Time
 }
 
-// NewSlidingWindowRateLimiter 创建滑动窗口限流器。
 func NewSlidingWindowRateLimiter(windowSize time.Duration, maxRequests int) *SlidingWindowRateLimiter {
 	if windowSize <= 0 {
 		windowSize = 1 * time.Minute
@@ -38,7 +36,6 @@ func NewSlidingWindowRateLimiter(windowSize time.Duration, maxRequests int) *Sli
 	}
 }
 
-// Allow 判断是否允许请求。
 func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -58,7 +55,6 @@ func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 		r.windows[key] = window
 	}
 
-	// 清理窗口外的请求
 	validIdx := 0
 	for _, t := range window.requests {
 		if t.After(windowStart) {
@@ -68,7 +64,6 @@ func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 	}
 	window.requests = window.requests[:validIdx]
 
-	// 检查是否超过限制
 	if len(window.requests) < r.maxRequests {
 		window.requests = append(window.requests, now)
 		return true
@@ -77,7 +72,6 @@ func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 	return false
 }
 
-// Cleanup 清理过期窗口。
 func (r *SlidingWindowRateLimiter) Cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -85,7 +79,6 @@ func (r *SlidingWindowRateLimiter) Cleanup() {
 	now := time.Now()
 	windowStart := now.Add(-r.windowSize)
 	for key, window := range r.windows {
-		// 清理窗口外的请求
 		validIdx := 0
 		for _, t := range window.requests {
 			if t.After(windowStart) {
@@ -94,8 +87,6 @@ func (r *SlidingWindowRateLimiter) Cleanup() {
 			}
 		}
 		window.requests = window.requests[:validIdx]
-
-		// 如果窗口为空，删除该 key
 		if len(window.requests) == 0 {
 			delete(r.windows, key)
 		}
@@ -103,9 +94,6 @@ func (r *SlidingWindowRateLimiter) Cleanup() {
 }
 
 // LeakyBucketRateLimiter 漏桶限流器
-// 算法原理：请求像水滴进入桶中，桶以固定速率漏水（处理请求）
-// 优点：平滑处理请求，防止突发流量
-// 适用场景：需要均匀处理请求的场景
 type LeakyBucketRateLimiter struct {
 	capacity int
 	rate     time.Duration
@@ -118,7 +106,6 @@ type leakyBucket struct {
 	lastLeak time.Time
 }
 
-// NewLeakyBucketRateLimiter 创建漏桶限流器。
 func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRateLimiter {
 	if capacity <= 0 {
 		capacity = 100
@@ -133,7 +120,6 @@ func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRat
 	}
 }
 
-// Allow 判断是否允许请求。
 func (r *LeakyBucketRateLimiter) Allow(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -168,7 +154,6 @@ func (r *LeakyBucketRateLimiter) Allow(key string) bool {
 	return false
 }
 
-// Cleanup 清理空桶。
 func (r *LeakyBucketRateLimiter) Cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -182,10 +167,6 @@ func (r *LeakyBucketRateLimiter) Cleanup() {
 }
 
 // FixedWindowCounterRateLimiter 固定窗口计数器限流器
-// 算法原理：将时间划分为固定窗口，每个窗口内计数请求数量
-// 优点：实现简单，内存占用小
-// 缺点：存在窗口临界问题（窗口切换时可能允许2倍流量）
-// 适用场景：对限流精度要求不高的场景
 type FixedWindowCounterRateLimiter struct {
 	windowSize  time.Duration
 	maxRequests int
@@ -198,7 +179,6 @@ type fixedWindowCounter struct {
 	windowStart time.Time
 }
 
-// NewFixedWindowCounterRateLimiter 创建固定窗口计数器限流器。
 func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int) *FixedWindowCounterRateLimiter {
 	if windowSize <= 0 {
 		windowSize = 1 * time.Minute
@@ -213,7 +193,6 @@ func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int)
 	}
 }
 
-// Allow 判断是否允许请求。
 func (r *FixedWindowCounterRateLimiter) Allow(key string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -241,7 +220,6 @@ func (r *FixedWindowCounterRateLimiter) Allow(key string) bool {
 	return false
 }
 
-// Cleanup 清理过期计数器。
 func (r *FixedWindowCounterRateLimiter) Cleanup() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -254,48 +232,40 @@ func (r *FixedWindowCounterRateLimiter) Cleanup() {
 	}
 }
 
-// StrategyRateLimiterAdapter 限流器适配器。
+// StrategyRateLimiterAdapter 限流器适配器
 type StrategyRateLimiterAdapter struct {
 	limiter RateLimiter
 }
 
-// NewStrategyRateLimiterAdapter 创建适配器。
 func NewStrategyRateLimiterAdapter(limiter RateLimiter) *StrategyRateLimiterAdapter {
 	return &StrategyRateLimiterAdapter{limiter: limiter}
 }
 
-// Allow 判断是否允许请求。
 func (a *StrategyRateLimiterAdapter) Allow(key string) bool {
 	return a.limiter.Allow(key)
 }
 
 // EnhancedRateLimitFilter 增强版限流过滤器
-// 职责：基于策略模式的限流过滤器，支持自定义限流策略和回调
-// 与RateLimitFilter的区别：使用RateLimitStrategy接口，更灵活
 type EnhancedRateLimitFilter struct {
 	strategy     RateLimitStrategy
 	excludePaths []string
 	onRateLimit  func(ctx context.Context, request SecurityRequest, response SecurityResponse)
 }
 
-// EnhancedRateLimitOption 增强限流配置选项。
 type EnhancedRateLimitOption func(*EnhancedRateLimitFilter)
 
-// WithExcludePaths 设置排除路径。
 func WithExcludePaths(paths ...string) EnhancedRateLimitOption {
 	return func(f *EnhancedRateLimitFilter) {
 		f.excludePaths = append(f.excludePaths, paths...)
 	}
 }
 
-// WithOnRateLimit 设置限流回调。
 func WithOnRateLimit(fn func(ctx context.Context, request SecurityRequest, response SecurityResponse)) EnhancedRateLimitOption {
 	return func(f *EnhancedRateLimitFilter) {
 		f.onRateLimit = fn
 	}
 }
 
-// NewEnhancedRateLimitFilter 创建增强版限流过滤器。
 func NewEnhancedRateLimitFilter(strategy RateLimitStrategy, opts ...EnhancedRateLimitOption) *EnhancedRateLimitFilter {
 	f := &EnhancedRateLimitFilter{
 		strategy: strategy,
@@ -306,8 +276,15 @@ func NewEnhancedRateLimitFilter(strategy RateLimitStrategy, opts ...EnhancedRate
 	return f
 }
 
-// DoFilter 处理限流。
-func (f *EnhancedRateLimitFilter) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error {
+// DoFilter 实现 filter.Filter 接口
+func (f *EnhancedRateLimitFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+	ctxVal, _ := ctx.(context.Context)
+	req, _ := request.(SecurityRequest)
+	resp, _ := response.(SecurityResponse)
+	return f.doFilter(ctxVal, req, resp, chain)
+}
+
+func (f *EnhancedRateLimitFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	uri := request.GetURI()
 	for _, path := range f.excludePaths {
 		if uri == path || (len(path) > 0 && uri[:len(path)] == path) {
@@ -338,7 +315,9 @@ func (f *EnhancedRateLimitFilter) DoFilter(ctx context.Context, request Security
 	return chain.DoFilter(ctx, request, response)
 }
 
-// maxInt 辅助函数。
+// Order 实现 filter.Filter 接口
+func (f *EnhancedRateLimitFilter) Order() int { return 0 }
+
 func maxInt(a, b int) int {
 	if a > b {
 		return a

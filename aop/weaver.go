@@ -138,7 +138,7 @@ func (r *AopRegistry) MatchAspectsForType(t reflect.Type) []*AspectMeta {
 		}
 		for i := 0; i < t.NumMethod(); i++ {
 			m := t.Method(i)
-			if a.PointCut.MatchMethod(m) {
+			if a.PointCut.Matches(nil, m.Name) {
 				matched = append(matched, a)
 				break
 			}

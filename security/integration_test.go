@@ -69,8 +69,8 @@ func TestMultipleProviderManager(t *testing.T) {
 		t.Fatalf("Authentication failed: %v", err)
 	}
 
-	if authenticated.Name() != "admin" {
-		t.Errorf("Expected username 'admin', got '%s'", authenticated.Name())
+	if extractPrincipalName(authenticated) != "admin" {
+		t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(authenticated))
 	}
 }
 
@@ -83,32 +83,32 @@ func TestAccessDecisionVoters(t *testing.T) {
 
 	voter := NewWebExpressionVoter()
 
-	result := voter.Vote(ctx, auth, nil, []string{"permitAll"})
+	result := voter.Vote(ctx, auth, "", []string{"permitAll"})
 	if result != ACCESS_GRANTED {
 		t.Errorf("permitAll should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, nil, []string{"denyAll"})
+	result = voter.Vote(ctx, auth, "", []string{"denyAll"})
 	if result != ACCESS_DENIED {
 		t.Errorf("denyAll should be denied")
 	}
 
-	result = voter.Vote(ctx, auth, nil, []string{"authenticated"})
+	result = voter.Vote(ctx, auth, "", []string{"authenticated"})
 	if result != ACCESS_GRANTED {
 		t.Errorf("authenticated should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, nil, []string{"hasRole('USER')"})
+	result = voter.Vote(ctx, auth, "", []string{"hasRole('USER')"})
 	if result != ACCESS_GRANTED {
 		t.Errorf("hasRole('USER') should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, nil, []string{"hasRole('SUPERUSER')"})
+	result = voter.Vote(ctx, auth, "", []string{"hasRole('SUPERUSER')"})
 	if result != ACCESS_DENIED {
 		t.Errorf("hasRole('SUPERUSER') should be denied")
 	}
 
-	result = voter.Vote(ctx, auth, nil, []string{"hasAnyRole('ADMIN','SUPERUSER')"})
+	result = voter.Vote(ctx, auth, "", []string{"hasAnyRole('ADMIN','SUPERUSER')"})
 	if result != ACCESS_GRANTED {
 		t.Errorf("hasAnyRole('ADMIN','SUPERUSER') should be granted")
 	}
@@ -127,12 +127,12 @@ func TestAccessDecisionManagers(t *testing.T) {
 	t.Run("AffirmativeBased", func(t *testing.T) {
 		manager := NewAffirmativeBased(webExpressionVoter, roleVoter)
 
-		err := manager.Decide(ctx, auth, nil, []string{"permitAll"})
+		err := manager.Decide(ctx, auth, "", []string{"permitAll"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
 
-		err = manager.Decide(ctx, auth, nil, []string{"hasRole('USER')"})
+		err = manager.Decide(ctx, auth, "", []string{"hasRole('USER')"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -141,12 +141,12 @@ func TestAccessDecisionManagers(t *testing.T) {
 	t.Run("UnanimousBased", func(t *testing.T) {
 		manager := NewUnanimousBased(webExpressionVoter, roleVoter)
 
-		err := manager.Decide(ctx, auth, nil, []string{"permitAll"})
+		err := manager.Decide(ctx, auth, "", []string{"permitAll"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
 
-		err = manager.Decide(ctx, auth, nil, []string{"hasRole('USER')"})
+		err = manager.Decide(ctx, auth, "", []string{"hasRole('USER')"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -155,12 +155,12 @@ func TestAccessDecisionManagers(t *testing.T) {
 	t.Run("ConsensusBased", func(t *testing.T) {
 		manager := NewConsensusBased(webExpressionVoter, roleVoter)
 
-		err := manager.Decide(ctx, auth, nil, []string{"permitAll"})
+		err := manager.Decide(ctx, auth, "", []string{"permitAll"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
 
-		err = manager.Decide(ctx, auth, nil, []string{"hasRole('USER')"})
+		err = manager.Decide(ctx, auth, "", []string{"hasRole('USER')"})
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -185,8 +185,8 @@ func TestSecurityContextThreadSafety(t *testing.T) {
 		t.Error("Expected authentication to be set")
 	}
 
-	if ctx.Authentication().Name() != "user" {
-		t.Errorf("Expected username 'user', got '%s'", ctx.Authentication().Name())
+	if extractPrincipalName(ctx.Authentication()) != "user" {
+		t.Errorf("Expected username 'user', got '%s'", extractPrincipalName(ctx.Authentication()))
 	}
 
 	ctx.ClearAuthentication()
@@ -379,7 +379,7 @@ func ExampleAuthentication() {
 	fmt.Printf("Principal: %v\n", authenticated.Principal())
 	fmt.Printf("Authorities: %v\n", authenticated.Authorities())
 	fmt.Printf("Authenticated: %v\n", authenticated.Authenticated())
-	fmt.Printf("Name: %s\n", authenticated.Name())
+	fmt.Printf("Name: %s\n", extractPrincipalName(authenticated))
 }
 
 // TestRoleBasedDecision 测试基于角色的访问决策

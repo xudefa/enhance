@@ -112,11 +112,11 @@ func TestBoot_Stop_AlreadyStopped(t *testing.T) {
 func TestBoot_Stop_OnlyStopsStartedStarters(t *testing.T) {
 	s := newMockStarter("test")
 	// 通过全局注册表注册，Start() 会从全局注册表加载
-	orig := GlobalStarterRegistry()
-	registry := NewStarterRegistry()
-	globalStarterRegistry.Store(registry)
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
 	t.Cleanup(func() { globalStarterRegistry.Store(orig) })
-	registry.Add(s)
+	testReg.Register(s)
 
 	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {
@@ -143,12 +143,12 @@ func TestBoot_Stop_WithConditionalStarters(t *testing.T) {
 	enabled := newMockStarter("enabled")
 	disabled := newMockStarterWithCondition("disabled", condition.OnProperty("never.match"))
 
-	orig := GlobalStarterRegistry()
-	registry := NewStarterRegistry()
-	globalStarterRegistry.Store(registry)
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
 	defer func() { globalStarterRegistry.Store(orig) }()
-	registry.Add(enabled)
-	registry.Add(disabled)
+	testReg.Register(enabled)
+	testReg.Register(disabled)
 
 	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {

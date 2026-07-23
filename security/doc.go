@@ -6,14 +6,14 @@
 // # 架构设计
 //
 //   - SecurityContext: 安全上下文接口，管理认证信息
-//   - Authentication: 认证信息接口
-//   - AuthenticationManager: 认证管理器接口
-//   - AccessDecisionManager: 访问决策管理器接口
+//   - Authentication: 认证信息接口（别名 → authentication.Authentication）
+//   - AuthenticationManager: 认证管理器接口（别名 → authentication.AuthenticationManager）
+//   - AccessDecisionManager: 访问决策管理器接口（别名 → authorization.AccessDecisionManager）
 //   - UserDetailsService: 用户详情服务接口
 //   - UserDetails: 用户详情接口
 //   - PasswordEncoder: 密码编码器接口
-//   - SecurityFilter: 安全过滤器接口
-//   - SecurityFilterChain: 安全过滤器链接口
+//   - SecurityFilter: 安全过滤器接口（别名 → filter.Filter）
+//   - SecurityFilterChain: 安全过滤器链接口（别名 → filter.SecurityFilterChain）
 //   - AccessDeniedHandler: 访问拒绝处理器接口
 //   - AuthenticationEntryPoint: 认证入口点接口
 //   - SecurityMetadataSource: 安全元数据源接口
@@ -75,6 +75,10 @@ package security
 import (
 	"context"
 	"errors"
+
+	"github.com/xudefa/enhance/security/authentication"
+	"github.com/xudefa/enhance/security/authorization"
+	"github.com/xudefa/enhance/security/filter"
 )
 
 // 错误定义。
@@ -87,6 +91,29 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 	// ErrBadCredentials 凭证无效。
 	ErrBadCredentials = errors.New("bad credentials")
+)
+
+// ==================== 子包类型别名 ====================
+//
+// 以下类型已迁移到子包中，此处通过类型别名保持包级访问。
+
+type (
+	// authentication 包的类型别名
+	Authentication         = authentication.Authentication
+	AuthenticationToken    = authentication.AuthenticationToken
+	AuthenticationManager  = authentication.AuthenticationManager
+	AuthenticationProvider = authentication.AuthenticationProvider
+	UserDetails            = authentication.UserDetails
+	UserDetailsService     = authentication.UserDetailsService
+	PasswordEncoder        = authentication.PasswordEncoder
+
+	// authorization 包的类型别名
+	AccessDecisionManager = authorization.AccessDecisionManager
+	AccessDecisionVoter   = authorization.AccessDecisionVoter
+
+	// filter 包的类型别名
+	SecurityFilter      = filter.Filter
+	SecurityFilterChain = filter.SecurityFilterChain
 )
 
 // SecurityContext 安全上下文接口。
@@ -106,115 +133,6 @@ type SecurityContext interface {
 	SetAuthentication(auth Authentication)
 	// ClearAuthentication 清除认证信息。
 	ClearAuthentication()
-}
-
-// Authentication 认证信息接口。
-//
-// 代表一个已认证主体的完整信息，包括身份标识、凭证和权限。
-// 实现应包含用户身份、角色列表和认证状态。
-type Authentication interface {
-	// Principal 返回认证主体的标识，通常是用户名或用户对象。
-	Principal() any
-	// Credentials 返回凭证信息，如密码或令牌。
-	Credentials() any
-	// Authorities 返回授权列表，如角色和权限。
-	Authorities() []string
-	// Authenticated 是否已认证。
-	Authenticated() bool
-	// Name 返回认证主体的名称。
-	Name() string
-}
-
-// AuthenticationManager 认证管理器接口。
-//
-// 负责处理认证请求，验证用户凭证并返回认证信息。
-// 通常与 UserDetailsService 配合使用。
-type AuthenticationManager interface {
-	// Authenticate 执行认证。
-	Authenticate(ctx context.Context, authentication Authentication) (Authentication, error)
-}
-
-// AccessDecisionManager 访问决策管理器接口。
-//
-// 决定是否允许访问受保护的资源。
-// 基于认证主体的权限和资源的访问控制属性进行决策。
-type AccessDecisionManager interface {
-	// Decide 决定是否允许访问。
-	Decide(ctx context.Context, authentication Authentication, object any, attributes []string) error
-}
-
-// AccessDecisionVoter 访问决策投票者接口。
-//
-// 投票决定是否授予访问权限。
-type AccessDecisionVoter interface {
-	Vote(ctx context.Context, authentication Authentication, object any, attributes []string) int
-}
-
-// AuthenticationProvider 认证提供者接口。
-//
-// 定义认证逻辑。
-type AuthenticationProvider interface {
-	Authenticate(ctx context.Context, authentication Authentication) (Authentication, error)
-	Supports(authentication Authentication) bool
-}
-
-// UserDetailsService 用户详情服务接口。
-//
-// 根据用户名加载用户信息，用于认证和授权。
-// 实现可以从数据库、LDAP、内存等来源加载用户。
-type UserDetailsService interface {
-	// LoadUserByUsername 根据用户名加载用户详情。
-	LoadUserByUsername(ctx context.Context, username string) (UserDetails, error)
-}
-
-// UserDetails 用户详情接口。
-//
-// 包含用户的完整认证和授权信息。
-// 实现应提供用户名、密码、权限列表和账户状态。
-type UserDetails interface {
-	// Username 返回用户名。
-	Username() string
-	// Password 返回密码。
-	Password() string
-	// Authorities 返回权限列表。
-	Authorities() []string
-	// Enabled 账户是否启用。
-	Enabled() bool
-	// AccountNonExpired 账户是否未过期。
-	AccountNonExpired() bool
-	// CredentialsNonExpired 凭证是否未过期。
-	CredentialsNonExpired() bool
-	// AccountNonLocked 账户是否未锁定。
-	AccountNonLocked() bool
-}
-
-// PasswordEncoder 密码编码器接口。
-//
-// 用于密码的编码和验证。
-// 推荐使用 bcrypt、argon2 等安全算法，避免使用 MD5、SHA1 等不安全算法。
-type PasswordEncoder interface {
-	// Encode 编码密码。
-	Encode(rawPassword string) string
-	// Matches 验证密码是否匹配。
-	Matches(rawPassword, encodedPassword string) bool
-}
-
-// SecurityFilter 安全过滤器接口。
-//
-// 处理安全相关的请求过滤，如认证、授权、CSRF 防护等。
-// 过滤器按顺序执行，形成安全过滤器链。
-type SecurityFilter interface {
-	// DoFilter 执行过滤器。
-	DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain SecurityFilterChain) error
-}
-
-// SecurityFilterChain 安全过滤器链接口。
-//
-// 按顺序执行多个安全过滤器。
-// 每个过滤器可以决定是否继续执行下一个过滤器。
-type SecurityFilterChain interface {
-	// DoFilter 执行过滤器链。
-	DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse) error
 }
 
 // AccessDeniedHandler 访问拒绝处理器接口。
@@ -286,6 +204,9 @@ type GrantedAuthority interface {
 //
 // 提供链式 API 配置 HTTP 安全规则。
 // 支持认证管理器、用户详情服务、过滤器、CSRF、登出等配置。
+//
+// 注意：此接口有 16 个方法，违反小接口原则。
+// 未来版本将拆分为多个独立的 Configurer 接口（CsrfConfigurer、CorsConfigurer 等）。
 //
 // 使用示例：
 //
@@ -412,7 +333,7 @@ type CsrfTokenRepository interface {
 	ClearToken(ctx context.Context, request SecurityRequest, response SecurityResponse)
 }
 
-// - CsrfToken: CSRF 令牌结构。
+// CsrfToken CSRF 令牌结构。
 type CsrfToken struct {
 	Identifier string // 令牌标识符
 	Value      string // 令牌值

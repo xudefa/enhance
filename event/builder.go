@@ -1,7 +1,6 @@
 package event
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
@@ -171,71 +170,4 @@ func EnvironmentPreparedEvent() *BaseEventBuilder {
 	return NewBaseEventBuilder().Type(EventEnvironmentPrepared).Now()
 }
 
-// EventPublisher 事件发布器，简化事件发布
-//
-// Deprecated: 直接使用 EventBus.Publish() 或事件构建器替代
-type EventPublisher struct {
-	bus *EventBus
-}
 
-// NewEventPublisher 创建事件发布器
-//
-// Deprecated: 直接使用 EventBus.Publish() 替代
-func NewEventPublisher(bus *EventBus) *EventPublisher {
-	return &EventPublisher{bus: bus}
-}
-
-// Publish 发布事件
-func (p *EventPublisher) Publish(event ApplicationEvent) {
-	p.bus.Publish(event)
-}
-
-// PublishEvent 发布指定类型的事件
-func (p *EventPublisher) PublishEvent(eventType string) {
-	p.bus.Publish(NewBaseEventBuilder().Type(eventType).Now().Build())
-}
-
-// PublishStarted 发布应用启动事件
-func (p *EventPublisher) PublishStarted() {
-	ApplicationStartedEvent().Publish(p.bus)
-}
-
-// PublishReady 发布应用就绪事件
-func (p *EventPublisher) PublishReady() {
-	ApplicationReadyEvent().Publish(p.bus)
-}
-
-// PublishStopped 发布应用停止事件
-func (p *EventPublisher) PublishStopped() {
-	ApplicationStoppedEvent().Publish(p.bus)
-}
-
-// AsyncEventPublisher 异步事件发布器包装
-//
-// Deprecated: 直接使用 AsyncPublisher 替代
-type AsyncEventPublisher struct {
-	publisher *AsyncPublisher
-}
-
-// NewAsyncEventPublisher 创建异步事件发布器
-//
-// Deprecated: 直接使用 AsyncPublisher 替代
-func NewAsyncEventPublisher(publisher *AsyncPublisher) *AsyncEventPublisher {
-	return &AsyncEventPublisher{publisher: publisher}
-}
-
-// Publish 异步发布事件
-func (p *AsyncEventPublisher) Publish(ctx context.Context, event ApplicationEvent) {
-	p.publisher.Publish(ctx, event)
-}
-
-// PublishEvent 异步发布指定类型的事件
-func (p *AsyncEventPublisher) PublishEvent(ctx context.Context, eventType string) {
-	event := NewBaseEventBuilder().Type(eventType).Now().Build()
-	p.publisher.Publish(ctx, event)
-}
-
-// Close 关闭异步发布器
-func (p *AsyncEventPublisher) Close() {
-	p.publisher.Close()
-}

@@ -3,21 +3,45 @@ package audit
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 type mockWriter struct {
+	mu     sync.Mutex
 	events []Event
 }
 
 func (w *mockWriter) Write(event Event) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.events = append(w.events, event)
 	return nil
 }
 
 func (w *mockWriter) Close() error {
 	return nil
+}
+
+func (w *mockWriter) getEvents() []Event {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	cp := make([]Event, len(w.events))
+	copy(cp, w.events)
+	return cp
+}
+
+func (w *mockWriter) getEvent(i int) Event {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.events[i]
+}
+
+func (w *mockWriter) eventCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.events)
 }
 
 func TestAuditor_Basic(t *testing.T) {
@@ -33,11 +57,11 @@ func TestAuditor_Basic(t *testing.T) {
 		Target:   "user:456",
 	})
 
-	if len(writer.events) != 1 {
-		t.Errorf("expected 1 event, got %d", len(writer.events))
+	if writer.eventCount() != 1 {
+		t.Errorf("expected 1 event, got %d", writer.eventCount())
 	}
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Actor != "user123" {
 		t.Errorf("expected actor user123, got %s", event.Actor)
 	}
@@ -58,7 +82,7 @@ func TestAuditor_DefaultValues(t *testing.T) {
 		Action: EventCreate,
 	})
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 
 	if event.Timestamp.IsZero() {
 		t.Error("expected timestamp to be set")
@@ -90,7 +114,7 @@ func TestAuditor_LogAction(t *testing.T) {
 		Result: "success",
 	})
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Result != "success" {
 		t.Errorf("expected result success, got %s", event.Result)
 	}
@@ -117,7 +141,7 @@ func TestAuditor_LogSecurity(t *testing.T) {
 		Result:   "failure",
 	})
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Severity != SeverityWarning {
 		t.Errorf("expected severity WARNING, got %s", event.Severity)
 	}
@@ -142,7 +166,7 @@ func TestAuditor_LogError(t *testing.T) {
 		Result:       "failure",
 	})
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Severity != SeverityError {
 		t.Errorf("expected severity ERROR, got %s", event.Severity)
 	}
@@ -161,7 +185,6 @@ func TestAuditor_Async(t *testing.T) {
 		WithBufferSize(10),
 	)
 
-	// 记录多个事件
 	for range 5 {
 		auditor.Log(Event{
 			Actor:  "user123",
@@ -169,12 +192,11 @@ func TestAuditor_Async(t *testing.T) {
 		})
 	}
 
-	// 等待异步处理
 	time.Sleep(100 * time.Millisecond)
 	_ = auditor.Close()
 
-	if len(writer.events) != 5 {
-		t.Errorf("expected 5 events, got %d", len(writer.events))
+	if writer.eventCount() != 5 {
+		t.Errorf("expected 5 events, got %d", writer.eventCount())
 	}
 }
 
@@ -223,11 +245,11 @@ func TestAuditInterceptor_Success(t *testing.T) {
 	interceptor := NewAuditInterceptor(auditor)
 	interceptor.Intercept("CreateUser", []any{"John", "john@example.com"}, nil, nil)
 
-	if len(writer.events) != 1 {
-		t.Errorf("expected 1 event, got %d", len(writer.events))
+	if writer.eventCount() != 1 {
+		t.Errorf("expected 1 event, got %d", writer.eventCount())
 	}
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Resource != "CreateUser" {
 		t.Errorf("expected resource CreateUser, got %s", event.Resource)
 	}
@@ -243,15 +265,13 @@ func TestAuditInterceptor_Failure(t *testing.T) {
 	defer func() { _ = auditor.Close() }()
 
 	interceptor := NewAuditInterceptor(auditor)
-
-	// 失败情况
 	interceptor.Intercept("CreateUser", nil, nil, &testError{"failed"})
 
-	if len(writer.events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(writer.events))
+	if writer.eventCount() != 1 {
+		t.Fatalf("expected 1 event, got %d", writer.eventCount())
 	}
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Result != "failure" {
 		t.Errorf("expected result failure, got %s", event.Result)
 	}
@@ -264,16 +284,12 @@ func TestAuditLogger_Create(t *testing.T) {
 	defer func() { _ = auditor.Close() }()
 
 	logger := NewAuditLogger(auditor, "user123", "web-app")
+	logger.Create("user", "user:456", map[string]any{"name": "John"})
 
-	logger.Create("user", "user:456", map[string]any{
-		"name": "John",
-	})
-
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Action != EventCreate {
 		t.Errorf("expected action CREATE, got %s", event.Action)
 	}
-
 	if event.Actor != "user123" {
 		t.Errorf("expected actor user123, got %s", event.Actor)
 	}
@@ -286,12 +302,9 @@ func TestAuditLogger_Update(t *testing.T) {
 	defer func() { _ = auditor.Close() }()
 
 	logger := NewAuditLogger(auditor, "user123", "web-app")
+	logger.Update("user", "user:456", map[string]any{"name": "Jane"})
 
-	logger.Update("user", "user:456", map[string]any{
-		"name": "Jane",
-	})
-
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Action != EventUpdate {
 		t.Errorf("expected action UPDATE, got %s", event.Action)
 	}
@@ -304,10 +317,9 @@ func TestAuditLogger_Delete(t *testing.T) {
 	defer func() { _ = auditor.Close() }()
 
 	logger := NewAuditLogger(auditor, "user123", "web-app")
-
 	logger.Delete("user", "user:456")
 
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Action != EventDelete {
 		t.Errorf("expected action DELETE, got %s", event.Action)
 	}
@@ -320,12 +332,9 @@ func TestAuditLogger_Login(t *testing.T) {
 	defer func() { _ = auditor.Close() }()
 
 	logger := NewAuditLogger(auditor, "user123", "web-app")
+	logger.Login("192.168.1.1", map[string]any{"browser": "Chrome"})
 
-	logger.Login("192.168.1.1", map[string]any{
-		"browser": "Chrome",
-	})
-
-	event := writer.events[0]
+	event := writer.getEvent(0)
 	if event.Action != EventLogin {
 		t.Errorf("expected action LOGIN, got %s", event.Action)
 	}
@@ -337,20 +346,19 @@ func TestAuditor_MultipleEvents(t *testing.T) {
 	auditor := NewAuditor(WithWriter(writer))
 	defer func() { _ = auditor.Close() }()
 
-	// 记录多种类型的事件
 	auditor.Log(Event{Actor: "user1", Action: EventCreate, Resource: "user", Target: "user:1", Result: "success"})
 	auditor.Log(Event{Actor: "user2", Action: EventUpdate, Resource: "user", Target: "user:2", Result: "success"})
 	auditor.Log(Event{Actor: "user3", Action: EventDelete, Resource: "user", Target: "user:3", Result: "success"})
 	auditor.Log(Event{Actor: "user4", Action: EventLogin, Source: "192.168.1.1", Severity: SeverityWarning})
 	auditor.Log(Event{Actor: "user5", Action: EventCreate, Resource: "user", Severity: SeverityError, ErrorMessage: "error", Result: "failure"})
 
-	if len(writer.events) != 5 {
-		t.Errorf("expected 5 events, got %d", len(writer.events))
+	if writer.eventCount() != 5 {
+		t.Errorf("expected 5 events, got %d", writer.eventCount())
 	}
 
-	// 验证事件类型
 	expectedActions := []EventType{EventCreate, EventUpdate, EventDelete, EventLogin, EventCreate}
-	for i, event := range writer.events {
+	events := writer.getEvents()
+	for i, event := range events {
 		if event.Action != expectedActions[i] {
 			t.Errorf("event %d: expected action %s, got %s", i, expectedActions[i], event.Action)
 		}
@@ -407,7 +415,6 @@ func TestAuditor_IDGeneration(t *testing.T) {
 	auditor := NewAuditor(WithWriter(writer))
 	defer func() { _ = auditor.Close() }()
 
-	// 生成多个 ID
 	ids := make(map[string]bool)
 	for range 10 {
 		auditor.Log(Event{
@@ -415,7 +422,7 @@ func TestAuditor_IDGeneration(t *testing.T) {
 			Action: EventCreate,
 		})
 
-		event := writer.events[len(writer.events)-1]
+		event := writer.getEvent(writer.eventCount() - 1)
 		if ids[event.ID] {
 			t.Errorf("duplicate ID generated: %s", event.ID)
 		}

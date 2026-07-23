@@ -8,12 +8,16 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xudefa/enhance/boot/banner"
 	"github.com/xudefa/enhance/config/environment"
 	contextpkg "github.com/xudefa/enhance/context"
 	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/event"
 	"github.com/xudefa/enhance/lifecycle"
 )
+
+// 编译时接口断言：确保 *Boot 实现 Application 接口。
+var _ Application = (*Boot)(nil)
 
 // Boot 应用启动器，管理应用的完整生命周期
 //
@@ -31,9 +35,19 @@ type Boot struct {
 	hooks        *lifecycle.HookRegistry
 }
 
-// Context 返回应用上下文
-func (b *Boot) Context() *contextpkg.DefaultApplicationContext {
-	return b.ctx
+// Context 返回应用上下文（返回接口类型，便于多态使用）。
+//
+// 返回 ApplicationContext 接口，包含 IoC 容器、环境配置等核心组件。
+// 如需访问 DefaultApplicationContext 的完整 API，可通过类型断言获取：
+//
+//	dc, ok := boot.Context().(*contextpkg.DefaultApplicationContext)
+func (b *Boot) Context() ApplicationContext {
+	return newAppCtx(b.ctx)
+}
+
+// Config 返回启动配置。
+func (b *Boot) Config() *BootConfig {
+	return b.config
 }
 
 // Container 返回 IoC 容器
@@ -174,8 +188,12 @@ func (b *Boot) Start() error {
 		}
 	}
 
-	banner := DefaultBanner
-	banner.Print(os.Stdout, b.config.AppName, b.config.Version, b.ctx.Environment().GetActiveProfiles())
+	banners := banner.NewLegacyBanner(
+		banner.WithLines([]string{defaultBannerText}),
+		banner.WithAppName(b.config.AppName),
+		banner.WithProfiles(b.ctx.Environment().GetActiveProfiles()),
+	)
+	banners.Print(b.config.Version)
 
 	// === 阶段 2：运行阶段 ===
 	if err := b.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
@@ -390,18 +408,23 @@ func Run(opts ...any) {
 //
 // 支持 BootOption 和 ApplicationOption 混合使用。
 func NewApplicationFromRunOptions(opts ...any) (*Boot, error) {
-	return NewApplicationWithOptions(opts...)
+	return NewApplication(opts...)
 }
 
 // reportError 通过 FailureAnalyzer 输出友好错误提示并返回结构化错误
-func (b *Boot) reportError(phase string, err error) *BootError {
-	bootErr := NewBootError(phase, err)
+func (b *Boot) reportError(phase string, err error) *bootError {
+	bootErr := &bootError{
+		code:     ErrCodeUnknown,
+		message:  err.Error(),
+		phase:    phase,
+		original: err,
+	}
 
 	// 使用 FailureAnalyzer 分析
 	report := globalAnalyzerRegistry.Analyze(err)
 	if report != nil {
-		_ = bootErr.WithAnalysis(report.Description)
-		_ = bootErr.WithSuggestions(report.PossibleSolutions...)
+		bootErr.analyzed = report.Description
+		bootErr.suggestions = report.PossibleSolutions
 		fmt.Fprintf(os.Stderr, "\n%s\n", formatFailure(report))
 	}
 

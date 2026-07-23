@@ -106,16 +106,23 @@ type Logger interface {
 	Warn(ctx context.Context, msg string, keys ...KeyValue)
 	// Error 记录错误日志。
 	Error(ctx context.Context, msg string, keys ...KeyValue)
+	// Sync 同步日志缓冲区，确保日志写入完成。
+	Sync() error
+	// With 返回带有额外字段的日志记录器。
+	With(ctx context.Context, keys ...KeyValue) Logger
+}
+
+// LoggerFatal 支持致命日志和 panic。
+//
+// 提供 Panic、Fatal、DPanic 方法。
+type LoggerFatal interface {
+	Logger
 	// DPanic 记录致命错误日志并在开发环境 panic。
 	DPanic(ctx context.Context, msg string, keys ...KeyValue)
 	// Panic 记录日志并 panic。
 	Panic(ctx context.Context, msg string, keys ...KeyValue)
 	// Fatal 记录日志并退出程序。
 	Fatal(ctx context.Context, msg string, keys ...KeyValue)
-	// Sync 同步日志缓冲区，确保日志写入完成。
-	Sync() error
-	// With 返回带有额外字段的日志记录器。
-	With(ctx context.Context, keys ...KeyValue) Logger
 }
 
 // LoggerWithLevel 支持自定义日志级别。

@@ -207,14 +207,13 @@ func TestHelperFunctions(t *testing.T) {
 func TestEventPublisher(t *testing.T) {
 	t.Parallel()
 	bus := NewEventBus()
-	publisher := NewEventPublisher(bus)
 
 	called := false
 	bus.Subscribe("TestEvent", func(event ApplicationEvent) {
 		called = true
 	})
 
-	publisher.PublishEvent("TestEvent")
+	bus.Publish(NewBaseEventBuilder().Type("TestEvent").Now().Build())
 
 	if !called {
 		t.Error("expected listener to be called")
@@ -224,7 +223,6 @@ func TestEventPublisher(t *testing.T) {
 func TestEventPublisher_BuiltInEvents(t *testing.T) {
 	t.Parallel()
 	bus := NewEventBus()
-	publisher := NewEventPublisher(bus)
 
 	startedCalled := false
 	readyCalled := false
@@ -240,9 +238,9 @@ func TestEventPublisher_BuiltInEvents(t *testing.T) {
 		stoppedCalled = true
 	})
 
-	publisher.PublishStarted()
-	publisher.PublishReady()
-	publisher.PublishStopped()
+	bus.Publish(ApplicationStartedEvent().Build())
+	bus.Publish(ApplicationReadyEvent().Build())
+	bus.Publish(ApplicationStoppedEvent().Build())
 
 	if !startedCalled {
 		t.Error("expected started listener to be called")
@@ -260,12 +258,10 @@ func TestEventPublisher_BuiltInEvents(t *testing.T) {
 func TestAsyncEventPublisher(t *testing.T) {
 	t.Parallel()
 	bus := NewEventBus()
-	asyncPublisher := NewAsyncPublisherBuilder().
+	publisher := NewAsyncPublisherBuilder().
 		Bus(bus).
 		WorkerCount(5).
 		MustBuild()
-
-	asyncEventPublisher := NewAsyncEventPublisher(asyncPublisher)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -275,20 +271,18 @@ func TestAsyncEventPublisher(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	asyncEventPublisher.PublishEvent(ctx, "AsyncTest")
+	publisher.Publish(ctx, NewBaseEventBuilder().Type("AsyncTest").Now().Build())
 
 	wg.Wait()
-	asyncEventPublisher.Close()
+	publisher.Close()
 }
 
 func TestAsyncEventPublisher_Publish(t *testing.T) {
 	t.Parallel()
 	bus := NewEventBus()
-	asyncPublisher := NewAsyncPublisherBuilder().
+	publisher := NewAsyncPublisherBuilder().
 		Bus(bus).
 		MustBuild()
-
-	asyncEventPublisher := NewAsyncEventPublisher(asyncPublisher)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -299,10 +293,10 @@ func TestAsyncEventPublisher_Publish(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	asyncEventPublisher.Publish(ctx, event)
+	publisher.Publish(ctx, event)
 
 	wg.Wait()
-	asyncEventPublisher.Close()
+	publisher.Close()
 }
 
 func TestEventBusBuilder_MultipleListenersSameEvent(t *testing.T) {
@@ -373,7 +367,6 @@ func TestBaseEventBuilder_EmptyEvent(t *testing.T) {
 func TestEventPublisher_PublishDirectEvent(t *testing.T) {
 	t.Parallel()
 	bus := NewEventBus()
-	publisher := NewEventPublisher(bus)
 
 	called := false
 	var receivedEvent ApplicationEvent
@@ -384,7 +377,7 @@ func TestEventPublisher_PublishDirectEvent(t *testing.T) {
 	})
 
 	event := NewBaseEventBuilder().Type("DirectEvent").Now().Build()
-	publisher.Publish(event)
+	bus.Publish(event)
 
 	if !called {
 		t.Error("expected listener to be called")

@@ -82,31 +82,22 @@ func NewCaffeineCache(opts ...CaffeineOption) *caffeineCache {
 // 如果键不存在或条目已过期，则返回 ErrNotFound。
 // 访问条目会更新其 LRU 位置（移到末尾）。
 func (c *caffeineCache) Get(ctx context.Context, key string) (any, error) {
-	c.mu.RLock()
-	item, exists := c.items[key]
-	c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	item, exists := c.items[key]
 	if !exists {
 		return nil, ErrNotFound
 	}
 
 	// 检查是否过期
 	if time.Now().After(item.expireAt) {
-		c.mu.Lock()
-		// 双重检查
-		if item, exists := c.items[key]; exists && time.Now().After(item.expireAt) {
-			c.deleteItem(item)
-			c.mu.Unlock()
-			return nil, ErrNotFound
-		}
-		c.mu.Unlock()
+		c.deleteItem(item)
 		return nil, ErrNotFound
 	}
 
 	// 更新 LRU 位置（移到尾部表示最近使用）
-	c.mu.Lock()
 	c.lru.MoveToBack(item.lruElement)
-	c.mu.Unlock()
 
 	return item.value, nil
 }
@@ -143,7 +134,7 @@ func (c *caffeineCache) Set(ctx context.Context, key string, value any, ttl time
 		value:    value,
 		expireAt: time.Now().Add(ttl),
 	}
-	item.lruElement = c.lru.PushBack(key)
+	item.lruElement = c.lru.PushBack(item)
 	c.items[key] = item
 
 	return nil
@@ -167,21 +158,16 @@ func (c *caffeineCache) Del(ctx context.Context, keys ...string) error {
 // Exists 检查键是否存在且未过期。
 // 检查期间会清理过期条目。
 func (c *caffeineCache) Exists(ctx context.Context, key string) (bool, error) {
-	c.mu.RLock()
-	item, exists := c.items[key]
-	c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	item, exists := c.items[key]
 	if !exists {
 		return false, nil
 	}
 
 	if time.Now().After(item.expireAt) {
-		c.mu.Lock()
-		// 双重检查
-		if item, exists := c.items[key]; exists && time.Now().After(item.expireAt) {
-			c.deleteItem(item)
-		}
-		c.mu.Unlock()
+		c.deleteItem(item)
 		return false, nil
 	}
 
@@ -192,16 +178,17 @@ func (c *caffeineCache) Exists(ctx context.Context, key string) (bool, error) {
 // Returns ErrNotFound if the key doesn't exist.
 // Returns 0 if the item has no expiration (永不过期).
 func (c *caffeineCache) TTL(ctx context.Context, key string) (time.Duration, error) {
-	c.mu.RLock()
-	item, exists := c.items[key]
-	c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
+	item, exists := c.items[key]
 	if !exists {
 		return 0, ErrNotFound
 	}
 
 	if time.Now().After(item.expireAt) {
-		return 0, nil
+		c.deleteItem(item)
+		return 0, ErrNotFound
 	}
 
 	return time.Until(item.expireAt), nil
