@@ -3,7 +3,7 @@ module github.com/xudefa/enhance/examples/example-enhance-run
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.2
+	github.com/xudefa/enhance v0.0.3
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.2
 )

@@ -7,7 +7,7 @@ require (
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/hibiken/asynq v0.24.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/xudefa/enhance v0.0.2
+	github.com/xudefa/enhance v0.0.3
 	golang.org/x/time v0.5.0
 )
 

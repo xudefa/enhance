@@ -168,7 +168,8 @@ _phase1-main: _commit-main _create-main-tag _push-main-tag ## 阶段1：提交�
 
 _commit-main: ## [内部] 提交主模块代码
 	@echo "=== 阶段1: 提交主模块代码 ==="
-	@git add go.mod go.sum *.go
+	@git add go.mod *.go
+	@test -f go.sum && git add go.sum || true
 	@git commit -m "release: main module $(VERSION)" || echo "  [跳过] 主模块无变更"
 
 _create-main-tag: ## [内部] 创建主模块 tag
