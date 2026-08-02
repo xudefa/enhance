@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/rs/zerolog v1.34.0
-	github.com/xudefa/enhance v0.0.3
-	github.com/xudefa/enhance/starter/zerolog v0.0.3
+	github.com/xudefa/enhance v0.0.4
+	github.com/xudefa/enhance/starter/zerolog v0.0.4
 )
 
 require (

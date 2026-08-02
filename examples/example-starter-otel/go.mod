@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-otel
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.3
-	github.com/xudefa/enhance/starter/otel v0.0.3
+	github.com/xudefa/enhance v0.0.4
+	github.com/xudefa/enhance/starter/otel v0.0.4
 	go.opentelemetry.io/otel v1.24.0
 	go.opentelemetry.io/otel/trace v1.24.0
 )

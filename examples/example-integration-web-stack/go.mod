@@ -6,13 +6,13 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-playground/validator/v10 v10.16.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/xudefa/enhance v0.0.3
-	github.com/xudefa/enhance/starter/cron v0.0.3
-	github.com/xudefa/enhance/starter/gin v0.0.3
-	github.com/xudefa/enhance/starter/prometheus v0.0.3
-	github.com/xudefa/enhance/starter/swagger v0.0.3
-	github.com/xudefa/enhance/starter/validator v0.0.3
-	github.com/xudefa/enhance/starter/zerolog v0.0.3
+	github.com/xudefa/enhance v0.0.4
+	github.com/xudefa/enhance/starter/cron v0.0.4
+	github.com/xudefa/enhance/starter/gin v0.0.4
+	github.com/xudefa/enhance/starter/prometheus v0.0.4
+	github.com/xudefa/enhance/starter/swagger v0.0.4
+	github.com/xudefa/enhance/starter/validator v0.0.4
+	github.com/xudefa/enhance/starter/zerolog v0.0.4
 )
 
 require (

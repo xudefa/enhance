@@ -4,11 +4,11 @@ go 1.25.12
 
 require (
 	github.com/xudefa/enhance v0.0.3
-	github.com/xudefa/enhance/starter/casbin v0.0.3
-	github.com/xudefa/enhance/starter/casbin-gorm v0.0.3
-	github.com/xudefa/enhance/starter/gorm v0.0.3
-	github.com/xudefa/enhance/starter/jwt v0.0.3
-	github.com/xudefa/enhance/starter/zerolog v0.0.3
+	github.com/xudefa/enhance/starter/casbin v0.0.4
+	github.com/xudefa/enhance/starter/casbin-gorm v0.0.4
+	github.com/xudefa/enhance/starter/gorm v0.0.4
+	github.com/xudefa/enhance/starter/jwt v0.0.4
+	github.com/xudefa/enhance/starter/zerolog v0.0.4
 	gorm.io/gorm v1.31.2
 )
 

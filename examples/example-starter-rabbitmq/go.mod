@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/rabbitmq/amqp091-go v1.9.0
-	github.com/xudefa/enhance v0.0.3
-	github.com/xudefa/enhance/starter/rabbitmq v0.0.3
+	github.com/xudefa/enhance v0.0.4
+	github.com/xudefa/enhance/starter/rabbitmq v0.0.4
 )
 
 replace (
