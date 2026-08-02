@@ -79,7 +79,7 @@ func (c *ValidatorAutoConfiguration) Configure(ctx boot.ApplicationContext) erro
 	// 加载配置
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Validator 配置失败: %w", err)
+		return fmt.Errorf("failed to load Validator config: %w", err)
 	}
 
 	c.config = cfg
@@ -87,15 +87,15 @@ func (c *ValidatorAutoConfiguration) Configure(ctx boot.ApplicationContext) erro
 
 	// 注册自定义验证器（手机号、身份证号等）
 	if cfg.EnableCustomValidators {
-		c.registerCustomValidators()
+		c.registerCustomValidators(ctx.Context(), c.logger)
 	}
 
 	// 注册验证器实例到 IoC 容器
 	if err := ctx.Container().RegisterInstance(c.validate, reflect.TypeFor[*validator.Validate]()); err != nil {
-		return fmt.Errorf("注册 Validator 实例失败: %w", err)
+		return fmt.Errorf("failed to register Validator instance: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Validator 数据验证器已配置")
+	c.logger.Info(ctx.Context(), "Validator configured")
 
 	return nil
 }
@@ -169,13 +169,19 @@ func (c *ValidatorAutoConfiguration) RegisterValidation(name string, fn validato
 
 // registerCustomValidators 注册内置自定义验证器。
 // 注册手机号和身份证号等常用验证规则。
-func (c *ValidatorAutoConfiguration) registerCustomValidators() {
+func (c *ValidatorAutoConfiguration) registerCustomValidators(ctx context.Context, logger log.Logger) {
 	// 注册手机号验证器（中国大陆手机号）
 	// 验证规则：11 位数字，前缀为 13x-19x
-	_ = c.validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
+	if err := c.validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
 		phone := fl.Field().String()
 		if len(phone) != 11 {
 			return false
+		}
+		// 验证所有位均为数字
+		for i := 0; i < len(phone); i++ {
+			if phone[i] < '0' || phone[i] > '9' {
+				return false
+			}
 		}
 		// 验证手机号前缀（13x, 14x, 15x, 16x, 17x, 18x, 19x）
 		prefix := phone[:2]
@@ -186,11 +192,13 @@ func (c *ValidatorAutoConfiguration) registerCustomValidators() {
 			}
 		}
 		return false
-	})
+	}); err != nil {
+		logger.Warn(ctx, "failed to register phone validator", log.KeyValue{Key: "error", Value: err.Error()})
+	}
 
 	// 注册身份证号验证器（18 位）
 	// 验证规则：前 17 位为数字，最后一位为数字或 X
-	_ = c.validate.RegisterValidation("idcard", func(fl validator.FieldLevel) bool {
+	if err := c.validate.RegisterValidation("idcard", func(fl validator.FieldLevel) bool {
 		idcard := fl.Field().String()
 		if len(idcard) != 18 {
 			return false
@@ -204,7 +212,9 @@ func (c *ValidatorAutoConfiguration) registerCustomValidators() {
 		// 最后一位可以是数字或 X（校验码）
 		lastChar := idcard[17]
 		return (lastChar >= '0' && lastChar <= '9') || lastChar == 'X' || lastChar == 'x'
-	})
+	}); err != nil {
+		logger.Warn(ctx, "failed to register idcard validator", log.KeyValue{Key: "error", Value: err.Error()})
+	}
 }
 
 // ValidatorConfig 数据验证配置。
@@ -229,7 +239,7 @@ func (c *ValidatorAutoConfiguration) loadConfig(env *environment.Environment) (*
 	}
 
 	if err := env.BindPrefix("validator", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Validator 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Validator config: %w", err)
 	}
 
 	return cfg, nil

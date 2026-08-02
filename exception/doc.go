@@ -91,6 +91,11 @@ type ResponseWriter interface {
 
 	// Write 写入响应体。
 	Write(data []byte) error
+
+	// Context 返回请求上下文。
+	//
+	// 如果实现不支持上下文，应返回 context.Background()。
+	Context() context.Context
 }
 
 // ErrorResponse 统一错误响应。

@@ -2,16 +2,18 @@ package security
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/xudefa/enhance/security/filter"
 )
 
 // Security filter order constants
 const (
-	SecurityContextHolderFilterOrder = -1000
+	SecurityContextHolderFilterOrder   = -1000
 	AnonymousAuthenticationFilterOrder = 0
 	ExceptionTranslationFilterOrder    = 0
 	FilterSecurityInterceptorOrder     = 100
@@ -19,14 +21,14 @@ const (
 
 // Specificity score constants for pattern matching
 const (
-	specificityExactMatch      = 1000
+	specificityExactMatch       = 1000
 	specificitySuffixDoubleStar = 100
 	specificitySuffixSingleStar = 50
 )
 
 // Anonymous authentication default values
 const (
-	defaultAnonymousKey      = "anonymousKey"
+	defaultAnonymousKey       = "anonymousKey"
 	defaultAnonymousUser      = "anonymousUser"
 	defaultAnonymousAuthority = "ROLE_ANONYMOUS"
 )
@@ -62,9 +64,7 @@ func (a *securityFilterChainAdapter) Matches(request interface{}) bool {
 
 func (a *securityFilterChainAdapter) GetFilters() []filter.Filter {
 	result := make([]filter.Filter, len(a.proxy.filters))
-	for i, f := range a.proxy.filters {
-		result[i] = f
-	}
+	copy(result, a.proxy.filters)
 	return result
 }
 
@@ -86,8 +86,7 @@ func (a *filterChainAdapter) DoFilter(ctx interface{}, request interface{}, resp
 	if !ok {
 		return fmt.Errorf("expected SecurityResponse, got %T", response)
 	}
-	nextChain := &filterChainAdapter{vfc: &VirtualFilterChain{proxy: a.vfc.proxy, index: a.vfc.index}}
-	return a.vfc.proxy.doFilterWithChain(ctxVal, req, resp, nextChain)
+	return a.vfc.DoFilter(ctxVal, req, resp)
 }
 
 func (a *filterChainAdapter) AddFilter(f filter.Filter) {}
@@ -102,6 +101,11 @@ type FilterChainProxy struct {
 	chain   SecurityFilterChain
 }
 
+// NewFilterChainProxy 创建过滤器链代理实例。
+//
+// 参数:
+//   - filters: 安全过滤器列表
+//   - chain: 最终的安全过滤器链
 func NewFilterChainProxy(filters []SecurityFilter, chain SecurityFilterChain) *FilterChainProxy {
 	return &FilterChainProxy{
 		filters: filters,
@@ -134,9 +138,7 @@ func (p *FilterChainProxy) Matches(request interface{}) bool {
 // GetFilters 实现 filter.SecurityFilterChain 接口
 func (p *FilterChainProxy) GetFilters() []filter.Filter {
 	result := make([]filter.Filter, len(p.filters))
-	for i, f := range p.filters {
-		result[i] = f
-	}
+	copy(result, p.filters)
 	return result
 }
 
@@ -171,15 +173,14 @@ func (c *VirtualFilterChain) DoFilter(ctx context.Context, request SecurityReque
 	return c.proxy.doFilterInternal(ctx, request, response, c.index)
 }
 
-// SecurityContextHolderFilter 安全上下文持有者过滤器
-type SecurityContextHolderFilter struct {
-	securityContext SecurityContext
-}
+// SecurityContextHolderFilter 安全上下文持有者过滤器。
+//
+// 在过滤器链执行完成后，将最终认证信息保存到请求属性中，
+// 供下游 HTTP 处理器使用。
+type SecurityContextHolderFilter struct{}
 
-func NewSecurityContextHolderFilter(securityContext SecurityContext) *SecurityContextHolderFilter {
-	return &SecurityContextHolderFilter{
-		securityContext: securityContext,
-	}
+func NewSecurityContextHolderFilter() *SecurityContextHolderFilter {
+	return &SecurityContextHolderFilter{}
 }
 
 // DoFilter 实现 filter.Filter 接口
@@ -200,20 +201,11 @@ func (f *SecurityContextHolderFilter) DoFilter(ctx interface{}, request interfac
 }
 
 func (f *SecurityContextHolderFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
-	prevAuth := GetAuthentication()
-	ClearAuthentication()
-
 	err := chain.DoFilter(ctx, request, response)
 
-	currentAuth := GetAuthentication()
-	if currentAuth != nil {
-		request.SetAttribute("security.currentAuthentication", currentAuth)
-	}
-
-	if f.securityContext != nil {
-		f.securityContext.ClearAuthentication()
-		if prevAuth != nil {
-			f.securityContext.SetAuthentication(prevAuth)
+	if _, exists := request.GetAttribute("security.currentAuthentication"); !exists {
+		if currentAuth := GetAuthenticationFromContext(ctx); currentAuth != nil {
+			request.SetAttribute("security.currentAuthentication", currentAuth)
 		}
 	}
 
@@ -256,9 +248,10 @@ func (f *AnonymousAuthenticationFilter) DoFilter(ctx interface{}, request interf
 }
 
 func (f *AnonymousAuthenticationFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
-	if GetAuthentication() == nil {
-		auth := NewAnonymousAuthenticationToken(f.key, f.principal, f.authorities)
-		SetAuthentication(auth)
+	auth := GetAuthenticationFromContext(ctx)
+	if auth == nil {
+		auth = NewAnonymousAuthenticationToken(f.key, f.principal, f.authorities)
+		ctx = ContextWithAuthentication(ctx, auth)
 	}
 	return chain.DoFilter(ctx, request, response)
 }
@@ -281,11 +274,19 @@ func NewAnonymousAuthenticationToken(key string, principal any, authorities []st
 	}
 }
 
-func (t *AnonymousAuthenticationToken) Principal() any        { return t.principal }
-func (t *AnonymousAuthenticationToken) Credentials() any      { return nil }
-func (t *AnonymousAuthenticationToken) Authorities() []string { return t.authorities }
-func (t *AnonymousAuthenticationToken) Authenticated() bool   { return t.authenticated }
+// Principal 返回匿名认证主体的身份信息。
+func (t *AnonymousAuthenticationToken) Principal() any { return t.principal }
 
+// Credentials 返回匿名认证的凭据（始终为 nil）。
+func (t *AnonymousAuthenticationToken) Credentials() any { return nil }
+
+// Authorities 返回匿名认证的授权列表。
+func (t *AnonymousAuthenticationToken) Authorities() []string { return t.authorities }
+
+// Authenticated 返回匿名认证是否已通过验证。
+func (t *AnonymousAuthenticationToken) Authenticated() bool { return t.authenticated }
+
+// Name 返回匿名认证主体的名称字符串。
 func (t *AnonymousAuthenticationToken) Name() string {
 	if name, ok := t.principal.(string); ok {
 		return name
@@ -326,8 +327,8 @@ func (f *ExceptionTranslationFilter) DoFilter(ctx interface{}, request interface
 func (f *ExceptionTranslationFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	err := chain.DoFilter(ctx, request, response)
 	if err != nil {
-		if err == ErrAccessDenied {
-			auth := GetAuthentication()
+		if errors.Is(err, ErrAccessDenied) {
+			auth := GetAuthenticationFromContext(ctx)
 			if auth == nil || !auth.Authenticated() {
 				if f.authenticationEntryPoint != nil {
 					return f.authenticationEntryPoint.Commence(ctx, request, response, err)
@@ -394,7 +395,7 @@ func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request Securi
 		request.SetAttribute(attrKey, true)
 	}
 
-	auth := GetAuthentication()
+	auth := GetAuthenticationFromContext(ctx)
 
 	if len(attributes) == 0 {
 		return chain.DoFilter(ctx, request, response)
@@ -411,36 +412,45 @@ func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request Securi
 // Order 实现 filter.Filter 接口
 func (f *FilterSecurityInterceptor) Order() int { return FilterSecurityInterceptorOrder }
 
+// SetSecurityMetadataSource 设置安全元数据源。
 func (f *FilterSecurityInterceptor) SetSecurityMetadataSource(source SecurityMetadataSource) {
 	f.securityMetadataSource = source
 }
 
+// SetAccessDecisionManager 设置访问决策管理器。
 func (f *FilterSecurityInterceptor) SetAccessDecisionManager(manager AccessDecisionManager) {
 	f.accessDecisionManager = manager
 }
 
+// SetAuthenticationManager 设置认证管理器。
 func (f *FilterSecurityInterceptor) SetAuthenticationManager(manager AuthenticationManager) {
 	f.authenticationManager = manager
 }
 
 // ExpressionBasedFilterInvocationSecurityMetadataSource 基于表达式的过滤器调用安全元数据源
 type ExpressionBasedFilterInvocationSecurityMetadataSource struct {
+	mu         sync.RWMutex
 	requestMap map[string][]string
 }
 
+// NewExpressionBasedFilterInvocationSecurityMetadataSource 创建基于表达式的过滤器调用安全元数据源实例。
 func NewExpressionBasedFilterInvocationSecurityMetadataSource() *ExpressionBasedFilterInvocationSecurityMetadataSource {
 	return &ExpressionBasedFilterInvocationSecurityMetadataSource{
 		requestMap: make(map[string][]string),
 	}
 }
 
+// AddMapping 添加 URL 模式与安全属性的映射关系。
 func (s *ExpressionBasedFilterInvocationSecurityMetadataSource) AddMapping(pattern string, attributes []string) {
 	if !strings.Contains(pattern, "::") {
 		pattern = "**::" + pattern
 	}
+	s.mu.Lock()
 	s.requestMap[pattern] = attributes
+	s.mu.Unlock()
 }
 
+// GetAttributes 根据请求获取匹配的安全属性列表。
 func (s *ExpressionBasedFilterInvocationSecurityMetadataSource) GetAttributes(ctx context.Context, request SecurityRequest) ([]string, error) {
 	uri := request.GetURI()
 	method := request.GetMethod()
@@ -450,6 +460,8 @@ func (s *ExpressionBasedFilterInvocationSecurityMetadataSource) GetAttributes(ct
 		attributes  []string
 		specificity int
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	matchedRules := make([]matchedRule, 0, len(s.requestMap))
 	for pattern, attributes := range s.requestMap {
 		if s.matches(pattern, uri, method) {
@@ -542,6 +554,7 @@ func NewHttp403ForbiddenEntryPoint() *Http403ForbiddenEntryPoint {
 	return &Http403ForbiddenEntryPoint{}
 }
 
+// Commence 发送 403 Forbidden 响应给客户端。
 func (e *Http403ForbiddenEntryPoint) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusForbidden)
 	if writeErr := response.Write([]byte(http.StatusText(http.StatusForbidden))); writeErr != nil {
@@ -557,6 +570,7 @@ func NewHttp401UnauthorizedEntryPoint() *Http401UnauthorizedEntryPoint {
 	return &Http401UnauthorizedEntryPoint{}
 }
 
+// Commence 发送 401 Unauthorized 响应给客户端。
 func (e *Http401UnauthorizedEntryPoint) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusUnauthorized)
 	if writeErr := response.Write([]byte(http.StatusText(http.StatusUnauthorized))); writeErr != nil {
@@ -572,6 +586,7 @@ func NewHttp403ForbiddenAccessDeniedHandler() *Http403ForbiddenAccessDeniedHandl
 	return &Http403ForbiddenAccessDeniedHandler{}
 }
 
+// Handle 处理访问被拒绝的情况，发送 403 Forbidden 响应给客户端。
 func (e *Http403ForbiddenAccessDeniedHandler) Handle(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusForbidden)
 	if writeErr := response.Write([]byte(http.StatusText(http.StatusForbidden))); writeErr != nil {
@@ -591,6 +606,7 @@ func NewLoginUrlAuthenticationEntryPoint(loginFormUrl string) *LoginUrlAuthentic
 	}
 }
 
+// Commence 重定向客户端到登录页面。
 func (e *LoginUrlAuthenticationEntryPoint) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusFound)
 	response.SetHeader("Location", e.loginFormUrl)

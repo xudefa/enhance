@@ -78,7 +78,11 @@ func injectImpl[T any](container core.BeanGet, beanName string) (T, error) {
 		if instance == nil {
 			return zero, fmt.Errorf("no bean found with name '%s' and type %v", beanName, typ)
 		}
-		return instance.(T), nil
+		result, ok := instance.(T)
+		if !ok {
+			return zero, fmt.Errorf("bean %q type mismatch: got %T, want %v", beanName, instance, typ)
+		}
+		return result, nil
 	}
 
 	instances, err := container.Get(typ)
@@ -90,5 +94,9 @@ func injectImpl[T any](container core.BeanGet, beanName string) (T, error) {
 		return zero, fmt.Errorf("no bean found for type %v", typ)
 	}
 
-	return instances[0].(T), nil
+	result, ok := instances[0].(T)
+	if !ok {
+		return zero, fmt.Errorf("bean type mismatch: got %T, want %v", instances[0], typ)
+	}
+	return result, nil
 }

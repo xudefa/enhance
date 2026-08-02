@@ -100,27 +100,28 @@ func (e *defaultChainExecutor) Execute(inv Invocation, aspects []*AspectMeta, ta
 	}
 
 	ca := classifyAdvices(aspects)
+	// 从 Invocation 的 JoinPoint 获取 context，如果不可用则使用 Background
 	ctx := context.Background()
+	if jp := inv.JoinPoint(); jp != nil {
+		ctx = jp.Context()
+	}
 
 	coreExecute := func(invocation Invocation) any {
 		joinPoint := invocation.JoinPoint()
+		if joinPoint == nil {
+			return targetFunc(invocation.Arguments()...)
+		}
 
 		// 1. 执行所有 Before 通知
 		for _, advice := range ca.before {
-			advice.Execute(ctx, joinPoint)
+			_, _ = advice.Execute(ctx, joinPoint)
 		}
 
 		var result any
 		var panicked any
 
 		// 2. 执行 Around 通知链或目标方法
-		if e.config.recoverPanic {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						panicked = r
-					}
-				}()
+		executeBody := func() {
 			if len(ca.around) > 0 {
 				chain := buildAdviceChain(ca.around, targetFunc)
 				result = chain(invocation)
@@ -128,42 +129,87 @@ func (e *defaultChainExecutor) Execute(inv Invocation, aspects []*AspectMeta, ta
 				var proceedErr error
 				result, proceedErr = joinPoint.Proceed()
 				if proceedErr != nil {
+					joinPoint.SetError(proceedErr)
 					if ei, ok := inv.(*invocationImpl); ok {
 						ei.SetError(proceedErr)
 					}
 				}
 			}
-		}()
-	} else {
-		if len(ca.around) > 0 {
-			chain := buildAdviceChain(ca.around, targetFunc)
-			result = chain(invocation)
-		} else {
-			var proceedErr error
-			result, proceedErr = joinPoint.Proceed()
-			if proceedErr != nil {
+			joinPoint.SetResult(result)
+			// 从返回值中提取 error，确保 AfterThrowing 能正确触发。
+			// 覆盖两种形态：
+			//   - 多返回值：末尾元素为 error（如 func() (T, error)）
+			//   - 唯一返回值即 error（如 func() error）
+			var extractedErr error
+			if results, ok := result.([]any); ok && len(results) > 0 {
+				if err, isErr := results[len(results)-1].(error); isErr {
+					extractedErr = err
+				}
+			} else if err, ok := result.(error); ok {
+				extractedErr = err
+			}
+			if extractedErr != nil {
+				joinPoint.SetError(extractedErr)
 				if ei, ok := inv.(*invocationImpl); ok {
-					ei.SetError(proceedErr)
+					ei.SetError(extractedErr)
 				}
 			}
 		}
-	}
+
+		if e.config.recoverPanic {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						panicked = r
+					}
+				}()
+				executeBody()
+			}()
+		} else {
+			executeBody()
+		}
 
 		// 3. 执行所有 After 通知
 		for _, advice := range ca.after {
-			advice.Execute(ctx, joinPoint)
+			_, _ = advice.Execute(ctx, joinPoint)
 		}
 
 		// 4. 根据 panic 状态执行 AfterThrowing 或 AfterReturning
 		if panicked != nil {
+			panicErr := fmt.Errorf("panic: %v", panicked)
+			joinPoint.SetError(panicErr)
+			if ei, ok := inv.(*invocationImpl); ok {
+				ei.SetError(panicErr)
+			}
 			for _, advice := range ca.afterThrowing {
-				advice.Execute(ctx, joinPoint)
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							_ = r
+						}
+					}()
+					_, _ = advice.Execute(ctx, joinPoint)
+				}()
 			}
 			panic(panicked)
 		}
 
-		for _, advice := range ca.afterReturning {
-			advice.Execute(ctx, joinPoint)
+		// 5. 方法返回错误时执行 AfterThrowing，正常返回时执行 AfterReturning
+		if joinPoint.GetError() != nil {
+			for _, advice := range ca.afterThrowing {
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							_ = r
+						}
+					}()
+					_, _ = advice.Execute(ctx, joinPoint)
+				}()
+			}
+		} else {
+			for _, advice := range ca.afterReturning {
+				_, _ = advice.Execute(ctx, joinPoint)
+			}
 		}
 
 		return result
@@ -226,49 +272,97 @@ func updateStats(panicked any, interceptorCount int) {
 // buildAdviceChain 构建环绕通知链
 func buildAdviceChain(advices []Advice, targetFunc func(...any) any) func(Invocation) any {
 	return func(inv Invocation) any {
-		return executeAdviceChain(0, advices, inv, targetFunc)
+		result, err := executeAdviceChain(0, advices, inv, targetFunc)
+		// 链式执行产生的错误提交到 JoinPoint 和 Invocation，
+		// 使 AfterThrowing 通知与调用方（CallContext/InvokeContext）能够感知。
+		if err != nil {
+			if jp := inv.JoinPoint(); jp != nil {
+				jp.SetError(err)
+			}
+			if ei, ok := inv.(*invocationImpl); ok {
+				ei.SetError(err)
+			}
+		}
+		return result
 	}
 }
 
 // chainJoinPoint 包装 JoinPoint，拦截 Proceed 调用以实现链式执行。
 type chainJoinPoint struct {
 	inner   JoinPoint
+	inv     Invocation
 	proceed func() (any, error)
 }
 
-func (c *chainJoinPoint) Target() any                { return c.inner.Target() }
-func (c *chainJoinPoint) Method() string             { return c.inner.Method() }
-func (c *chainJoinPoint) Args() []any                { return c.inner.Args() }
-func (c *chainJoinPoint) Proceed() (any, error)      { return c.proceed() }
-func (c *chainJoinPoint) ProceedWithArgs(args []any) (any, error) { return c.proceed() }
+func (c *chainJoinPoint) Target() any              { return c.inner.Target() }
+func (c *chainJoinPoint) Method() string           { return c.inner.Method() }
+func (c *chainJoinPoint) Args() []any              { return c.inner.Args() }
+func (c *chainJoinPoint) Proceed() (any, error)    { return c.proceed() }
+func (c *chainJoinPoint) Context() context.Context { return c.inner.Context() }
+func (c *chainJoinPoint) GetResult() any           { return c.inner.GetResult() }
+func (c *chainJoinPoint) GetError() error          { return c.inner.GetError() }
+func (c *chainJoinPoint) SetResult(v any)          { c.inner.SetResult(v) }
+func (c *chainJoinPoint) SetError(err error)       { c.inner.SetError(err) }
 
-// executeAdviceChain 递归执行环绕通知链
-func executeAdviceChain(idx int, advices []Advice, inv Invocation, targetFunc func(...any) any) any {
+func (c *chainJoinPoint) ProceedWithArgs(args []any) (any, error) {
+	// 更新底层 Invocation 的参数，使后续链和目标方法使用新参数
+	if s, ok := c.inv.(interface{ SetArgs([]any) }); ok {
+		s.SetArgs(args)
+	}
+	// 同步更新 JoinPoint 的可见参数，保证链外读取到新参数
+	if jp, ok := c.inner.(*joinPointImpl); ok {
+		jp.args = args
+	}
+	return c.proceed()
+}
+
+// executeAdviceChain 递归执行环绕通知链，返回结果与错误。
+//
+// 目标方法或内层 Around 通知返回的错误通过返回值逐层上抛，
+// 使外层 Around 通知能通过 proceed() 的 error 返回值感知并处理。
+func executeAdviceChain(idx int, advices []Advice, inv Invocation, targetFunc func(...any) any) (any, error) {
 	if idx >= len(advices) {
-		return targetFunc(inv.JoinPoint().Args()...)
+		return extractChainError(targetFunc(inv.Arguments()...))
 	}
 
 	currentIdx := idx
 	ctx := context.Background()
+	if jp := inv.JoinPoint(); jp != nil {
+		ctx = jp.Context()
+	}
 
 	proceed := func() (any, error) {
-		return executeAdviceChain(currentIdx+1, advices, inv, targetFunc), nil
+		return executeAdviceChain(currentIdx+1, advices, inv, targetFunc)
 	}
 
 	// 包装 JoinPoint，使 Around 通知调用 Proceed 时走链式调用而非原始目标
 	innerJP := inv.JoinPoint()
 	wrapper := &chainJoinPoint{
 		inner:   innerJP,
+		inv:     inv,
 		proceed: proceed,
 	}
 
-	result, executeErr := advices[idx].Execute(ctx, wrapper)
-	if executeErr != nil {
-		if ei, ok := inv.(*invocationImpl); ok {
-			ei.SetError(executeErr)
+	return advices[idx].Execute(ctx, wrapper)
+}
+
+// extractChainError 从目标函数结果中提取错误。
+//
+// 覆盖两种形态：
+//   - 唯一返回值即 error（如 func() error）
+//   - 多返回值末尾为 error（如 func() (T, error)）
+//
+// 返回 (结果, 错误)，错误可被 Around 通知通过 proceed() 感知。
+func extractChainError(result any) (any, error) {
+	if err, ok := result.(error); ok && err != nil {
+		return nil, err
+	}
+	if results, ok := result.([]any); ok && len(results) > 0 {
+		if err, isErr := results[len(results)-1].(error); isErr && err != nil {
+			return results, err
 		}
 	}
-	return result
+	return result, nil
 }
 
 // defaultExecutor 全局默认通知链执行器

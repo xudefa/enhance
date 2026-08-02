@@ -32,7 +32,10 @@
 //	router.POST("/users", createHandler)
 package core
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 // ==================== 核心接口 ====================
 
@@ -88,6 +91,9 @@ type Context interface {
 
 	// Context 获取请求上下文。
 	Context() context.Context
+
+	// Request 获取底层 HTTP 请求。
+	Request() *http.Request
 
 	// SetContext 设置请求上下文。
 	SetContext(ctx context.Context)

@@ -24,6 +24,14 @@ type daoAuthenticationProvider struct {
 }
 
 // NewDaoAuthenticationProvider 创建基于数据源的认证提供者。
+//
+// 参数:
+//   - userDetailsService: 用户详情服务，用于加载用户信息
+//   - passwordEncoder: 密码编码器，用于验证密码
+//   - logger: 日志记录器，可为 nil
+//
+// 返回:
+//   - AuthenticationProvider: 认证提供者接口
 func NewDaoAuthenticationProvider(
 	userDetailsService UserDetailsService,
 	passwordEncoder PasswordEncoder,
@@ -87,6 +95,16 @@ func (p *daoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 		return nil, errors.New("user account is locked")
 	}
 
+	if !user.AccountNonExpired() {
+		p.logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
+		return nil, errors.New("user account is expired")
+	}
+
+	if !user.CredentialsNonExpired() {
+		p.logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
+		return nil, errors.New("user credentials are expired")
+	}
+
 	p.logger.Info(ctx, "用户认证成功", log.KeyValue{Key: "username", Value: username})
 	return NewAuthenticatedUsernamePasswordToken(user, nil, user.Authorities()), nil
 }
@@ -103,18 +121,25 @@ func (p *daoAuthenticationProvider) Supports(token AuthenticationToken) bool {
 type anonymousAuthenticationProvider struct{}
 
 // NewAnonymousAuthenticationProvider 创建匿名认证提供者。
+//
+// 匿名提供者为未认证请求自动创建匿名令牌，
+// 通常作为认证链中的最后一个提供者使用。
 func NewAnonymousAuthenticationProvider() AuthenticationProvider {
 	return &anonymousAuthenticationProvider{}
 }
 
 // Authenticate 创建匿名认证令牌。
 //
-// 只有当传入的 token 为 nil 或未认证时，才创建匿名令牌。
+// 只有当未发起实际认证请求时，才创建匿名令牌。
 func (p *anonymousAuthenticationProvider) Authenticate(_ context.Context, token AuthenticationToken) (Authentication, error) {
-	if token == nil || !token.Authenticated() {
+	if token == nil {
 		return NewAuthenticatedUsernamePasswordToken("anonymousUser", nil, []string{"ROLE_ANONYMOUS"}), nil
 	}
-	return nil, nil
+	// 如果令牌已认证或包含凭证，不创建匿名令牌
+	if token.Authenticated() || token.Credentials() != nil {
+		return nil, nil
+	}
+	return NewAuthenticatedUsernamePasswordToken("anonymousUser", nil, []string{"ROLE_ANONYMOUS"}), nil
 }
 
 // Supports 只支持 UsernamePasswordToken 类型。

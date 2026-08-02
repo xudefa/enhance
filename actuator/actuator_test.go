@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/xudefa/enhance/actuator/health"
@@ -44,6 +45,51 @@ func (t *testIndicator) Health(ctx context.Context) health.Health {
 		Details: map[string]any{
 			"version": "1.0.0",
 		},
+	}
+}
+
+// downIndicator 测试用的 DOWN 健康指标
+type downIndicator struct{}
+
+func (d *downIndicator) Name() string {
+	return "db"
+}
+
+func (d *downIndicator) Health(ctx context.Context) health.Health {
+	return health.Health{
+		Status: health.StatusDown,
+		Details: map[string]any{
+			"error": "connection refused",
+		},
+	}
+}
+
+// TestHealthHandler_DownReturns503 测试健康状态非 UP 时返回 503
+func TestHealthHandler_DownReturns503(t *testing.T) {
+	t.Parallel()
+	container := core.NewContainer()
+	env := newTestEnvironment()
+	ctx := &testAppContext{container: container, env: env}
+	act := New(ctx)
+
+	agg := health.NewAggregator()
+	agg.AddIndicator(&downIndicator{})
+	act.SetHealthAggregator(agg)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/actuator/health", nil)
+	act.HealthHandler(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+
+	var result health.Health
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if result.Status != health.StatusDown {
+		t.Fatalf("expected DOWN, got %s", result.Status)
 	}
 }
 
@@ -577,6 +623,18 @@ func TestInfoHandler_NoAppContext(t *testing.T) {
 	}
 }
 
+// TestInfoHandler_NilEnvironment 测试环境为 nil 时的错误处理
+func TestInfoHandler_NilEnvironment(t *testing.T) {
+	t.Parallel()
+	act := &Actuator{appContext: &testAppContext{container: core.NewContainer(), env: nil}}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/actuator/info", nil)
+	act.InfoHandler(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
 // TestPrometheusHandler 测试 Prometheus 格式指标处理器
 func TestPrometheusHandler(t *testing.T) {
 	t.Parallel()
@@ -615,6 +673,35 @@ func TestPrometheusHandler(t *testing.T) {
 	}
 	if !contains(body, "memory_usage") {
 		t.Fatal("expected 'memory_usage' in response")
+	}
+}
+
+// TestPrometheusHandler_EscapedLabelsAndType 测试标签转义和 TYPE 输出
+func TestPrometheusHandler_EscapedLabelsAndType(t *testing.T) {
+	t.Parallel()
+	container := core.NewContainer()
+	env := newTestEnvironment()
+	ctx := &testAppContext{container: container, env: env}
+	act := New(ctx)
+
+	reg := metrics.NewSimpleRegistry()
+	reg.Counter("http_requests", "path", `/api/"quoted"`).Add(1)
+	act.SetMetricsRegistry(reg)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	act.PrometheusHandler(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "# TYPE http_requests counter") {
+		t.Errorf("expected TYPE line, got:\n%s", body)
+	}
+	if !strings.Contains(body, `path="/api/\"quoted\""`) {
+		t.Errorf("expected escaped label value, got:\n%s", body)
 	}
 }
 
@@ -677,37 +764,16 @@ func TestRegisterDebugRoutes(t *testing.T) {
 		"/debug/pprof/",
 		"/debug/pprof/cmdline",
 		"/debug/pprof/symbol",
+		"/debug/pprof/profile",
+		"/debug/pprof/trace",
 	}
 
 	for _, path := range expectedPaths {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, path, nil)
-		mux.ServeHTTP(w, r)
-
-		if w.Code == http.StatusNotFound {
-			t.Fatalf("path %s returned 404, expected handler to be registered", path)
+		handler, _ := mux.Handler(httptest.NewRequest(http.MethodGet, path, nil))
+		if handler == nil {
+			t.Fatalf("path %s has no handler registered", path)
 		}
 	}
-
-	t.Run("profile endpoint registered", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/debug/pprof/profile?seconds=0.1", nil)
-		mux.ServeHTTP(w, r)
-
-		if w.Code == http.StatusNotFound {
-			t.Fatal("profile endpoint should be registered")
-		}
-	})
-
-	t.Run("trace endpoint registered", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/debug/pprof/trace", nil)
-		mux.ServeHTTP(w, r)
-
-		if w.Code == http.StatusNotFound {
-			t.Fatal("trace endpoint should be registered")
-		}
-	})
 }
 
 // contains 检查字符串是否包含子串

@@ -135,9 +135,28 @@ func (b *defaultBinder) setFieldValue(fieldValue reflect.Value, valueStr string,
 	if b.converter != nil {
 		converted, err := b.converter.Convert(valueStr, fieldType.String())
 		if err == nil {
-			fieldValue.Set(reflect.ValueOf(converted))
-			return nil
+			// 转换器返回 (nil, nil) 时不能使用反射操作
+			if converted == nil {
+				return fmt.Errorf("type converter returned nil for field type %v", fieldType)
+			}
+			convertedVal := reflect.ValueOf(converted)
+			if convertedVal.Type().AssignableTo(fieldType) {
+				fieldValue.Set(convertedVal)
+				return nil
+			}
+			return fmt.Errorf("type converter returned %v which is not assignable to field type %v", convertedVal.Type(), fieldType)
 		}
+	}
+
+	// 特殊类型处理：time.Duration 的 Kind 是 Int64，
+	// 必须先于 kind switch 判断，否则会落入 Int64 分支导致 "30s" 解析失败
+	if fieldType == reflect.TypeOf(time.Duration(0)) {
+		v, err := time.ParseDuration(valueStr)
+		if err != nil {
+			return err
+		}
+		fieldValue.Set(reflect.ValueOf(v))
+		return nil
 	}
 
 	// 内置类型转换
@@ -149,11 +168,25 @@ func (b *defaultBinder) setFieldValue(fieldValue reflect.Value, valueStr string,
 		if err != nil {
 			return err
 		}
+		bits := fieldType.Bits()
+		if bits > 0 && bits < 64 {
+			min, max := int64(-1)<<(bits-1), (int64(1)<<(bits-1))-1
+			if v < min || v > max {
+				return fmt.Errorf("value %d overflows %s (range [%d, %d])", v, fieldType, min, max)
+			}
+		}
 		fieldValue.SetInt(v)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v, err := strconv.ParseUint(valueStr, 10, 64)
 		if err != nil {
 			return err
+		}
+		bits := fieldType.Bits()
+		if bits > 0 && bits < 64 {
+			max := (uint64(1) << bits) - 1
+			if v > max {
+				return fmt.Errorf("value %d overflows %s (max %d)", v, fieldType, max)
+			}
 		}
 		fieldValue.SetUint(v)
 	case reflect.Float32, reflect.Float64:
@@ -169,15 +202,6 @@ func (b *defaultBinder) setFieldValue(fieldValue reflect.Value, valueStr string,
 		}
 		fieldValue.SetBool(v)
 	default:
-		// 特殊类型处理
-		if fieldType == reflect.TypeOf(time.Duration(0)) {
-			v, err := time.ParseDuration(valueStr)
-			if err != nil {
-				return err
-			}
-			fieldValue.Set(reflect.ValueOf(v))
-			return nil
-		}
 		return fmt.Errorf("unsupported field type: %v", fieldType)
 	}
 

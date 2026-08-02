@@ -12,12 +12,20 @@ func (c *interceptorChainImpl) AddInterceptor(interceptor MethodInterceptor) {
 
 // Proceed 执行下一个拦截器或目标方法。
 func (c *interceptorChainImpl) Proceed() (any, error) {
+	c.mu.Lock()
 	if c.index >= len(c.interceptors) {
-		return c.invocation.Proceed()
+		if c.invocation == nil {
+			c.mu.Unlock()
+			return nil, nil
+		}
+		inv := c.invocation
+		c.mu.Unlock()
+		return inv.Proceed()
 	}
 
 	interceptor := c.interceptors[c.index]
 	c.index++
+	c.mu.Unlock()
 	return interceptor.Invoke(c)
 }
 
@@ -43,8 +51,10 @@ func (c *interceptorChainImpl) GetTarget() any {
 
 // Invoke 执行拦截逻辑。
 func (c *interceptorChainImpl) Invoke(invocation MethodInvocation) (any, error) {
+	c.mu.Lock()
 	c.index = 0
 	c.invocation = invocation
+	c.mu.Unlock()
 	return c.Proceed()
 }
 

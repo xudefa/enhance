@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// ValidateStruct 用于验证结构体的便捷函数
+// ValidateStruct 用于验证结构体的便捷函数。
 func ValidateStruct(obj any) error {
 	validator := NewTagValidator()
 	return validator.Validate(obj)
 }
 
-// Validate 验证单个值是否符合规则
+// Validate 验证单个值是否符合规则。
 func Validate(value any, rules string) error {
 	ruleList := strings.Split(rules, ",")
 	for _, rule := range ruleList {
@@ -215,6 +215,9 @@ func isRegexpValidForValue(value any, pattern string) bool {
 		return false
 	}
 	re := compileRegex(pattern)
+	if re == nil {
+		return false
+	}
 	return re.MatchString(v.String())
 }
 

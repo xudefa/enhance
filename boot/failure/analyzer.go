@@ -33,7 +33,7 @@ func (a *DefaultFailureAnalyzer) Supports(err error) bool {
 
 	msg := err.Error()
 	return strings.Contains(msg, "address already in use") ||
-		strings.Contains(msg, "permission denied") ||
+		strings.Contains(msg, "permission denied") || errors.Is(err, os.ErrPermission) ||
 		strings.Contains(msg, "file not found") ||
 		strings.Contains(msg, "no such file")
 }
@@ -51,7 +51,7 @@ func (a *DefaultFailureAnalyzer) Analyze(err error) *FailureAnalysis {
 	switch {
 	case strings.Contains(msg, "address already in use"):
 		return a.analyzePortInUse(err)
-	case errors.Is(err, os.ErrPermission):
+	case strings.Contains(msg, "permission denied") || errors.Is(err, os.ErrPermission):
 		return a.analyzePermissionDenied(err)
 	case strings.Contains(msg, "file not found") || strings.Contains(msg, "no such file"):
 		return a.analyzeFileNotFound(err)

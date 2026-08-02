@@ -20,8 +20,8 @@ func TestCasbinGormConfig_DefaultValues(t *testing.T) {
 	if cfg.ModelType != "file" {
 		t.Errorf("expected default model_type 'file', got '%s'", cfg.ModelType)
 	}
-	if cfg.ModelPath != "./config/casbin_model.conf" {
-		t.Errorf("expected default model_path './config/casbin_model.conf', got '%s'", cfg.ModelPath)
+	if cfg.ModelPath != "config/casbin_model.conf" {
+		t.Errorf("expected default model_path 'config/casbin_model.conf', got '%s'", cfg.ModelPath)
 	}
 	if cfg.PolicyType != "gorm" {
 		t.Errorf("expected default policy_type 'gorm', got '%s'", cfg.PolicyType)

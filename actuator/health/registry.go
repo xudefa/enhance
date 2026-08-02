@@ -2,7 +2,8 @@ package health
 
 import (
 	"context"
-	"fmt"
+	"maps"
+	"os"
 	"runtime"
 	"sync"
 	"time"
@@ -104,9 +105,7 @@ func (b *HealthBuilder) WithDetail(key string, value any) *HealthBuilder {
 
 // WithDetails 批量添加详细信息
 func (b *HealthBuilder) WithDetails(details map[string]any) *HealthBuilder {
-	for k, v := range details {
-		b.health.Details[k] = v
-	}
+	maps.Copy(b.health.Details, details)
 	return b
 }
 
@@ -151,14 +150,20 @@ func (r *IndicatorRegistry) Get(name string) (Indicator, bool) {
 	if !ok {
 		return nil, false
 	}
-	return v.(Indicator), true
+	ind, ok := v.(Indicator)
+	if !ok {
+		return nil, false
+	}
+	return ind, true
 }
 
 // GetAll 获取所有健康指标
 func (r *IndicatorRegistry) GetAll() []Indicator {
 	var indicators []Indicator
 	r.indicators.Range(func(key, value any) bool {
-		indicators = append(indicators, value.(Indicator))
+		if ind, ok := value.(Indicator); ok {
+			indicators = append(indicators, ind)
+		}
 		return true
 	})
 	return indicators
@@ -256,7 +261,11 @@ func (s *SystemHealthIndicator) Health(ctx context.Context) Health {
 }
 
 func getHostname() string {
-	return "localhost"
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
 }
 
 // HealthCheckService 健康检查服务
@@ -319,38 +328,4 @@ func CheckHealth(ctx context.Context) Health {
 // RegisterCustomIndicator 注册自定义健康指标到默认服务
 func RegisterCustomIndicator(name string, fn IndicatorFunc) {
 	DefaultHealthCheckService.RegisterIndicator(name, fn)
-}
-
-// Example: 注册 Redis 健康指标
-func ExampleRegisterRedisIndicator() {
-	RegisterCustomIndicator("redis", func(ctx context.Context) Health {
-		// 模拟 Redis 连接检查
-		version := "6.2"
-		return Up().WithDetail("version", version).Build()
-	})
-}
-
-// Example: 注册数据库健康指标
-func ExampleRegisterDatabaseIndicator() {
-	RegisterCustomIndicator("database", func(ctx context.Context) Health {
-		// 模拟数据库连接检查
-		return Up().WithDetail("status", "connected").Build()
-	})
-}
-
-// Example: 注册自定义健康指标
-func ExampleRegisterCustomIndicator() {
-	RegisterCustomIndicator("custom-service", func(ctx context.Context) Health {
-		// 模拟自定义服务检查
-		return Up().WithDetail("status", "ok").WithDetail("version", "1.0.0").Build()
-	})
-}
-
-// Example: 使用 HealthBuilder
-func ExampleHealthBuilder() {
-	health := Up().
-		WithDetail("version", "1.0.0").
-		WithDetail("status", "running").
-		Build()
-	fmt.Println(health.Status)
 }

@@ -17,6 +17,7 @@ func main() {
 
 	// 创建调度器
 	scheduler := schedule.NewScheduler(
+		context.Background(),
 		schedule.WithPoolSize(5),
 		schedule.WithErrorHandler(func(taskName string, err error) {
 			fmt.Printf("[ERROR] Task %s failed: %v\n", taskName, err)

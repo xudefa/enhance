@@ -29,9 +29,9 @@ const (
 
 const (
 	DefaultCasbinModelType        = "file"
-	DefaultCasbinModelPath        = "./config/casbin_model.conf"
+	DefaultCasbinModelPath        = "config/casbin_model.conf"
 	DefaultCasbinPolicyType       = "file"
-	DefaultCasbinPolicyPath       = "./config/casbin_policy.csv"
+	DefaultCasbinPolicyPath       = "config/casbin_policy.csv"
 	DefaultCasbinAutoLoad         = false
 	DefaultCasbinAutoLoadInterval = 5
 )
@@ -52,6 +52,9 @@ type CasbinVoter struct {
 }
 
 func NewCasbinVoter(enforcer CasbinEnforcer) *CasbinVoter {
+	if enforcer == nil {
+		panic("casbin: enforcer must not be nil")
+	}
 	return &CasbinVoter{
 		enforcer: enforcer,
 	}
@@ -86,7 +89,8 @@ func (v *CasbinVoter) Vote(ctx context.Context, authentication authorization.Aut
 
 	allowed, err := v.enforcer.Enforce(ctx, subject, uri, method)
 	if err != nil {
-		return ACCESS_ABSTAIN
+		// 执行器返回错误时采用失败关闭策略，拒绝访问
+		return ACCESS_DENIED
 	}
 
 	if allowed {

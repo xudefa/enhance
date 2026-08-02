@@ -2,7 +2,6 @@
 package ent
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -43,21 +42,21 @@ func (c *EntAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 ent 配置失败: %w", err)
+		return fmt.Errorf("failed to load ent config: %w", err)
 	}
 
 	driver, err := entsql.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
-		return fmt.Errorf("打开 ent 数据库连接失败: %w", err)
+		return fmt.Errorf("failed to open ent database connection: %w", err)
 	}
 
 	c.driver = driver
 
 	if err := ctx.Container().RegisterInstance(driver, reflect.TypeFor[*entsql.Driver]()); err != nil {
-		return fmt.Errorf("注册 ent Driver 失败: %w", err)
+		return fmt.Errorf("failed to register ent Driver: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "ent ORM 数据库连接成功",
+	c.logger.Info(ctx.Context(), "ent ORM database connected successfully",
 		log.KeyValue{Key: "driver", Value: cfg.Driver},
 		log.KeyValue{Key: "database", Value: cfg.Database},
 	)
@@ -104,7 +103,7 @@ func (c *EntAutoConfiguration) loadConfig(env *environment.Environment) (*EntCon
 	}
 
 	if err := env.BindPrefix("ent", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 ent 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind ent config: %w", err)
 	}
 
 	return cfg, nil

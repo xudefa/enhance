@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/xudefa/enhance/actuator"
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/condition"
 	"github.com/xudefa/enhance/log"
@@ -133,32 +132,29 @@ func (s *WebStarter) Dependencies() []string {
 
 // Configure 配置阶段调用
 func (s *WebStarter) Configure(ctx boot.ApplicationContext) error {
-	s.logger.Info(context.Background(), "开始配置 Web MVC 模块...")
-
-	// 如果上下文为 nil，跳过依赖注入（用于测试场景）
 	if ctx == nil || ctx.Container() == nil {
 		return nil
 	}
+	sCtx := ctx.Context()
+	s.logger.Info(sCtx, "开始配置 Web MVC 模块...")
 
-	// 直接操作原始控制器列表，避免副本问题
+	// 获取控制器快照，避免 TOCTOU 竞态
 	mu.RLock()
-	ctrlCount := len(controllers)
+	snapshot := make([]core.Controller, len(controllers))
+	copy(snapshot, controllers)
 	mu.RUnlock()
-	s.logger.Debug(context.Background(), "发现控制器", log.KeyValue{Key: "count", Value: ctrlCount})
+	s.logger.Debug(sCtx, "发现控制器", log.KeyValue{Key: "count", Value: len(snapshot)})
 
 	// 对每个控制器进行依赖注入
-	for i := 0; i < ctrlCount; i++ {
-		mu.RLock()
-		ctrl := controllers[i]
-		mu.RUnlock()
+	for _, ctrl := range snapshot {
 		if err := injectControllerDependencies(ctx, ctrl); err != nil {
-			s.logger.Error(context.Background(), "控制器依赖注入失败",
+			s.logger.Error(sCtx, "控制器依赖注入失败",
 				log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 			return fmt.Errorf("failed to inject controller %T: %w", ctrl, err)
 		}
-		s.logger.Debug(context.Background(), "控制器依赖注入完成",
+		s.logger.Debug(sCtx, "控制器依赖注入完成",
 			log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
 		)
 	}
@@ -166,6 +162,9 @@ func (s *WebStarter) Configure(ctx boot.ApplicationContext) error {
 }
 
 // injectControllerDependencies 注入控制器的依赖
+//
+// 控制器必须以指针注册（如 &MyController{}），
+// 值类型控制器无法回写注入结果，将返回错误。
 func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Controller) error {
 	ctrlValue := reflect.ValueOf(ctrl)
 
@@ -177,6 +176,11 @@ func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Control
 	// 必须是结构体
 	if ctrlValue.Kind() != reflect.Struct {
 		return nil
+	}
+
+	// 值类型控制器不可寻址，注入结果无法回写到原始实例
+	if !ctrlValue.CanAddr() {
+		return fmt.Errorf("controller %T is a value type; register it as a pointer to enable dependency injection", ctrl)
 	}
 
 	ctrlType := ctrlValue.Type()
@@ -192,6 +196,11 @@ func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Control
 			continue
 		}
 
+		// 仅注入带有 inject 标签的字段
+		if _, ok := field.Tag.Lookup("inject"); !ok {
+			continue
+		}
+
 		// 跳过已经设置的字段
 		switch fieldValue.Kind() {
 		case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
@@ -204,12 +213,17 @@ func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Control
 		fieldType := field.Type
 		beans, err := container.Get(fieldType)
 		if err != nil || len(beans) == 0 {
-			// 依赖不存在，跳过（可能是可选依赖）
+			continue
+		}
+
+		// 注入值必须与字段类型兼容，避免类型不匹配时 panic
+		bean := reflect.ValueOf(beans[0])
+		if !bean.IsValid() || !bean.Type().AssignableTo(fieldType) {
 			continue
 		}
 
 		// 设置字段值
-		fieldValue.Set(reflect.ValueOf(beans[0]))
+		fieldValue.Set(bean)
 	}
 
 	return nil
@@ -217,68 +231,69 @@ func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Control
 
 // Start 启动阶段调用
 func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
-	s.logger.Info(context.Background(), "开始启动 Web 服务器...")
+	var sCtx context.Context
+	if ctx != nil {
+		sCtx = ctx.Context()
+	} else {
+		sCtx = context.Background()
+	}
+	s.logger.Info(sCtx, "开始启动 Web 服务器...")
 
 	// 创建默认路由器（如果未提供）
 	if s.router == nil {
 		return fmt.Errorf("router is required")
 	}
 
-	// 注册所有控制器
-	controllers := GetControllers()
-	for _, ctrl := range controllers {
-		ctrl.Routes(s.router)
-		s.logger.Info(context.Background(), "控制器已注册",
-			log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
-		)
-	}
-
-	// 应用中间件
+	// 应用中间件（必须先于控制器注册，路由注册时会快照当前中间件链）
 	for _, mw := range s.middlewares {
 		s.router.Use(mw)
 	}
 
-	s.logger.Debug(context.Background(), "中间件已应用",
+	// 注册所有控制器
+	controllers := GetControllers()
+	for _, ctrl := range controllers {
+		ctrl.Routes(s.router)
+		s.logger.Info(sCtx, "控制器已注册",
+			log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
+		)
+	}
+
+	s.logger.Debug(sCtx, "中间件已应用",
 		log.KeyValue{Key: "count", Value: len(s.middlewares)},
 	)
-
-	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点
-	if ctx != nil && ctx.Container() != nil {
-		if endpointRegistry, err := s.createEndpointRegistry(); err == nil && endpointRegistry != nil {
-			if err := ctx.Container().RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-				s.logger.Warn(context.Background(), "注册 HttpEndpointRegistry 失败,Actuator 端点将无法自动挂载",
-					log.KeyValue{Key: "error", Value: err.Error()},
-				)
-			}
-		}
-	}
 
 	// 创建默认服务器（如果未提供）
 	if s.server == nil {
 		return fmt.Errorf("server is required")
 	}
 
+	// 如果服务器支持 SetContext，传递应用上下文用于日志记录
+	type contextSetter interface {
+		SetContext(ctx context.Context)
+	}
+	if cs, ok := s.server.(contextSetter); ok {
+		cs.SetContext(sCtx)
+	}
+
 	// 设置处理器
 	if s.handler != nil {
-		// 使用自定义处理器（如安全过滤器链）
 		s.server.SetHandler(s.handler)
-		s.logger.Debug(context.Background(), "使用自定义处理器")
+		s.logger.Debug(sCtx, "使用自定义处理器")
 	} else {
-		// 使用默认路由器
 		s.server.SetHandler(s.router)
-		s.logger.Debug(context.Background(), "使用默认路由器")
+		s.logger.Debug(sCtx, "使用默认路由器")
 	}
 
 	// 启动服务器
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
-	s.logger.Info(context.Background(), "Web 服务器启动中",
+	s.logger.Info(sCtx, "Web 服务器启动中",
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
 	// 在后台启动服务器
 	go func() {
 		if err := s.server.Start(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error(context.Background(), "Web 服务器运行错误",
+			s.logger.Error(sCtx, "Web 服务器运行错误",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -287,67 +302,25 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 	return nil
 }
 
-// createEndpointRegistry 创建 HttpEndpointRegistry 实例
-func (s *WebStarter) createEndpointRegistry() (actuator.HttpEndpointRegistry, error) {
-	// 如果 router 实现了 http.Handler,创建一个基于 Handler 的注册表
-	if handler, ok := s.router.(http.Handler); ok {
-		return &handlerBasedEndpointRegistry{
-			handler: handler,
-			mux:     http.NewServeMux(),
-		}, nil
-	}
-
-	return nil, fmt.Errorf("router does not implement http.Handler")
-}
-
-// handlerBasedEndpointRegistry 基于 http.Handler 的端点注册表
-type handlerBasedEndpointRegistry struct {
-	handler   http.Handler
-	mux       *http.ServeMux
-	endpoints map[string]bool
-}
-
-func (r *handlerBasedEndpointRegistry) RegisterEndpoint(method, path string, handler http.Handler) {
-	if r.mux == nil || handler == nil {
-		return
-	}
-
-	pattern := path
-	if method != "" {
-		pattern = method + " " + path
-	}
-	r.mux.Handle(pattern, handler)
-
-	if r.endpoints == nil {
-		r.endpoints = make(map[string]bool)
-	}
-	r.endpoints[path] = true
-}
-
-func (r *handlerBasedEndpointRegistry) RegisterEndpoints(endpoints []actuator.EndpointConfig) {
-	for _, ep := range endpoints {
-		r.RegisterEndpoint(ep.Method, ep.Path, ep.Handler)
-	}
-}
-
-func (r *handlerBasedEndpointRegistry) HasEndpoint(path string) bool {
-	_, exists := r.endpoints[path]
-	return exists
-}
-
 // Stop 停止阶段调用
 func (s *WebStarter) Stop(ctx boot.ApplicationContext) error {
-	s.logger.Info(context.Background(), "开始停止 Web 服务器...")
+	var sCtx context.Context
+	if ctx != nil {
+		sCtx = ctx.Context()
+	} else {
+		sCtx = context.Background()
+	}
+	s.logger.Info(sCtx, "开始停止 Web 服务器...")
 	if s.server != nil {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(sCtx, 10*time.Second)
 		defer cancel()
 		if err := s.server.Stop(timeoutCtx); err != nil {
-			s.logger.Error(context.Background(), "Web 服务器停止失败",
+			s.logger.Error(sCtx, "Web 服务器停止失败",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 			return err
 		}
-		s.logger.Info(context.Background(), "Web 服务器已停止")
+		s.logger.Info(sCtx, "Web 服务器已停止")
 	}
 	return nil
 }

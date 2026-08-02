@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+// GenerateOptions provides options for code generation
+type GenerateOptions struct {
+	Types      []string // only generate for these types (empty = all)
+	Interfaces []string // only generate for these interfaces (empty = all)
+	Output     string   // output file path (empty = default "<name>_proxy.go")
+	DryRun     bool     // parse and report only, do not write any files
+}
+
 // Generator AOP 代理代码生成器
 //
 // 解析 Go 源码中的注解，匹配切面与代理目标，
@@ -16,6 +24,8 @@ type Generator struct {
 	parser   *Parser         // 源码解析器
 	engine   *TemplateEngine // 模板引擎
 	registry *Registry       // 代理注册表
+	output   string          // 本次生成使用的输出文件路径（空 = 默认 <name>_proxy.go）
+	dryRun   bool            // 仅解析与报告，不写入文件
 }
 
 // NewGenerator 创建代理代码生成器
@@ -37,7 +47,11 @@ func NewGenerator() (*Generator, error) {
 // 参数：
 //   - dir: 需要扫描的源码目录
 //   - mode: 生成模式（"simple" 简单代理, "aop" 运行时 AOP, "static" 静态 AOP 零反射）
-func (g *Generator) Generate(dir string, mode string) error {
+//   - opts: 可选的生成选项（支持按类型/接口名过滤）
+func (g *Generator) Generate(dir string, mode string, opts ...GenerateOptions) error {
+	g.output = ""
+	g.dryRun = false
+
 	if err := g.parser.ParseDir(dir); err != nil {
 		return fmt.Errorf("failed to parse directory: %w", err)
 	}
@@ -46,6 +60,37 @@ func (g *Generator) Generate(dir string, mode string) error {
 	proxies := g.parser.GetProxies()
 	interfaces := g.parser.GetInterfaces()
 	funcs := g.parser.GetFuncs()
+
+	if len(opts) > 0 {
+		g.output = opts[0].Output
+		g.dryRun = opts[0].DryRun
+		if len(opts[0].Types) > 0 {
+			filterSet := make(map[string]bool, len(opts[0].Types))
+			for _, t := range opts[0].Types {
+				filterSet[t] = true
+			}
+			var filtered []ProxyInfo
+			for _, p := range proxies {
+				if filterSet[p.Name] {
+					filtered = append(filtered, p)
+				}
+			}
+			proxies = filtered
+		}
+		if len(opts[0].Interfaces) > 0 {
+			filterSet := make(map[string]bool, len(opts[0].Interfaces))
+			for _, name := range opts[0].Interfaces {
+				filterSet[name] = true
+			}
+			var filtered []InterfaceInfo
+			for _, intf := range interfaces {
+				if filterSet[intf.Name] {
+					filtered = append(filtered, intf)
+				}
+			}
+			interfaces = filtered
+		}
+	}
 
 	if len(proxies) == 0 && len(interfaces) == 0 {
 		return nil
@@ -78,8 +123,10 @@ func (g *Generator) generateProxy(proxy ProxyInfo, aspects []AspectInfo, funcs [
 	}
 
 	outputPath := g.getOutputPath(proxy.FilePath)
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
-		return err
+	if !g.dryRun {
+		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+			return err
+		}
 	}
 
 	g.registry.Register(proxy.BeanID, outputPath)
@@ -99,8 +146,10 @@ func (g *Generator) generateInterfaceProxy(intf InterfaceInfo, aspects []AspectI
 	}
 
 	outputPath := g.getOutputPath(intf.FilePath)
-	if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
-		return err
+	if !g.dryRun {
+		if err := os.WriteFile(outputPath, []byte(output), 0644); err != nil {
+			return err
+		}
 	}
 
 	g.registry.Register(intf.BeanID, outputPath)
@@ -118,7 +167,7 @@ func (g *Generator) matchAspectsForInterface(intf InterfaceInfo, aspects []Aspec
 				if g.isMatchForInterface(target, intf) {
 					matched = append(matched, AspectTemplateData{
 						MethodName:       g.extractMethodName(target),
-						AdviceType:       toTitleCase(string(advice.Type)),
+						AdviceType:       adviceConstructorName(string(advice.Type)),
 						AdviceFunc:       g.buildAdviceFuncName(aspect.Name, advice.Method, advice.IsFunc),
 						Order:            aspect.Order,
 						AspectName:       aspect.Name,
@@ -134,7 +183,7 @@ func (g *Generator) matchAspectsForInterface(intf InterfaceInfo, aspects []Aspec
 			if g.isMatchForInterface(target, intf) {
 				matched = append(matched, AspectTemplateData{
 					MethodName: g.extractMethodName(target),
-					AdviceType: toTitleCase(string(advice.Type)),
+					AdviceType: adviceConstructorName(string(advice.Type)),
 					AdviceFunc: advice.FuncName,
 					Order:      0,
 				})
@@ -171,7 +220,7 @@ func (g *Generator) matchAspects(proxy ProxyInfo, aspects []AspectInfo, funcs []
 				if g.isMatch(target, proxy) {
 					matched = append(matched, AspectTemplateData{
 						MethodName:       g.extractMethodName(target),
-						AdviceType:       toTitleCase(string(advice.Type)),
+						AdviceType:       adviceConstructorName(string(advice.Type)),
 						AdviceFunc:       g.buildAdviceFuncName(aspect.Name, advice.Method, advice.IsFunc),
 						Order:            aspect.Order,
 						AspectName:       aspect.Name,
@@ -187,7 +236,7 @@ func (g *Generator) matchAspects(proxy ProxyInfo, aspects []AspectInfo, funcs []
 			if g.isMatch(target, proxy) {
 				matched = append(matched, AspectTemplateData{
 					MethodName: g.extractMethodName(target),
-					AdviceType: toTitleCase(string(advice.Type)),
+					AdviceType: adviceConstructorName(string(advice.Type)),
 					AdviceFunc: advice.FuncName,
 					Order:      0,
 				})
@@ -228,6 +277,9 @@ func (g *Generator) buildAdviceFuncName(aspectName, methodName string, isFunc bo
 	if isFunc {
 		return methodName
 	}
+	if aspectName == "" {
+		return methodName
+	}
 	return strings.ToLower(aspectName[:1]) + aspectName[1:] + methodName
 }
 
@@ -238,19 +290,17 @@ func (g *Generator) buildProxyTemplateData(proxy ProxyInfo, aspects []AspectTemp
 	switch mode {
 	case "static":
 		imports = []string{
+			"github.com/xudefa/enhance/aop",
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	case "aop":
 		imports = []string{
 			"github.com/xudefa/enhance/aop",
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	default:
 		imports = []string{
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	}
 
@@ -267,14 +317,14 @@ func (g *Generator) buildProxyTemplateData(proxy ProxyInfo, aspects []AspectTemp
 	}
 
 	return ProxyTemplateData{
-		Package:      proxy.Package,
-		ProxyName:    proxy.Name + "Proxy",
-		TargetName:   proxy.Target,
-		BeanID:       proxy.BeanID,
-		Imports:      imports,
-		Aspects:      aspects,
-		Methods:      methods,
-		Dependencies: []string{},
+		Package:     proxy.Package,
+		ProxyName:   proxy.Name + "Proxy",
+		TargetName:  proxy.Target,
+		BeanID:      proxy.BeanID,
+		Imports:     imports,
+		Aspects:     aspects,
+		Methods:     methods,
+		IsInterface: false,
 	}
 }
 
@@ -285,19 +335,17 @@ func (g *Generator) buildInterfaceProxyTemplateData(intf InterfaceInfo, aspects 
 	switch mode {
 	case "static":
 		imports = []string{
+			"github.com/xudefa/enhance/aop",
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	case "aop":
 		imports = []string{
 			"github.com/xudefa/enhance/aop",
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	default:
 		imports = []string{
 			"github.com/xudefa/enhance/core",
-			"reflect",
 		}
 	}
 
@@ -314,19 +362,22 @@ func (g *Generator) buildInterfaceProxyTemplateData(intf InterfaceInfo, aspects 
 	}
 
 	return ProxyTemplateData{
-		Package:      intf.Package,
-		ProxyName:    intf.Name + "Proxy",
-		TargetName:   intf.Name,
-		BeanID:       intf.BeanID,
-		Imports:      imports,
-		Aspects:      aspects,
-		Methods:      methods,
-		Dependencies: []string{},
+		Package:     intf.Package,
+		ProxyName:   intf.Name + "Proxy",
+		TargetName:  intf.Name,
+		BeanID:      intf.BeanID,
+		Imports:     imports,
+		Aspects:     aspects,
+		Methods:     methods,
+		IsInterface: true,
 	}
 }
 
 // getOutputPath 获取代理文件输出路径
 func (g *Generator) getOutputPath(sourcePath string) string {
+	if g.output != "" {
+		return g.output
+	}
 	dir := filepath.Dir(sourcePath)
 	base := filepath.Base(sourcePath)
 	ext := filepath.Ext(base)
@@ -361,4 +412,19 @@ func toTitleCase(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// adviceConstructorName 将通知类型映射为 aop 包中公开的构造器函数名。
+//
+// 通知类型字符串形如 "after_returning"，而公开构造器为 aop.AfterReturning，
+// 直接首字母大写会得到不存在的 After_returning，导致生成的代码无法编译。
+func adviceConstructorName(adviceType string) string {
+	switch adviceType {
+	case string(AdviceAfterReturning):
+		return "AfterReturning"
+	case string(AdviceAfterThrowing):
+		return "AfterThrowing"
+	default:
+		return toTitleCase(adviceType)
+	}
 }

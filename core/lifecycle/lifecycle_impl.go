@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"sync"
 )
 
@@ -44,15 +45,11 @@ func (m *defaultLifecycleManager) NotifyPhaseChange(beanName string, bean any, p
 
 // InvokeInit 调用 Bean 的初始化回调。
 func (m *defaultLifecycleManager) InvokeInit(beanName string, bean any, initFunc func(any) error) error {
-	// 调用函数式回调
 	if initFunc != nil {
 		if err := initFunc(bean); err != nil {
 			return err
 		}
-	}
-
-	// 调用 LifecycleBean 接口
-	if lifecycleBean, ok := bean.(LifecycleBean); ok {
+	} else if lifecycleBean, ok := bean.(LifecycleBean); ok {
 		if err := lifecycleBean.Init(); err != nil {
 			return err
 		}
@@ -63,15 +60,16 @@ func (m *defaultLifecycleManager) InvokeInit(beanName string, bean any, initFunc
 }
 
 // InvokeDestroy 调用 Bean 的销毁回调。
+//
+// 设计说明：InvokeDestroy 与 InvokeInit 不同，销毁回调是累积的，
+// 允许同时调用函数式回调和 LifecycleBean 接口方法。
 func (m *defaultLifecycleManager) InvokeDestroy(beanName string, bean any, destroyFunc func(any) error) error {
-	// 调用函数式回调
 	if destroyFunc != nil {
 		if err := destroyFunc(bean); err != nil {
 			return err
 		}
 	}
 
-	// 调用 LifecycleBean 接口
 	if lifecycleBean, ok := bean.(LifecycleBean); ok {
 		if err := lifecycleBean.Destroy(); err != nil {
 			return err
@@ -90,16 +88,16 @@ func (m *defaultLifecycleManager) DestroyAll() error {
 	m.beanRecords = nil
 	m.mu.Unlock()
 
-	var firstErr error
+	var errs []error
 	// 逆序销毁
 	for i := len(records) - 1; i >= 0; i-- {
 		record := records[i]
-		if err := m.InvokeDestroy(record.name, record.instance, record.destroyFunc); err != nil && firstErr == nil {
-			firstErr = err
+		if err := m.InvokeDestroy(record.name, record.instance, record.destroyFunc); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	return firstErr
+	return errors.Join(errs...)
 }
 
 // RegisterBean 注册 Bean 记录（内部使用）。

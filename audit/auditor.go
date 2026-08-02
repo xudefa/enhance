@@ -2,17 +2,11 @@
 package audit
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 )
-
-func init() {
-	ErrWriterClosed = errors.New("audit writer is closed")
-	ErrChannelFull = errors.New("audit event channel is full")
-}
 
 // auditorImpl Auditor 接口的默认实现。
 type auditorImpl struct {
@@ -21,6 +15,7 @@ type auditorImpl struct {
 	bufferSize int
 	async      bool
 	eventChan  chan Event
+	doneChan   chan struct{}
 	wg         sync.WaitGroup
 	closed     bool
 	idCounter  int64
@@ -43,6 +38,7 @@ func NewAuditor(opts ...AuditorOption) Auditor {
 		writer:     NewConsoleWriter(),
 		bufferSize: 1000,
 		async:      false,
+		doneChan:   make(chan struct{}),
 	}
 
 	for _, opt := range opts {
@@ -86,6 +82,10 @@ func WithAsync() AuditorOption {
 }
 
 func (a *auditorImpl) Log(event Event) {
+	if a.IsClosed() {
+		return
+	}
+
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -102,13 +102,19 @@ func (a *auditorImpl) Log(event Event) {
 		select {
 		case a.eventChan <- event:
 			return
+		case <-a.doneChan:
+			return
 		default:
-			a.writer.Write(event)
+			if err := a.writer.Write(event); err != nil {
+				fmt.Fprintf(os.Stderr, "[audit] failed to write audit event: %v\n", err)
+			}
 		}
 		return
 	}
 
-	a.writer.Write(event)
+	if err := a.writer.Write(event); err != nil {
+		fmt.Fprintf(os.Stderr, "[audit] failed to write audit event: %v\n", err)
+	}
 }
 
 func (a *auditorImpl) Close() error {
@@ -120,8 +126,9 @@ func (a *auditorImpl) Close() error {
 	a.closed = true
 	a.mu.Unlock()
 
+	close(a.doneChan)
+
 	if a.async {
-		close(a.eventChan)
 		a.wg.Wait()
 	}
 
@@ -137,10 +144,41 @@ func (a *auditorImpl) IsClosed() bool {
 // processEvents 处理事件(异步模式)
 func (a *auditorImpl) processEvents() {
 	defer a.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "panic in audit event processor: %v\n", r)
+		}
+	}()
 
-	for event := range a.eventChan {
-		if err := a.writer.Write(event); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to write audit event: %v\n", err)
+	for {
+		select {
+		case event, ok := <-a.eventChan:
+			if !ok {
+				return
+			}
+			if err := a.writer.Write(event); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write audit event: %v\n", err)
+			}
+		case <-a.doneChan:
+			a.drainEvents()
+			return
+		}
+	}
+}
+
+// drainEvents 在关闭时尽可能消费缓冲区中剩余的事件。
+func (a *auditorImpl) drainEvents() {
+	for {
+		select {
+		case event, ok := <-a.eventChan:
+			if !ok {
+				return
+			}
+			if err := a.writer.Write(event); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to write audit event: %v\n", err)
+			}
+		default:
+			return
 		}
 	}
 }

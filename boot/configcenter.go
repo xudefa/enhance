@@ -40,7 +40,7 @@ func (b *Boot) loadConfigCenterConfig() error {
 	}
 
 	cfg := b.buildConfigCenterConfig()
-	ctx, cancel := context.WithTimeout(context.Background(), b.config.ConfigCenterTimeout)
+	ctx, cancel := context.WithTimeout(b.rootCtx, b.config.ConfigCenterTimeout)
 	defer cancel()
 
 	center, err := factory(ctx, cfg)
@@ -48,6 +48,9 @@ func (b *Boot) loadConfigCenterConfig() error {
 		return fmt.Errorf("failed to create config center client: %w", err)
 	}
 	defer func() {
+		if center == nil {
+			return
+		}
 		if closeErr := center.Close(); closeErr != nil {
 			fmt.Fprintf(os.Stderr, "[enhance] failed to close config center: %v\n", closeErr)
 		}
@@ -95,6 +98,8 @@ func (b *Boot) buildConfigCenterConfig() *config.ConfigCenterConfig {
 			}
 		}
 		cfg.Prefix = prefix
+	default:
+		// 未知配置中心类型，仅使用基础配置
 	}
 
 	return cfg

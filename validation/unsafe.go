@@ -1,9 +1,6 @@
 package validation
 
-import (
-	"reflect"
-	"unsafe"
-)
+import "reflect"
 
 // fieldValueInterface 使用 unsafe 直接读取字段值，避免 reflect.Value.Interface() 的内存分配
 //
@@ -96,15 +93,4 @@ func getFieldValueUnsafe(field reflect.Value) any {
 
 	// 复杂类型回退到安全方式
 	return fieldValueInterface(field)
-}
-
-// iface eface 结构体定义（用于 unsafe 操作）
-type iface struct {
-	tab  unsafe.Pointer
-	data unsafe.Pointer
-}
-
-type eface struct {
-	_type unsafe.Pointer
-	data  unsafe.Pointer
 }

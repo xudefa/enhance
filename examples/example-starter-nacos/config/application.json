@@ -1,0 +1,15 @@
+{
+  "nacos": {
+    "enabled": true,
+    "server_addr": "127.0.0.1",
+    "port": 8848,
+    "namespace_id": "public",
+    "app_name": "nacos-example",
+    "username": "nacos",
+    "password": "nacos",
+    "timeout_ms": 10000,
+    "log_dir": "/tmp/nacos/log",
+    "cache_dir": "/tmp/nacos/cache",
+    "log_level": "info"
+  }
+}

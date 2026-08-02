@@ -25,14 +25,14 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
 		t.Fatalf("failed to read pipe: %v", err)
 	}
-	r.Close()
+	_ = r.Close()
 	return buf.String()
 }
 

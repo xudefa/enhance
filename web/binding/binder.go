@@ -4,6 +4,7 @@ package binding
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -55,8 +56,13 @@ func (b *Binder) BindJSON(req *http.Request, target any) error {
 	if reflect.ValueOf(target).Kind() != reflect.Ptr {
 		return ErrNotPointer
 	}
+	defer func() { _ = req.Body.Close() }()
 
-	return json.NewDecoder(req.Body).Decode(target)
+	body, err := io.ReadAll(io.LimitReader(req.Body, 32<<20))
+	if err != nil {
+		return fmt.Errorf("failed to read request body: %w", err)
+	}
+	return json.Unmarshal(body, target)
 }
 
 func (b *Binder) bindForm(values map[string][]string, target any) error {
@@ -87,15 +93,18 @@ func (b *Binder) bindForm(values map[string][]string, target any) error {
 		parts := strings.Split(tag, ",")
 		fieldName := parts[0]
 
-		formValues := values[fieldName]
-		if len(formValues) == 0 {
-			required := false
-			for _, part := range parts[1:] {
-				if part == "required" {
-					required = true
-					break
-				}
+		required := false
+		for _, part := range parts[1:] {
+			if part == "required" {
+				required = true
+				break
 			}
+		}
+
+		formValues := values[fieldName]
+		// 参数缺失；required 字段的显式空值（?name=）也视为缺失
+		missing := len(formValues) == 0 || (required && len(formValues) == 1 && formValues[0] == "")
+		if missing {
 			if required {
 				return &Error{
 					Field:   fieldName,
@@ -105,7 +114,7 @@ func (b *Binder) bindForm(values map[string][]string, target any) error {
 			continue
 		}
 
-		if err := b.setFieldValue(field, formValues[0]); err != nil {
+		if err := b.setFieldValues(field, formValues); err != nil {
 			return &Error{
 				Field:   fieldName,
 				Message: err.Error(),
@@ -116,24 +125,46 @@ func (b *Binder) bindForm(values map[string][]string, target any) error {
 	return nil
 }
 
+// setFieldValues 绑定字段值：切片字段绑定全部值，标量字段使用第一个值。
+func (b *Binder) setFieldValues(field reflect.Value, values []string) error {
+	if field.Kind() != reflect.Slice {
+		return b.setFieldValue(field, values[0])
+	}
+
+	// 支持重复参数（?tags=a&tags=b）以及逗号分隔（tags=a,b）
+	parts := make([]string, 0, len(values))
+	for _, v := range values {
+		parts = append(parts, strings.Split(v, ",")...)
+	}
+
+	slice := reflect.MakeSlice(field.Type(), len(parts), len(parts))
+	for i, part := range parts {
+		if err := b.setFieldValue(slice.Index(i), part); err != nil {
+			return err
+		}
+	}
+	field.Set(slice)
+	return nil
+}
+
 func (b *Binder) setFieldValue(field reflect.Value, value string) error {
 	switch field.Kind() {
 	case reflect.String:
 		field.SetString(value)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(value, 10, 64)
+		v, err := strconv.ParseInt(value, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetInt(v)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(value, 10, 64)
+		v, err := strconv.ParseUint(value, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetUint(v)
 	case reflect.Float32, reflect.Float64:
-		v, err := strconv.ParseFloat(value, 64)
+		v, err := strconv.ParseFloat(value, field.Type().Bits())
 		if err != nil {
 			return err
 		}
@@ -144,10 +175,6 @@ func (b *Binder) setFieldValue(field reflect.Value, value string) error {
 			return err
 		}
 		field.SetBool(v)
-	case reflect.Slice:
-		if field.Type().Elem().Kind() == reflect.String {
-			field.Set(reflect.ValueOf(strings.Split(value, ",")))
-		}
 	case reflect.Ptr:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
@@ -164,6 +191,7 @@ type Error struct {
 	Message string
 }
 
+// Error 返回绑定错误的描述信息。
 func (e *Error) Error() string {
 	if e.Field != "" {
 		return fmt.Sprintf("binding error: field %q: %s", e.Field, e.Message)

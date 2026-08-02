@@ -32,12 +32,14 @@ func NewEventBus() *EventBus {
 //   - 发布操作是无锁的，性能优异
 //   - 监听器数量较多时，考虑使用 AsyncEventBus
 func (b *EventBus) Publish(event ApplicationEvent) {
+	if event == nil {
+		return
+	}
 	value, ok := b.listeners.Load(event.Type())
 	if !ok {
 		return
 	}
-	list := value.(*listenerList)
-	// 避免 range 分配迭代器，使用索引遍历
+	list, _ := value.(*listenerList)
 	for i := range list.listeners {
 		list.listeners[i](event)
 	}
@@ -66,12 +68,15 @@ func (b *EventBus) Publish(event ApplicationEvent) {
 //   - 后续订阅使用 CAS 重试，保证并发安全
 //   - 避免在事件处理函数中调用 Subscribe，可能导致死锁
 func (b *EventBus) Subscribe(eventType string, listener EventListener) {
+	if listener == nil {
+		return
+	}
 	for {
 		value, loaded := b.listeners.LoadOrStore(eventType, &listenerList{listeners: []EventListener{listener}})
 		if !loaded {
 			return
 		}
-		list := value.(*listenerList)
+		list, _ := value.(*listenerList)
 		newList := &listenerList{
 			listeners: make([]EventListener, len(list.listeners)+1),
 		}
@@ -108,7 +113,7 @@ func (b *EventBus) Unsubscribe(eventType string, target EventListener) {
 		if !ok {
 			return
 		}
-		list := value.(*listenerList)
+		list, _ := value.(*listenerList)
 		listeners := list.listeners
 		for i, listener := range listeners {
 			if reflect.ValueOf(listener).Pointer() == targetPtr {
@@ -116,8 +121,12 @@ func (b *EventBus) Unsubscribe(eventType string, target EventListener) {
 				copy(newListeners, listeners[:i])
 				copy(newListeners[i:], listeners[i+1:])
 				if len(newListeners) == 0 {
-					b.listeners.Delete(eventType)
-					return
+					// 使用 CompareAndSwap 替代 Delete，避免与并发 Subscribe 竞态
+					if b.listeners.CompareAndSwap(eventType, list, &listenerList{listeners: newListeners}) {
+						return
+					}
+					// CAS 失败，重试
+					continue
 				}
 				if b.listeners.CompareAndSwap(eventType, list, &listenerList{listeners: newListeners}) {
 					return

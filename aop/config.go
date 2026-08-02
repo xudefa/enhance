@@ -54,18 +54,28 @@ func (m *AopManager) GetAspects() []*AspectMeta {
 	return dst
 }
 
+// GetConfig 返回当前配置的快照副本（线程安全）。
+func (m *AopManager) GetConfig() *AopConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.config == nil {
+		return nil
+	}
+	cfg := *m.config
+	return &cfg
+}
+
 // MatchAspectsForType 匹配指定类型的切面
-func (m *AopManager) MatchAspectsForType(beanType any) []*AspectMeta {
+func (m *AopManager) MatchAspectsForType(beanType reflect.Type) []*AspectMeta {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var matched []*AspectMeta
-	t := reflect.TypeOf(beanType)
-	if t == nil {
+	if beanType == nil {
 		return matched
 	}
 	for _, aspect := range m.aspects {
-		if aspect != nil && aspect.PointCut != nil && aspect.PointCut.MatchClass(t) {
+		if aspect != nil && aspect.PointCut != nil && aspect.PointCut.MatchClass(beanType) {
 			matched = append(matched, aspect)
 		}
 	}

@@ -306,12 +306,9 @@ func TestRegisterWithNilFactoryInDef(t *testing.T) {
 	}
 
 	err := container.RegisterBean(def)
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
+	if err == nil {
+		t.Fatal("Expected RegisterBean to fail with nil factory")
 	}
-
-	// Note: This will panic when trying to create the bean due to nil factory
-	// This is expected behavior - the container doesn't validate factory at registration time
 }
 
 func TestGetByNameWithDestroyedContainer(t *testing.T) {

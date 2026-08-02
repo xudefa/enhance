@@ -360,3 +360,47 @@ func TestBuilderNotWithOr(t *testing.T) {
 		t.Fatal("NOT with OR should match when Not condition is true")
 	}
 }
+
+func TestBuilderNotNegatesNextCondition(t *testing.T) {
+	t.Parallel()
+
+	mkCtx := func(keys ...string) ConditionContext {
+		return &mockConditionContext{
+			envFn: func(k string) (any, bool) {
+				for _, key := range keys {
+					if k == key {
+						return "v", true
+					}
+				}
+				return nil, false
+			},
+		}
+	}
+
+	// A().Not().B() 语义应为 All(A, Not(B))：
+	// - A、B 都存在时 → Not(B) 为 false → 整体 false
+	// - A 存在、B 缺失时 → Not(B) 为 true → 整体 true
+	bothPresent := New().
+		OnProperty("a").
+		Not().
+		OnProperty("b").
+		Build()
+	if bothPresent.Matches(mkCtx("a", "b")) {
+		t.Fatal("expected (a AND NOT b) to be false when a and b both present")
+	}
+	if b := New().OnProperty("a").Not().OnProperty("b").Build(); !b.Matches(mkCtx("a")) {
+		t.Fatal("expected (a AND NOT b) to be true when b is missing")
+	}
+
+	// Not() 紧邻其后条件：Not().A() 语义为 Not(A)
+	b := New().
+		Not().
+		OnProperty("a").
+		Build()
+	if b.Matches(mkCtx("a")) {
+		t.Fatal("expected Not(a) to be false when a present")
+	}
+	if !b.Matches(mkCtx()) {
+		t.Fatal("expected Not(a) to be true when a missing")
+	}
+}

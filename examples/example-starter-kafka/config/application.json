@@ -1,0 +1,8 @@
+{
+  "kafka": {
+    "enabled": true,
+    "brokers": ["localhost:9092"],
+    "topic": "enhance-events",
+    "group_id": "enhance-consumer"
+  }
+}

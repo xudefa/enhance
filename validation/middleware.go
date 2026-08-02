@@ -8,16 +8,17 @@ import (
 	"reflect"
 )
 
+// ToJSON 将错误响应序列化为 JSON 字节。
 func (e *ErrorResponse) ToJSON() ([]byte, error) {
 	return json.Marshal(e)
 }
 
-// DefaultErrorHandler 默认错误处理器
+// DefaultErrorHandler 默认错误处理器。
 //
 // 支持多种上下文类型的错误处理:
 //
 //  1. http.ResponseWriter: 设置 400 状态码并写入 JSON 错误响应
-//  2. ResponseWriterInterface (自定义接口): 统一错误响应
+//  2. ResponseWriter (自定义接口): 统一错误响应
 //  3. 其他类型: 仅记录错误信息，不做响应处理
 func DefaultErrorHandler(c any, err error) {
 	if c == nil || err == nil {
@@ -36,7 +37,7 @@ func DefaultErrorHandler(c any, err error) {
 			_, _ = ctx.Write(data)
 		}
 
-	case ResponseWriterInterface:
+	case ResponseWriter:
 		ctx.SetStatusCode(http.StatusBadRequest)
 		ctx.SetHeader("Content-Type", "application/json")
 		resp := &ErrorResponse{
@@ -80,10 +81,10 @@ func findErrorHandlerMethod(c any) func(any, error) {
 	return nil
 }
 
-// ValidateMiddleware 通用验证中间件函数类型
+// ValidateMiddleware 通用验证中间件函数类型。
 type ValidateMiddleware func(c any, obj any, config *MiddlewareConfig) error
 
-// NewValidateMiddleware 创建新的验证中间件
+// NewValidateMiddleware 创建新的验证中间件。
 func NewValidateMiddleware(config *MiddlewareConfig) ValidateMiddleware {
 	return func(c any, obj any, cfg *MiddlewareConfig) error {
 		if cfg.Validator == nil {

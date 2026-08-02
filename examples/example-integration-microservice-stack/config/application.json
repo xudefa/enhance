@@ -1,0 +1,44 @@
+{
+  "gin": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "mode": "debug"
+  },
+  "zerolog": {
+    "enabled": true,
+    "level": "info",
+    "format": "console"
+  },
+  "redis": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "prefix": "enhance:"
+  },
+  "prometheus": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 9090
+  },
+  "otel": {
+    "enabled": true,
+    "service_name": "microservice-stack",
+    "service_version": "1.0.0",
+    "exporter_type": "console",
+    "sample_rate": 1.0
+  },
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "enabled": true,
+      "secret_key": "microservice-secret-key-change-in-production",
+      "issuer": "microservice-stack",
+      "expires_duration": 3600
+    }
+  },
+  "cron": {
+    "enabled": true
+  }
+}

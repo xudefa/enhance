@@ -3,9 +3,11 @@ package boot
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/xudefa/enhance/boot/banner"
@@ -28,11 +30,16 @@ var _ Application = (*Boot)(nil)
 //   - 事件发布
 //   - 优雅关闭
 type Boot struct {
-	ctx          *contextpkg.DefaultApplicationContext
-	config       *BootConfig
-	configLoader *environment.ConfigLoader
-	starters     []Starter
-	hooks        *lifecycle.HookRegistry
+	ctx             *contextpkg.DefaultApplicationContext
+	config          *BootConfig
+	configLoader    *environment.ConfigLoader
+	starters        []Starter
+	hooks           *lifecycle.HookRegistry
+	rootCtx         context.Context
+	rootCancel      context.CancelFunc
+	started         atomic.Bool
+	stopped         atomic.Bool
+	startersStarted bool
 }
 
 // Context 返回应用上下文（返回接口类型，便于多态使用）。
@@ -42,7 +49,7 @@ type Boot struct {
 //
 //	dc, ok := boot.Context().(*contextpkg.DefaultApplicationContext)
 func (b *Boot) Context() ApplicationContext {
-	return newAppCtx(b.ctx)
+	return newAppCtx(b.ctx, b.rootCtx)
 }
 
 // Config 返回启动配置。
@@ -65,10 +72,29 @@ func (b *Boot) Environment() *environment.Environment {
 // 启动流程简化为 3 阶段：
 //  1. PhaseInit：加载配置、注册 Bean、启动启动器
 //  2. PhaseRunning：应用正常运行
-func (b *Boot) Start() error {
-	if b.ctx.IsRunning() {
+func (b *Boot) Start() (err error) {
+	if b.started.Load() {
 		return nil
 	}
+	b.started.Store(true)
+
+	// 创建应用根 context，在 Stop() 时取消
+	b.rootCtx, b.rootCancel = context.WithCancel(context.Background())
+
+	// 启动失败时重置状态，支持失败后重试 Start；同时取消并清理根 context，避免资源泄漏
+	defer func() {
+		if err != nil {
+			b.started.Store(false)
+			b.startersStarted = false
+			// 重建 Hook 注册表，避免重试时重复注册钩子
+			b.hooks = lifecycle.NewHookRegistry()
+			if b.rootCancel != nil {
+				b.rootCancel()
+				b.rootCancel = nil
+				b.rootCtx = nil
+			}
+		}
+	}()
 
 	// === 阶段 1：初始化阶段 ===
 	if b.configLoader != nil {
@@ -106,7 +132,7 @@ func (b *Boot) Start() error {
 		}
 
 		for _, entry := range entries {
-			if err := entry.Config.Configure(newAppCtx(b.ctx)); err != nil {
+			if err := entry.Config.Configure(newAppCtx(b.ctx, b.rootCtx)); err != nil {
 				return b.reportError("初始化", fmt.Errorf("自动配置 %T 失败: %w", entry.Config, err))
 			}
 		}
@@ -155,7 +181,7 @@ func (b *Boot) Start() error {
 			if !b.starterMatches(s) {
 				continue
 			}
-			if err := s.Configure(newAppCtx(b.ctx)); err != nil {
+			if err := s.Configure(newAppCtx(b.ctx, b.rootCtx)); err != nil {
 				return b.reportError("初始化", fmt.Errorf("启动器 %s 配置失败: %w", s.Name(), err))
 			}
 		}
@@ -165,25 +191,34 @@ func (b *Boot) Start() error {
 
 	// 执行 OnInit 钩子（Bean 注册完成后）
 	if b.hooks.Count() > 0 {
-		if err := b.hooks.InitAll(context.Background()); err != nil {
+		if err := b.hooks.InitAll(b.rootCtx); err != nil {
 			return b.reportError("initializing", err)
 		}
 	}
 
 	if b.config.Starters {
+		started := make([]Starter, 0, len(b.starters))
 		for _, s := range b.starters {
 			if !b.starterMatches(s) {
 				continue
 			}
-			if err := s.Start(newAppCtx(b.ctx)); err != nil {
+			if err := s.Start(newAppCtx(b.ctx, b.rootCtx)); err != nil {
+				// 逆序停止已启动的 Starter，避免部分启动失败导致资源泄漏
+				for i := len(started) - 1; i >= 0; i-- {
+					if stopErr := started[i].Stop(newAppCtx(b.ctx, b.rootCtx)); stopErr != nil {
+						fmt.Fprintf(os.Stderr, "starter %s stop error: %v\n", started[i].Name(), stopErr)
+					}
+				}
 				return b.reportError("初始化", fmt.Errorf("启动器 %s 启动失败: %w", s.Name(), err))
 			}
+			started = append(started, s)
 		}
+		b.startersStarted = true
 	}
 
 	// 执行 OnStart 钩子（应用启动前）
 	if b.hooks.Count() > 0 {
-		if err := b.hooks.StartAll(context.Background()); err != nil {
+		if err := b.hooks.StartAll(b.rootCtx); err != nil {
 			return b.reportError("initializing", err)
 		}
 	}
@@ -193,7 +228,9 @@ func (b *Boot) Start() error {
 		banner.WithAppName(b.config.AppName),
 		banner.WithProfiles(b.ctx.Environment().GetActiveProfiles()),
 	)
-	banners.Print(b.config.Version)
+	if err := banners.Print(b.config.Version); err != nil {
+		slog.Debug("failed to print banner", "error", err)
+	}
 
 	// === 阶段 2：运行阶段 ===
 	if err := b.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
@@ -212,24 +249,23 @@ func (b *Boot) Start() error {
 //  1. 逆序停止启动器
 //  2. 执行 OnStop 钩子
 //  3. 发布停止事件
+//  4. 取消应用根 context
 //
 // 注意：允许从任何阶段调用 Stop，以支持 Start() 部分失败时的资源清理。
 func (b *Boot) Stop() error {
-	phase := b.ctx.Lifecycle().GetPhase()
-
-	// 已停止，无需清理
-	if phase == lifecycle.PhaseStopped {
+	if b.stopped.Swap(true) {
 		return nil
 	}
 
 	// 逆序停止启动器（仅当启动器已启动后才执行停止）
-	if b.config.Starters && phase == lifecycle.PhaseRunning {
+	phase := b.ctx.Lifecycle().GetPhase()
+	if b.config.Starters && (b.startersStarted || phase == lifecycle.PhaseRunning) {
 		for i := len(b.starters) - 1; i >= 0; i-- {
 			s := b.starters[i]
 			if !b.starterMatches(s) {
 				continue
 			}
-			if err := s.Stop(newAppCtx(b.ctx)); err != nil {
+			if err := s.Stop(newAppCtx(b.ctx, b.rootCtx)); err != nil {
 				fmt.Fprintf(os.Stderr, "starter %s stop error: %v\n", s.Name(), err)
 			}
 		}
@@ -237,7 +273,7 @@ func (b *Boot) Stop() error {
 
 	// 执行 OnStop 钩子（逆序释放资源）
 	if b.hooks.Count() > 0 {
-		if err := b.hooks.StopAll(context.Background()); err != nil {
+		if err := b.hooks.StopAll(b.rootCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "hook stop error: %v\n", err)
 		}
 	}
@@ -248,6 +284,12 @@ func (b *Boot) Stop() error {
 	}
 
 	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationStopped})
+
+	// 取消应用根 context，通知所有持有者应用已停止
+	if b.rootCancel != nil {
+		b.rootCancel()
+	}
+
 	return nil
 }
 

@@ -62,30 +62,47 @@ func NewShardedLRUCache(capacity int, shardCount int, opts ...LRUOption) *Sharde
 func (c *ShardedLRUCache) getShardIndex(key string) int {
 	h := fnv.New32a()
 	h.Write([]byte(key))
-	return int(h.Sum32()) % c.shardCount
+	return int(h.Sum32() % uint32(c.shardCount))
+}
+
+// fireEvicted 在锁外调用淘汰回调。
+func (c *ShardedLRUCache) fireEvicted(evicted []evictedEntry) {
+	if c.onEvict == nil {
+		return
+	}
+	for _, e := range evicted {
+		c.onEvict(e.key, e.value)
+	}
 }
 
 // Get 获取缓存值
 func (c *ShardedLRUCache) Get(ctx context.Context, key string) (any, error) {
 	shard := c.shards[c.getShardIndex(key)]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
 	elem, ok := shard.items[key]
 	if !ok {
+		shard.mu.Unlock()
 		return nil, ErrNotFound
 	}
 
-	entry := elem.Value.(*lruEntry)
+	entry, ok := elem.Value.(*lruEntry)
+	if !ok {
+		shard.mu.Unlock()
+		return nil, ErrNotFound
+	}
 
 	// 检查是否过期
 	if !entry.expiresAt.IsZero() && time.Now().After(entry.expiresAt) {
-		c.shardRemoveElement(shard, elem)
+		evicted := c.shardRemoveElement(shard, elem)
+		shard.mu.Unlock()
+		c.fireEvicted(evicted)
 		return nil, ErrNotFound
 	}
 
 	// 移到最前
 	shard.evictList.MoveToFront(elem)
+	shard.mu.Unlock()
 	return entry.value, nil
 }
 
@@ -93,24 +110,30 @@ func (c *ShardedLRUCache) Get(ctx context.Context, key string) (any, error) {
 func (c *ShardedLRUCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	shard := c.shards[c.getShardIndex(key)]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
 	// 如果已存在，更新值
 	if elem, ok := shard.items[key]; ok {
 		shard.evictList.MoveToFront(elem)
-		entry := elem.Value.(*lruEntry)
+		entry, ok := elem.Value.(*lruEntry)
+		if !ok {
+			shard.mu.Unlock()
+			return nil
+		}
 		entry.value = value
 		if ttl <= 0 {
 			entry.expiresAt = time.Time{}
+			shard.mu.Unlock()
 			return nil
 		}
 		entry.expiresAt = time.Now().Add(ttl)
+		shard.mu.Unlock()
 		return nil
 	}
 
 	// 如果超出容量，淘汰最久未使用的项
+	var evicted []evictedEntry
 	for shard.evictList.Len() >= shard.capacity {
-		c.shardEvictOldest(shard)
+		evicted = append(evicted, c.shardEvictOldest(shard)...)
 	}
 
 	// 添加新项
@@ -124,6 +147,10 @@ func (c *ShardedLRUCache) Set(ctx context.Context, key string, value any, ttl ti
 	elem := shard.evictList.PushFront(entry)
 	shard.items[key] = elem
 
+	shard.mu.Unlock()
+
+	c.fireEvicted(evicted)
+
 	return nil
 }
 
@@ -136,16 +163,19 @@ func (c *ShardedLRUCache) Del(ctx context.Context, keys ...string) error {
 		shardKeys[idx] = append(shardKeys[idx], key)
 	}
 
+	var evicted []evictedEntry
 	for idx, keys := range shardKeys {
 		shard := c.shards[idx]
 		shard.mu.Lock()
 		for _, key := range keys {
 			if elem, ok := shard.items[key]; ok {
-				c.shardRemoveElement(shard, elem)
+				evicted = append(evicted, c.shardRemoveElement(shard, elem)...)
 			}
 		}
 		shard.mu.Unlock()
 	}
+
+	c.fireEvicted(evicted)
 	return nil
 }
 
@@ -153,19 +183,26 @@ func (c *ShardedLRUCache) Del(ctx context.Context, keys ...string) error {
 func (c *ShardedLRUCache) Exists(ctx context.Context, key string) (bool, error) {
 	shard := c.shards[c.getShardIndex(key)]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
 	elem, ok := shard.items[key]
 	if !ok {
+		shard.mu.Unlock()
 		return false, nil
 	}
 
-	entry := elem.Value.(*lruEntry)
+	entry, ok := elem.Value.(*lruEntry)
+	if !ok {
+		shard.mu.Unlock()
+		return false, nil
+	}
 	if !entry.expiresAt.IsZero() && time.Now().After(entry.expiresAt) {
-		c.shardRemoveElement(shard, elem)
+		evicted := c.shardRemoveElement(shard, elem)
+		shard.mu.Unlock()
+		c.fireEvicted(evicted)
 		return false, nil
 	}
 
+	shard.mu.Unlock()
 	return true, nil
 }
 
@@ -173,26 +210,34 @@ func (c *ShardedLRUCache) Exists(ctx context.Context, key string) (bool, error) 
 func (c *ShardedLRUCache) TTL(ctx context.Context, key string) (time.Duration, error) {
 	shard := c.shards[c.getShardIndex(key)]
 	shard.mu.Lock()
-	defer shard.mu.Unlock()
 
 	elem, ok := shard.items[key]
 	if !ok {
+		shard.mu.Unlock()
 		return 0, ErrNotFound
 	}
 
-	entry := elem.Value.(*lruEntry)
+	entry, ok := elem.Value.(*lruEntry)
+	if !ok {
+		shard.mu.Unlock()
+		return 0, ErrNotFound
+	}
 
 	// 如果没有设置 TTL，返回 -1 表示永不过期
 	if entry.expiresAt.IsZero() {
+		shard.mu.Unlock()
 		return -1, nil
 	}
 
 	remaining := time.Until(entry.expiresAt)
 	if remaining <= 0 {
-		c.shardRemoveElement(shard, elem)
+		evicted := c.shardRemoveElement(shard, elem)
+		shard.mu.Unlock()
+		c.fireEvicted(evicted)
 		return 0, ErrNotFound
 	}
 
+	shard.mu.Unlock()
 	return remaining, nil
 }
 
@@ -224,29 +269,27 @@ func (c *ShardedLRUCache) Clear() {
 }
 
 // shardEvictOldest 淘汰分片中最久未使用的项
-func (c *ShardedLRUCache) shardEvictOldest(shard *lruShard) {
+func (c *ShardedLRUCache) shardEvictOldest(shard *lruShard) []evictedEntry {
 	elem := shard.evictList.Back()
 	if elem != nil {
-		c.shardRemoveElement(shard, elem)
+		return c.shardRemoveElement(shard, elem)
 	}
+	return nil
 }
 
 // shardRemoveElement 移除分片中的元素
-func (c *ShardedLRUCache) shardRemoveElement(shard *lruShard, elem *list.Element) {
+func (c *ShardedLRUCache) shardRemoveElement(shard *lruShard, elem *list.Element) []evictedEntry {
 	if elem == nil || shard == nil {
-		return
+		return nil
 	}
 
 	shard.evictList.Remove(elem)
 
 	entry, ok := elem.Value.(*lruEntry)
 	if !ok || entry == nil {
-		return
+		return nil
 	}
 
 	delete(shard.items, entry.key)
-
-	if c.onEvict != nil {
-		c.onEvict(entry.key, entry.value)
-	}
+	return []evictedEntry{{key: entry.key, value: entry.value}}
 }

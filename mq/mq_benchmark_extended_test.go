@@ -31,7 +31,7 @@ func BenchmarkMessageQueueFactory_DeleteQueue(b *testing.B) {
 		for j := 0; j < 10; j++ {
 			factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", j))
 		}
-		factory.DeleteQueue("queue-5")
+		_ = factory.DeleteQueue("queue-5")
 	}
 }
 

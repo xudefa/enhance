@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -149,7 +150,7 @@ func BenchmarkDeadLetterQueue_ConcurrentReadWrite(b *testing.B) {
 }
 
 func BenchmarkEventBusWithDeadLetter_Publish(b *testing.B) {
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(0),
 	)
 	bus.Subscribe("bench.event", func(e ApplicationEvent) {})
@@ -160,7 +161,7 @@ func BenchmarkEventBusWithDeadLetter_Publish(b *testing.B) {
 }
 
 func BenchmarkEventBusWithDeadLetter_ConcurrentPublish(b *testing.B) {
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(0),
 	)
 	bus.Subscribe("bench.event", func(e ApplicationEvent) {})
@@ -172,7 +173,7 @@ func BenchmarkEventBusWithDeadLetter_ConcurrentPublish(b *testing.B) {
 }
 
 func BenchmarkEventBusWithDeadLetter_ConcurrentPublishMultipleListeners(b *testing.B) {
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(0),
 	)
 	for i := 0; i < 10; i++ {

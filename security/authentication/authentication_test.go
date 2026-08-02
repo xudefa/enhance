@@ -195,7 +195,7 @@ func TestAnonymousAuthenticationProvider(t *testing.T) {
 
 	provider := NewAnonymousAuthenticationProvider()
 
-	token := NewUsernamePasswordToken("user", "pass")
+	token := NewUsernamePasswordToken("user", nil)
 	result, err := provider.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -209,6 +209,21 @@ func TestAnonymousAuthenticationProvider(t *testing.T) {
 	}
 	if len(result.Authorities()) != 1 || result.Authorities()[0] != "ROLE_ANONYMOUS" {
 		t.Errorf("expected authorities [ROLE_ANONYMOUS], got %v", result.Authorities())
+	}
+}
+
+func TestAnonymousAuthenticationProviderSkipsLoginAttempt(t *testing.T) {
+	t.Parallel()
+
+	provider := NewAnonymousAuthenticationProvider()
+
+	token := NewUsernamePasswordToken("user", "pass")
+	result, err := provider.Authenticate(context.Background(), token)
+	if result != nil {
+		t.Error("expected nil result for login attempt with credentials")
+	}
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

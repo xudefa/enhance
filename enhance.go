@@ -46,9 +46,7 @@ var Enhance = &EnhanceApp{}
 // EnhanceApp 应用启动器
 //
 // 封装 boot.Boot 的所有功能，提供更简洁的 API。
-type EnhanceApp struct {
-	bootApp *boot.Boot
-}
+type EnhanceApp struct{}
 
 // Run 启动应用并等待信号（一行启动）
 //

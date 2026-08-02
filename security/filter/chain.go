@@ -22,9 +22,8 @@ func NewDefaultFilterChainWithFilters(filters ...Filter) FilterChain {
 	c := &defaultFilterChain{
 		filters: make([]Filter, 0, len(filters)),
 	}
-	for _, f := range filters {
-		c.filters = append(c.filters, f)
-	}
+	c.filters = append(c.filters, filters...)
+	c.SortFilters()
 	return c
 }
 
@@ -55,12 +54,14 @@ func (c *defaultFilterChain) AddFilter(filter Filter) {
 
 // GetFilters 获取所有过滤器。
 func (c *defaultFilterChain) GetFilters() []Filter {
-	return c.filters
+	result := make([]Filter, len(c.filters))
+	copy(result, c.filters)
+	return result
 }
 
 // SortFilters 按 Order 排序过滤器。
 func (c *defaultFilterChain) SortFilters() {
-	sort.Slice(c.filters, func(i, j int) bool {
+	sort.SliceStable(c.filters, func(i, j int) bool {
 		return c.filters[i].Order() < c.filters[j].Order()
 	})
 }

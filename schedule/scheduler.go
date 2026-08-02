@@ -68,7 +68,7 @@ func (h taskHeap) Swap(i, j int) {
 
 func (h *taskHeap) Push(x any) {
 	n := len(*h)
-	item := x.(*scheduledTask)
+	item, _ := x.(*scheduledTask)
 	item.index = n
 	*h = append(*h, item)
 }
@@ -98,10 +98,15 @@ type DefaultScheduler struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	done         chan struct{}
+	wg           sync.WaitGroup
 }
 
 // NewScheduler 创建调度器实例。
-func NewScheduler(opts ...SchedulerOption) *DefaultScheduler {
+//
+// 参数:
+//   - ctx: 父级 context，用于控制调度器生命周期
+//   - opts: 配置选项
+func NewScheduler(ctx context.Context, opts ...SchedulerOption) *DefaultScheduler {
 	cfg := &schedulerConfig{
 		poolSize: DefaultSchedulePoolSize,
 		logger:   log.NewLoggerBuilder().Build(),
@@ -111,7 +116,7 @@ func NewScheduler(opts ...SchedulerOption) *DefaultScheduler {
 		opt(cfg)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	s := &DefaultScheduler{
 		tasks:        make(map[string]*scheduledTask),
@@ -139,9 +144,10 @@ func (s *DefaultScheduler) Start(ctx context.Context) error {
 	s.running = true
 	s.mu.Unlock()
 
-	s.logger.Info(context.Background(), "scheduler started",
+	s.logger.Info(s.ctx, "scheduler started",
 		log.KeyValue{Key: "pool_size", Value: s.poolSize})
 
+	s.done = make(chan struct{})
 	go s.run()
 
 	return nil
@@ -154,7 +160,7 @@ func (s *DefaultScheduler) run() {
 	for {
 		select {
 		case <-s.ctx.Done():
-			s.logger.Info(context.Background(), "scheduler stopping")
+			s.logger.Info(s.ctx, "scheduler stopping")
 			return
 		default:
 			s.mu.Lock()
@@ -171,12 +177,15 @@ func (s *DefaultScheduler) run() {
 				waitTime := next.nextRun.Sub(now)
 				s.mu.Unlock()
 
+				timer := time.NewTimer(waitTime)
 				select {
-				case <-time.After(waitTime):
+				case <-timer.C:
 					// 等待完成，继续执行
 				case <-s.ctx.Done():
+					timer.Stop()
 					return
 				}
+				timer.Stop()
 			} else {
 				heap.Pop(&s.heap)
 				s.mu.Unlock()
@@ -213,8 +222,18 @@ func (s *DefaultScheduler) run() {
 func (s *DefaultScheduler) executeTask(st *scheduledTask) {
 	select {
 	case s.semaphore <- struct{}{}:
+		s.wg.Add(1)
 		go func() {
+			defer s.wg.Done()
 			defer func() { <-s.semaphore }()
+			defer func() {
+				if r := recover(); r != nil {
+					s.logger.Error(s.ctx, "task panic recovered",
+						log.KeyValue{Key: "task", Value: st.task.Name()},
+						log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+					)
+				}
+			}()
 
 			s.logger.Debug(s.ctx, "executing task",
 				log.KeyValue{Key: "task", Value: st.task.Name()})
@@ -279,13 +298,45 @@ func (s *DefaultScheduler) Shutdown(ctx context.Context) error {
 
 	s.cancel()
 
+	// 等待 run() 主循环退出
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-s.done:
+	}
+
+	// 等待所有正在执行的任务 goroutine 完成
+	taskDone := make(chan struct{}, 1)
+	go func() {
+		s.wg.Wait()
+		close(taskDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-taskDone:
 		s.logger.Info(s.ctx, "scheduler stopped")
 		return nil
 	}
+}
+
+// Close 关闭调度器，释放资源。
+//
+// 此方法确保调度器的 context 被正确取消，防止 goroutine 泄漏。
+// 如果调度器未启动或已关闭，调用此方法不会产生任何副作用。
+func (s *DefaultScheduler) Close() {
+	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = false
+	s.mu.Unlock()
+
+	s.cancel()
+	<-s.done
+	s.wg.Wait()
 }
 
 // Register 注册定时任务，任务名唯一，重复返回 error。
@@ -325,7 +376,9 @@ func (s *DefaultScheduler) Unregister(name string) bool {
 		return false
 	}
 
-	heap.Remove(&s.heap, st.index)
+	if st.index >= 0 {
+		heap.Remove(&s.heap, st.index)
+	}
 	delete(s.tasks, name)
 
 	s.logger.Info(s.ctx, "task unregistered",

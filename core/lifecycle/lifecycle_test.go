@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -44,8 +45,8 @@ func TestInvokeInitWithFunc(t *testing.T) {
 		t.Error("Expected init callback to be called")
 	}
 
-	if !bean.InitCalled {
-		t.Error("Expected LifecycleBean.Init() to be called")
+	if bean.InitCalled {
+		t.Error("Expected LifecycleBean.Init() NOT to be called when initFunc is provided")
 	}
 }
 
@@ -236,7 +237,7 @@ func TestDestroyAllWithError(t *testing.T) {
 		t.Fatal("Expected DestroyAll to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected destroy error, got: %v", err)
 	}
 
@@ -305,7 +306,7 @@ func TestLifecycleListener(t *testing.T) {
 	mgr.RegisterListener(listener)
 
 	bean := &TestLifecycleBean{}
-	mgr.InvokeInit("testBean", bean, nil)
+	_ = mgr.InvokeInit("testBean", bean, nil)
 
 	mu.Lock()
 	phaseCount := len(phases)
@@ -342,7 +343,7 @@ func TestMultipleListeners(t *testing.T) {
 	mgr.RegisterListener(listener2)
 
 	bean := &TestLifecycleBean{}
-	mgr.InvokeInit("testBean", bean, nil)
+	_ = mgr.InvokeInit("testBean", bean, nil)
 
 	if atomic.LoadInt32(&callCount1) != 1 {
 		t.Errorf("Expected listener1 to be called once, got %d", atomic.LoadInt32(&callCount1))

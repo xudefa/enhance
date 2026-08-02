@@ -63,8 +63,8 @@ func AESDecrypt(ciphertext, key, iv []byte) ([]byte, error) {
 		return nil, fmt.Errorf("https: iv length must be %d bytes", aes.BlockSize)
 	}
 
-	if len(ciphertext) < aes.BlockSize {
-		return nil, fmt.Errorf("https: ciphertext too short")
+	if len(ciphertext) < aes.BlockSize || len(ciphertext)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("https: ciphertext length must be a multiple of %d and at least %d", aes.BlockSize, aes.BlockSize)
 	}
 
 	mode := cipher.NewCBCDecrypter(block, iv)

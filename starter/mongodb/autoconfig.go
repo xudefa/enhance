@@ -31,6 +31,7 @@ type MongoDBAutoConfiguration struct {
 	logger log.Logger
 	client *mongo.Client
 	config *MongoDBConfig
+	ctx    context.Context
 }
 
 // Configure 配置 MongoDB 连接。
@@ -45,10 +46,13 @@ func (c *MongoDBAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 MongoDB 配置失败: %w", err)
+		return fmt.Errorf("failed to load MongoDB config: %w", err)
 	}
 
 	c.config = cfg
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
 
 	uri := c.buildURI(cfg)
 	clientOpts := options.Client().
@@ -58,25 +62,25 @@ func (c *MongoDBAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 		SetConnectTimeout(time.Duration(cfg.ConnectTimeout) * time.Second).
 		SetServerSelectionTimeout(time.Duration(cfg.ServerSelectionTimeout) * time.Second)
 
-	ctx2, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.ConnectTimeout)*time.Second)
+	ctx2, cancel := context.WithTimeout(ctx.Context(), time.Duration(cfg.ConnectTimeout)*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx2, clientOpts)
 	if err != nil {
-		return fmt.Errorf("MongoDB 连接失败: %w", err)
+		return fmt.Errorf("failed to connect to MongoDB: %w", err)
 	}
 
 	if err := client.Ping(ctx2, nil); err != nil {
-		return fmt.Errorf("MongoDB Ping 失败: %w", err)
+		return fmt.Errorf("MongoDB ping failed: %w", err)
 	}
 
 	c.client = client
 
 	if err := ctx.Container().RegisterInstance(c.client, reflect.TypeFor[*mongo.Client]()); err != nil {
-		return fmt.Errorf("注册 MongoDB Client 失败: %w", err)
+		return fmt.Errorf("failed to register MongoDB Client: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "MongoDB 连接成功",
+	c.logger.Info(ctx.Context(), "MongoDB connected successfully",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "database", Value: cfg.Database},
@@ -88,7 +92,7 @@ func (c *MongoDBAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 // Stop 关闭 MongoDB 连接。
 func (c *MongoDBAutoConfiguration) Stop() error {
 	if c.client != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
 		defer cancel()
 		return c.client.Disconnect(ctx)
 	}
@@ -172,7 +176,7 @@ func (c *MongoDBAutoConfiguration) loadConfig(env *environment.Environment) (*Mo
 	}
 
 	if err := env.BindPrefix("mongodb", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 MongoDB 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind MongoDB config: %w", err)
 	}
 
 	return cfg, nil

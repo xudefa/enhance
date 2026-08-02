@@ -1,0 +1,8 @@
+{
+  "ent": {
+    "enabled": true,
+    "driver": "mysql",
+    "dsn": "root:password@tcp(localhost:3306)/enhance?parseTime=True",
+    "database": "enhance"
+  }
+}

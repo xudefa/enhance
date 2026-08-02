@@ -67,18 +67,20 @@ func NewClient(baseURL string, opts ...ClientOption) *server.NetClient {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
+	} else if b.tlsConfig != nil {
+		// 自定义 Transport 需合并 TLS 配置，否则 server 会优先使用 transport 而忽略 tlsConfig
+		transport.TLSClientConfig = b.tlsConfig
 	}
 
-	header := make(http.Header)
-	for k, v := range b.headers {
-		header.Set(k, v)
-	}
-
-	return server.NewTLSClient(baseURL,
-		server.WithTLSConfig(b.tlsConfig),
+	tlsOpts := []server.TLSClientOption{
 		server.WithTLSRequestTimeout(b.timeout),
 		server.WithTLSTransport(transport),
-	)
+	}
+	for k, v := range b.headers {
+		tlsOpts = append(tlsOpts, server.WithTLSDefaultHeader(k, v))
+	}
+
+	return server.NewTLSClient(baseURL, tlsOpts...)
 }
 
 // WithTLSConfig 设置 TLS 配置。

@@ -12,6 +12,7 @@ func NewRandom() *Random {
 
 // Next 随机选择一个后端
 func (r *Random) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}

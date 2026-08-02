@@ -1,0 +1,14 @@
+{
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "enabled": true,
+      "secret_key": "your-secret-key-here-change-in-production",
+      "issuer": "enhance-example",
+      "expires_duration": 3600,
+      "refresh_expires_duration": 86400,
+      "signing_method": "HS256",
+      "exclude_paths": "/login,/register,/health"
+    }
+  }
+}

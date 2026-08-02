@@ -61,6 +61,47 @@ func (r *subdomainResolverImpl) Resolve(req *http.Request) (string, error) {
 	return subdomain, nil
 }
 
+// SetJWTClaims 将 JWT claims 存入 context。
+func SetJWTClaims(ctx context.Context, claims map[string]any) context.Context {
+	return context.WithValue(ctx, jwtClaimsKey{}, claims)
+}
+
+// ExtractJWTClaims 从 context 提取 JWT claims。
+func ExtractJWTClaims(ctx context.Context) (map[string]any, bool) {
+	claims, ok := ctx.Value(jwtClaimsKey{}).(map[string]any)
+	return claims, ok
+}
+
+// JWTExtractor 从 HTTP 请求头中提取 JWT claims 并存入 context。
+type JWTExtractor struct {
+	parse func(authHeader string) (map[string]any, error)
+}
+
+// NewJWTExtractor 创建 JWT 提取器。
+//
+// parseFunc 接收 Authorization 头的值（如 "Bearer eyJ..."），返回解析后的 claims。
+func NewJWTExtractor(parseFunc func(authHeader string) (map[string]any, error)) *JWTExtractor {
+	return &JWTExtractor{parse: parseFunc}
+}
+
+// Handle 返回 HTTP 中间件，从 Authorization 头提取 JWT claims 并存入 context。
+func (e *JWTExtractor) Handle(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+			return
+		}
+		claims, err := e.parse(authHeader)
+		if err != nil {
+			http.Error(w, "invalid JWT token", http.StatusUnauthorized)
+			return
+		}
+		ctx := SetJWTClaims(r.Context(), claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // jwtResolverImpl TenantResolver 接口的基于 JWT 的实现。
 type jwtResolverImpl struct {
 	claimName string
@@ -151,20 +192,26 @@ func (m *tenantManagerImpl) GetTenant(tenantID string) (*Tenant, error) {
 }
 
 // SetCurrentTenant 设置当前租户。
+//
+// 注意：当前租户是进程级共享状态，并发请求会互相覆盖（租户串扰）。
+// 在多请求场景下请使用 context 传递租户（SetTenantToContext / TenantFromContext）。
 func (m *tenantManagerImpl) SetCurrentTenant(tenantID string) error {
-	tenant, err := m.GetTenant(tenantID)
-	if err != nil {
-		return err
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	tenant, exists := m.tenants[tenantID]
+	if !exists {
+		return fmt.Errorf("tenant %s not found", tenantID)
+	}
 
 	m.currentTenant = tenant
 	return nil
 }
 
 // GetCurrentTenant 获取当前租户。
+//
+// 注意：当前租户是进程级共享状态，并发请求之间可能读到被其他请求覆盖的值。
+// 请优先使用 TenantFromContext 从请求 context 中获取租户。
 func (m *tenantManagerImpl) GetCurrentTenant() *Tenant {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -220,15 +267,9 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 			return
 		}
 
-		// 设置当前租户
-		_ = m.manager.SetCurrentTenant(tenantID)
-
 		// 将租户信息添加到 context
-		ctx := context.WithValue(r.Context(), tenantContextKey{}, tenant)
+		ctx := SetTenantToContext(r.Context(), tenant)
 		newReq := r.WithContext(ctx)
-
-		// 确保请求处理完成后清除当前租户
-		defer m.manager.ClearCurrentTenant()
 
 		next.ServeHTTP(w, newReq)
 	})
@@ -238,6 +279,14 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 func TenantFromContext(ctx context.Context) (*Tenant, bool) {
 	tenant, ok := ctx.Value(tenantContextKey{}).(*Tenant)
 	return tenant, ok
+}
+
+// SetTenantToContext 将租户存入 context。
+//
+// 推荐使用 context 传递当前租户，而非 SetCurrentTenant 的进程级状态，
+// 以保证并发请求之间互不串扰。
+func SetTenantToContext(ctx context.Context, tenant *Tenant) context.Context {
+	return context.WithValue(ctx, tenantContextKey{}, tenant)
 }
 
 // tenantIsolationImpl TenantIsolation 接口的默认实现。

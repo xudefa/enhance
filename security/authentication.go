@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/xudefa/enhance/log"
 )
@@ -36,18 +37,24 @@ func NewAuthenticatedUsernamePasswordAuthenticationToken(principal any, authorit
 	}
 }
 
+// Principal 返回认证主体的身份信息（如用户名）。
 func (t *UsernamePasswordAuthenticationToken) Principal() any {
 	return t.principal
 }
 
+// Credentials 返回认证凭证（如密码）。
 func (t *UsernamePasswordAuthenticationToken) Credentials() any {
 	return t.credentials
 }
 
+// Authorities 返回认证令牌的授权列表（返回副本以保证安全）。
 func (t *UsernamePasswordAuthenticationToken) Authorities() []string {
-	return t.authorities
+	result := make([]string, len(t.authorities))
+	copy(result, t.authorities)
+	return result
 }
 
+// Authenticated 返回认证令牌是否已通过验证。
 func (t *UsernamePasswordAuthenticationToken) Authenticated() bool {
 	return t.authenticated
 }
@@ -64,11 +71,13 @@ func (t *UsernamePasswordAuthenticationToken) Name() string {
 }
 
 // SetAuthenticated 设置认证状态
+// SetAuthenticated 设置认证令牌的认证状态。
 func (t *UsernamePasswordAuthenticationToken) SetAuthenticated(authenticated bool) {
 	t.authenticated = authenticated
 }
 
 // SetAuthorities 设置授权列表
+// SetAuthorities 设置认证令牌的授权列表。
 func (t *UsernamePasswordAuthenticationToken) SetAuthorities(authorities []string) {
 	t.authorities = authorities
 }
@@ -89,6 +98,7 @@ func extractPrincipalName(auth Authentication) string {
 
 // ProviderManager 认证提供者管理器
 type ProviderManager struct {
+	mu        sync.RWMutex
 	providers []AuthenticationProvider
 }
 
@@ -101,9 +111,14 @@ func NewProviderManager(providers ...AuthenticationProvider) *ProviderManager {
 
 // Authenticate 尝试通过配置的提供者进行认证
 func (m *ProviderManager) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
+	m.mu.RLock()
+	providers := make([]AuthenticationProvider, len(m.providers))
+	copy(providers, m.providers)
+	m.mu.RUnlock()
+
 	var lastErr error
 
-	for _, provider := range m.providers {
+	for _, provider := range providers {
 		if provider.Supports(token) {
 			result, err := provider.Authenticate(ctx, token)
 			if err != nil {
@@ -125,6 +140,8 @@ func (m *ProviderManager) Authenticate(ctx context.Context, token Authentication
 
 // AddProvider 添加认证提供者
 func (m *ProviderManager) AddProvider(provider AuthenticationProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.providers = append(m.providers, provider)
 }
 
@@ -193,6 +210,16 @@ func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 		return nil, errors.New("user account is locked")
 	}
 
+	if !user.AccountNonExpired() {
+		p.logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
+		return nil, errors.New("user account is expired")
+	}
+
+	if !user.CredentialsNonExpired() {
+		p.logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
+		return nil, errors.New("user credentials are expired")
+	}
+
 	p.logger.Info(ctx, "用户认证成功", log.KeyValue{Key: "username", Value: username})
 	return NewAuthenticatedUsernamePasswordAuthenticationToken(user, user.Authorities()), nil
 }
@@ -213,10 +240,14 @@ func NewAnonymousAuthenticationProvider() *AnonymousAuthenticationProvider {
 
 // Authenticate 为匿名用户创建认证令牌
 func (p *AnonymousAuthenticationProvider) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
-	if token == nil || !token.Authenticated() {
+	if token == nil {
 		return NewAuthenticatedUsernamePasswordAuthenticationToken("anonymousUser", []string{"ROLE_ANONYMOUS"}), nil
 	}
-	return nil, nil
+	// 如果令牌已认证或包含凭证，不创建匿名令牌
+	if token.Authenticated() || token.Credentials() != nil {
+		return nil, nil
+	}
+	return NewAuthenticatedUsernamePasswordAuthenticationToken("anonymousUser", []string{"ROLE_ANONYMOUS"}), nil
 }
 
 // Supports 只支持UsernamePasswordAuthenticationToken类型

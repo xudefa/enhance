@@ -29,7 +29,6 @@ type methodMeta struct {
 	receiverType reflect.Type   // receiver 类型
 	inTypes      []reflect.Type // 参数类型列表
 	valuePool    *sync.Pool     // []reflect.Value 对象池
-	receiverPool *sync.Pool     // receiver reflect.Value 对象池
 }
 
 // ReflectiveAopProxy 基于反射的 AOP 代理。
@@ -138,7 +137,6 @@ func (p *ProxyFactory) GetProxy() any {
 		return p.target
 	}
 
-	targetVal := reflect.ValueOf(p.target)
 	targetType := reflect.TypeOf(p.target)
 	if targetType.Kind() == reflect.Pointer {
 		targetType = targetType.Elem()
@@ -149,7 +147,7 @@ func (p *ProxyFactory) GetProxy() any {
 	}
 
 	if targetType.Kind() == reflect.Struct {
-		return p.createStructProxy(targetVal, targetType)
+		return p.createStructProxy(targetType)
 	}
 
 	return p.target
@@ -217,8 +215,8 @@ func (p *ReflectiveAopProxy) Call(methodName string, args ...any) (any, error) {
 //   - args: 方法参数
 //
 // 返回值:
-//   - any: 方法返回值（多返回值时返回 []any）
-//   - error: 调用错误（仅表示方法查找失败，不包含目标方法的 panic）
+//   - any: 方法返回值（单返回值直接返回，多返回值返回 []any）
+//   - error: 调用错误（方法返回的 error，或框架内部错误）
 func (p *ReflectiveAopProxy) CallContext(ctx context.Context, methodName string, args ...any) (any, error) {
 	meta := p.getOrCacheMethodMeta(methodName)
 	if meta == nil {
@@ -231,15 +229,37 @@ func (p *ReflectiveAopProxy) CallContext(ctx context.Context, methodName string,
 		return p.invokeWithMeta(meta, callArgs)
 	}
 
+	proceedFn := func() (any, error) { return targetFunc(args...), nil }
+	proceedWithArgsFn := func(newArgs []any) (any, error) { return targetFunc(newArgs...), nil }
+
 	inv := NewInvocation(
-		NewJoinPoint(p.target, methodName, args,
-			func() (any, error) { return targetFunc(args...), nil },
-			func(newArgs []any) (any, error) { return targetFunc(newArgs...), nil },
+		NewJoinPointWithContext(ctx, p.target, methodName, args,
+			proceedFn, proceedWithArgsFn,
 		),
-		func() (any, error) { return targetFunc(args...), nil },
+		proceedFn,
 	)
 
 	result := p.getExecutor().Execute(inv, matchedAspects, targetFunc)
+
+	// 从返回值中提取 error。覆盖唯一返回值即 error（如 func() error）的情形。
+	if err, ok := result.(error); ok && err != nil {
+		return nil, err
+	}
+	// 从多返回值中提取 error
+	if result != nil && meta.numOut > 1 {
+		if results, ok := result.([]any); ok && len(results) >= 2 {
+			if err, isErr := results[len(results)-1].(error); isErr && err != nil {
+				return result, err
+			}
+		}
+	}
+	// 通知链执行产生的错误（如 Around 通知返回的错误）记录在 JoinPoint 中
+	if jp := inv.JoinPoint(); jp != nil {
+		if err := jp.GetError(); err != nil {
+			return result, err
+		}
+	}
+
 	return result, nil
 }
 
@@ -260,7 +280,8 @@ func (p *ReflectiveAopProxy) SetExecutor(executor ChainExecutor) {
 // getOrCacheMethodMeta 获取或缓存方法反射元数据
 func (p *ReflectiveAopProxy) getOrCacheMethodMeta(methodName string) *methodMeta {
 	if cached, ok := p.metaCache.Load(methodName); ok {
-		return cached.(*methodMeta)
+		meta, _ := cached.(*methodMeta)
+		return meta
 	}
 
 	method, ok := p.targetType.MethodByName(methodName)
@@ -289,32 +310,22 @@ func (p *ReflectiveAopProxy) getOrCacheMethodMeta(methodName string) *methodMeta
 		},
 	}
 
-	// receiverPool 缓存目标对象的 reflect.Value，避免重复反射
-	targetVal := reflect.ValueOf(p.target)
-	meta.receiverPool = &sync.Pool{
-		New: func() any {
-			v := targetVal
-			return &v
-		},
-	}
-
 	// 使用 LoadOrStore 避免并发创建多个元数据对象
 	actual, loaded := p.metaCache.LoadOrStore(methodName, meta)
 	if loaded {
 		// 已有其他goroutine创建了元数据，使用已存在的
-		return actual.(*methodMeta)
+		meta, _ := actual.(*methodMeta)
+		return meta
 	}
 	return meta
 }
 
 // invokeWithMeta 使用缓存的元数据执行方法调用
 func (p *ReflectiveAopProxy) invokeWithMeta(meta *methodMeta, callArgs []any) any {
-	in := *(meta.valuePool.Get().(*[]reflect.Value))
-	in = in[:0]
+	inPtr, _ := meta.valuePool.Get().(*[]reflect.Value)
+	in := (*inPtr)[:0]
 
-	// 使用缓存的 receiver 避免重复反射
-	receiverPtr := meta.receiverPool.Get().(*reflect.Value)
-	in = append(in, *receiverPtr)
+	in = append(in, reflect.ValueOf(p.target))
 
 	for _, a := range callArgs {
 		in = append(in, reflect.ValueOf(a))
@@ -322,8 +333,8 @@ func (p *ReflectiveAopProxy) invokeWithMeta(meta *methodMeta, callArgs []any) an
 
 	results := meta.method.Func.Call(in)
 
-	meta.valuePool.Put(&in)
-	meta.receiverPool.Put(receiverPtr)
+	*inPtr = in
+	meta.valuePool.Put(inPtr)
 
 	switch meta.numOut {
 	case 0:
@@ -332,7 +343,7 @@ func (p *ReflectiveAopProxy) invokeWithMeta(meta *methodMeta, callArgs []any) an
 		return results[0].Interface()
 	default:
 		// 使用对象池复用返回值切片
-		retPtr := resultsPool.Get().(*[]any)
+		retPtr, _ := resultsPool.Get().(*[]any)
 		*retPtr = (*retPtr)[:0]
 		for _, r := range results {
 			*retPtr = append(*retPtr, r.Interface())
@@ -386,15 +397,7 @@ func AsReflectiveProxy(obj any) (*ReflectiveAopProxy, bool) {
 }
 
 // createStructProxy 创建结构体代理
-func (p *ProxyFactory) createStructProxy(targetVal reflect.Value, targetType reflect.Type) any {
-	proxyVal := reflect.New(targetType)
-
-	if targetVal.Kind() == reflect.Pointer {
-		proxyVal.Elem().Set(targetVal.Elem())
-	} else {
-		proxyVal.Elem().Set(targetVal)
-	}
-
+func (p *ProxyFactory) createStructProxy(targetType reflect.Type) any {
 	ptrType := reflect.PointerTo(targetType)
 
 	hasMatched := false
@@ -410,7 +413,8 @@ func (p *ProxyFactory) createStructProxy(targetVal reflect.Value, targetType ref
 	}
 
 	if !hasMatched {
-		return proxyVal.Interface()
+		// 无匹配切面时返回原对象，保持引用同一性（不返回拷贝）
+		return p.target
 	}
 
 	p.aspectsMu.RLock()

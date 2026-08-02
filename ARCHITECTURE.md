@@ -1,6 +1,6 @@
 # enhance 架构设计文档
 
-> **文档版本**：v3.0 | **最后更新**：2026-07-19
+> **文档版本**：v0.0 | **最后更新**：2026-07-29
 
 本文档详细描述 enhance 框架的架构设计、核心模块、接口定义和扩展点。
 
@@ -66,31 +66,30 @@ enhance 是一个参考 Spring Framework 和 Spring Boot 设计的 Go 企业级�
 | `aop/` | AOP 框架（5 种通知 + 切点匹配 + 代码生成） | `aop.Advice`, `aop.PointCut` |
 | `boot/` | 应用启动器、自动配置、横幅、失败分析 | `boot.AutoConfiguration` |
 | `context/` | 应用上下文（聚合容器、环境、生命周期） | `context.ApplicationContext` |
-| `condition/` | 条件判断（OnProperty / OnBean / OnClass） | `condition.Condition` |
-| `event/` | 事件驱动（发布/订阅、死信队列、事务绑定） | `event.EventPublisher` |
+| `condition/` | 条件判断（OnProperty / OnBean / OnModuleLoaded） | `condition.Condition` |
+| `event/` | 事件驱动（发布/订阅、死信队列、事务绑定） | `event.EventBus`, `event.EventBusWithOrdering` |
 | `cache/` | 缓存抽象（LRU + 内存缓存） | `cache.Cache` |
 | `web/` | HTTP 服务器/客户端、路由器、中间件 | `web.Server`, `web.Router` |
-| `security/` | 安全框架（认证 + 授权 + 过滤器链） | `security.Authentication` |
+| `security/` | 安全框架（认证 + 授权 + 过滤器链） | `security.Authentication`, `security.HttpSecurity` |
 | `actuator/` | 运维端点（/health, /metrics, /env） | `actuator.Endpoint` |
-| `metrics/` | 指标收集（Counter + Gauge + Registry） | `metrics.MeterRegistry` |
-| `schedule/` | 定时任务调度（Cron + @Scheduled） | `schedule.Scheduler` |
-| `log/` | 日志抽象（Logger 接口 + slog 实现） | `log.Logger` |
-| `async/` | 异步执行（线程池 + Future） | `async.AsyncExecutor` |
-| `retry/` | 重试机制（多种退避策略） | `retry.Retrier` |
-| `audit/` | 审计日志（事件记录 + 拦截器） | `audit.Auditor` |
-| `i18n/` | 国际化（多区域消息源） | `i18n.MessageSource` |
-| `validation/` | 数据验证（声明式验证） | `validation.Validator` |
-| `exception/` | 异常处理（全局异常处理器） | `exception.ExceptionHandler` |
-| `spel/` | 表达式语言（SpEL 风格） | `spel.ExpressionParser` |
-| `lifecycle/` | 生命周期管理（7 阶段状态机） | `lifecycle.LifecycleManager` |
-| `resilience/` | 弹性容错（熔断器 + 负载均衡） | `resilience.Breaker`, `resilience.Selector` |
-| `mq/` | 消息队列（统一抽象） | `mq.Queue` |
-| `tenant/` | 多租户（租户隔离 + 解析器） | `tenant.TenantResolver` |
-| `tracing/` | 分布式追踪（链路追踪） | `tracing.Tracer` |
+| `metrics/` | 指标收集（Counter + Gauge + Histogram） | `metrics.MeterRegistry`, `metrics.Exporter` |
+| `schedule/` | 定时任务调度（Cron + 6 字段表达式） | `schedule.Scheduler`, `schedule.Task` |
+| `log/` | 日志抽象（Logger 接口 + slog/zerolog 集成） | `log.Logger` |
+| `async/` | 异步执行（goroutine 池 + Future） | `async.AsyncExecutor`, `async.Future` |
+| `audit/` | 审计日志（事件记录 + 拦截器） | `audit.Auditor`, `audit.AuditLogger` |
+| `i18n/` | 国际化（多区域消息源） | `i18n.MessageSource`, `i18n.Locale` |
+| `validation/` | 数据验证（字段级 + 跨字段验证） | `validation.Validator`, `validation.MiddlewareValidator` |
+| `exception/` | 异常处理（全局异常处理器） | `exception.ExceptionHandler`, `exception.ErrorCode` |
+| `spel/` | 表达式语言（SpEL 风格） | `spel.ExpressionParser`, `spel.EvaluationContext` |
+| `lifecycle/` | 生命周期管理（3 阶段状态机） | `lifecycle.LifecycleManager`, `lifecycle.PhaseListener` |
+| `resilience/` | 弹性容错（熔断器 + 负载均衡） | `resilience.Breaker`, `resilience.Selector`, `resilience.Balancer` |
+| `mq/` | 消息队列（统一抽象） | `mq.Queue`, `mq.Message` |
+| `tenant/` | 多租户（租户隔离 + 解析器） | `tenant.TenantResolver`, `tenant.TenantManager` |
+| `tracing/` | 分布式追踪（链路追踪） | `tracing.Tracer`, `tracing.Span` |
 | `openapi/` | OpenAPI 文档（自动生成） | `openapi.Document` |
 | `testing/` | 测试框架（TestRunner + Mock） | `testing.TestRunner` |
-| `devtools/` | 开发工具（热重载） | `devtools.HotReloader` |
-| `email/` | 邮件发送（SMTP） | `email.Sender` |
+| `devtools/` | 开发工具（热重载） | `devtools.HotReloader`, `devtools.FileWatcher` |
+| `email/` | 邮件发送（SMTP） | `email.Sender`, `email.Message` |
 
 ---
 
@@ -113,19 +112,25 @@ enhance 是一个参考 Spring Framework 和 Spring Boot 设计的 Go 企业级�
 ```go
 // Container IoC 容器接口
 type Container interface {
-    // 注册
-    Register(t reflect.Type, def Definition, opts ...Option) error
-    
-    // 获取
-    Get(name string) (any, error)
-    GetByType(t reflect.Type) (any, error)
-    
-    // 解析（依赖注入）
-    Resolve(target any) error
-    
     // 查询
-    Has(name string) bool
-    Names() []string
+    Get(typ reflect.Type) ([]any, error)
+    GetByTypeAndName(name string, typ reflect.Type) (any, error)
+    GetAll() []any
+    Has(name string, typ reflect.Type) bool
+    HasType(typ reflect.Type) bool
+    Types() []reflect.Type
+    ListBeans() map[string]*registry.BeanDef
+    
+    // 注册
+    RegisterBean(def registry.BeanDef) error
+    RegisterInstance(instance any, typ reflect.Type) error
+    
+    // Bean ID 生成
+    Generate(typ reflect.Type, customName ...string) string
+    Parse(beanID string) (pkgPath, typeName, customName string)
+    
+    // Bean 创建
+    CreateBean(beanID string) (any, error)
     
     // 生命周期
     Initialize() error
@@ -174,21 +179,32 @@ type BeanDestroyFunc func(bean any) error
 ```go
 // Pointcut 切点接口
 type Pointcut interface {
-    Matches(method reflect.Method) bool
-    String() string
+    Matches(target any, methodName string) bool
+    MatchClass(t reflect.Type) bool
+    Expression() string
 }
 
 // Advice 通知接口
 type Advice interface {
     Type() AdviceType
-    Execute(ctx JoinPoint) (any, error)
+    Order() int
+    Execute(ctx context.Context, joinPoint JoinPoint) (any, error)
 }
 
-// Advisor 通知器
-type Advisor struct {
-    Pointcut Pointcut
-    Advice   Advice
-    Order    int
+// Advisor 通知器接口
+type Advisor interface {
+    Advice() Advice
+    PointCut() Pointcut
+    Order() int
+}
+
+// JoinPoint 连接点接口
+type JoinPoint interface {
+    Target() any
+    Method() string
+    Args() []any
+    Proceed() (any, error)
+    ProceedWithArgs(args []any) (any, error)
 }
 ```
 
@@ -227,20 +243,26 @@ aop.WithPointcut("regex:.*Service$")     // 正则匹配
 #### 核心接口
 
 ```go
-// EventBus 事件总线
-type EventBus interface {
-    Subscribe(eventName string, handler EventHandler) error
-    Publish(event ApplicationEvent) error
-    PublishAsync(event ApplicationEvent) error
-    Unsubscribe(eventName string, handler EventHandler) error
+// EventBus 事件总线（结构体，非接口）
+type EventBus struct {
+    listeners sync.Map
 }
 
-// ApplicationEvent 应用事件
-type ApplicationEvent interface {
-    EventName() string
-    Timestamp() time.Time
-    Source() any
+// EventBusWithOrdering 支持优先级和过滤条件的事件总线
+type EventBusWithOrdering struct {
+    mu        sync.Mutex
+    listeners sync.Map
+    nextID    int
 }
+
+// ApplicationEvent 应用事件接口
+type ApplicationEvent interface {
+    Type() string
+    Timestamp() time.Time
+}
+
+// EventListener 事件监听器函数类型
+type EventListener func(event ApplicationEvent)
 ```
 
 #### 内置事件
@@ -268,6 +290,29 @@ type ApplicationEvent interface {
 
 ```
 命令行参数 > 环境变量 > 配置文件 > 默认值
+```
+
+#### 核心接口
+
+```go
+// Config 配置接口
+type Config interface {
+    Get(key string) any
+    GetString(key string) string
+    GetInt(key string) int
+    GetBool(key string) bool
+    GetAll() map[string]any
+    Set(key string, value any)
+    Load(path string) error
+    Save(path string) error
+}
+
+// Loader 配置加载器
+type Loader interface {
+    Load(opts ...LoaderOption) (Config, error)
+    Priority() int
+    SupportsWatch() bool
+}
 ```
 
 #### 支持的配置格式
@@ -332,23 +377,23 @@ type Transactor interface {
 // Server HTTP 服务器接口
 type Server interface {
     Start() error
-    Use(middleware Middleware) Server
-    GET(path string, handler Handler)
-    POST(path string, handler Handler)
-    PUT(path string, handler Handler)
-    DELETE(path string, handler Handler)
     Stop(ctx context.Context) error
+    SetHandler(handler any)
+    Use(middleware any)
 }
 
-// Handler 请求处理器
-type Handler func(ctx Context) error
+// HandlerFunc HTTP 处理函数
+type HandlerFunc func(ctx Context)
 
 // Router 路由器接口
 type Router interface {
-    Group(prefix string, fn func(r Router))
-    Use(middleware Middleware)
-    GET(path string, handler Handler)
-    POST(path string, handler Handler)
+    GET(path string, handler HandlerFunc)
+    POST(path string, handler HandlerFunc)
+    PUT(path string, handler HandlerFunc)
+    DELETE(path string, handler HandlerFunc)
+    PATCH(path string, handler HandlerFunc)
+    Group(prefix string) Router
+    Use(middleware MiddlewareFunc)
 }
 ```
 
@@ -367,19 +412,26 @@ type Router interface {
 #### 核心组件
 
 ```go
-// SecurityFilter 安全过滤器
-type SecurityFilter interface {
-    DoFilter(ctx Context, chain FilterChain) error
-}
+// SecurityFilter 安全过滤器（类型别名 → filter.Filter）
+type SecurityFilter = filter.Filter
 
-// AuthenticationManager 认证管理器
-type AuthenticationManager interface {
-    Authenticate(token AuthenticationToken) (Authentication, error)
-}
+// AuthenticationManager 认证管理器（类型别名 → authentication.AuthenticationManager）
+type AuthenticationManager = authentication.AuthenticationManager
 
-// AccessDecisionManager 访问决策管理器
-type AccessDecisionManager interface {
-    Decide(authentication Authentication, object any, attributes []string) error
+// AccessDecisionManager 访问决策管理器（类型别名 → authorization.AccessDecisionManager）
+type AccessDecisionManager = authorization.AccessDecisionManager
+
+// HttpSecurity HTTP 安全配置接口（16 个方法，链式 API）
+type HttpSecurity interface {
+    AuthenticationManager(authManager AuthenticationManager) HttpSecurity
+    UserDetailsService(userDetailsService UserDetailsService) HttpSecurity
+    AuthorizeRequests(authorizer AuthorizeRequests) HttpSecurity
+    AddFilter(filter SecurityFilter) HttpSecurity
+    Csrf() HttpSecurity
+    FormLogin(loginProcessingUrl string, defaultSuccessUrl ...string) HttpSecurity
+    Logout(logoutUrl string, successHandler ...LogoutSuccessHandler) HttpSecurity
+    Build() (SecurityFilterChain, error)
+    // ... 更多方法
 }
 ```
 
@@ -410,14 +462,27 @@ type AccessDecisionManager interface {
 // Indicator 健康指标
 type Indicator interface {
     Name() string
-    Health(ctx context.Context) HealthStatus
+    Health(ctx context.Context) Health
 }
 
-// HealthStatus 健康状态
-type HealthStatus struct {
-    Status  Status
-    Details map[string]any
+// Health 健康信息
+type Health struct {
+    Status    Status
+    Details   map[string]any
+    Error     error
+    Timestamp time.Time
 }
+
+// Status 健康状态
+type Status int
+
+const (
+    StatusUp      Status = iota // 正常
+    StatusDown                   // 不可用
+    StatusDegraded               // 降级
+    StatusOutage                 // 停服
+    StatusUnknown                // 未知
+)
 ```
 
 ---
@@ -439,8 +504,10 @@ type HealthStatus struct {
 type Cache interface {
     Get(ctx context.Context, key string) (any, error)
     Set(ctx context.Context, key string, value any, ttl time.Duration) error
-    Delete(ctx context.Context, key string) error
-    Clear(ctx context.Context) error
+    Del(ctx context.Context, keys ...string) error
+    Exists(ctx context.Context, key string) (bool, error)
+    TTL(ctx context.Context, key string) (time.Duration, error)
+    Close() error
 }
 ```
 
@@ -460,13 +527,20 @@ type Cache interface {
 ```go
 // Scheduler 调度器
 type Scheduler interface {
-    Schedule(cron string, task Task) error
-    Start() error
-    Stop() error
+    Start(ctx context.Context) error
+    Shutdown(ctx context.Context) error
+    Register(task Task) error
+    Unregister(name string) bool
+    IsRunning() bool
+    RegisteredTasks() []Task
 }
 
-// Task 任务接口
-type Task func() error
+// Task 定时任务接口
+type Task interface {
+    Name() string
+    Cron() string
+    Execute(ctx context.Context) error
+}
 ```
 
 ---
@@ -485,11 +559,18 @@ type Task func() error
 ```go
 // Logger 日志接口
 type Logger interface {
-    Debug(ctx context.Context, msg string, keysAndValues ...any)
-    Info(ctx context.Context, msg string, keysAndValues ...any)
-    Warn(ctx context.Context, msg string, keysAndValues ...any)
-    Error(ctx context.Context, msg string, keysAndValues ...any)
-    With(keysAndValues ...any) Logger
+    Debug(ctx context.Context, msg string, keys ...KeyValue)
+    Info(ctx context.Context, msg string, keys ...KeyValue)
+    Warn(ctx context.Context, msg string, keys ...KeyValue)
+    Error(ctx context.Context, msg string, keys ...KeyValue)
+    Sync() error
+    With(ctx context.Context, keys ...KeyValue) Logger
+}
+
+// KeyValue 日志键值对
+type KeyValue struct {
+    Key   string
+    Value any
 }
 ```
 
@@ -512,6 +593,14 @@ type MeterRegistry interface {
     Counter(name string, tags ...string) Counter
     Gauge(name string, tags ...string) Gauge
     Histogram(name string, tags ...string) Histogram
+    Collect() []Metric
+    RegisterExporter(exporter Exporter)
+    Export() error
+}
+
+// Exporter 指标导出器
+type Exporter interface {
+    Export(metrics []Metric) error
 }
 ```
 
@@ -528,47 +617,25 @@ type MeterRegistry interface {
 #### 核心接口
 
 ```go
-// AsyncExecutor 异步执行器
-type AsyncExecutor interface {
-    Submit(task func() (any, error)) Future
-    Shutdown(timeout time.Duration) error
+// AsyncExecutor 异步执行器（结构体，非接口）
+type AsyncExecutor struct {
+    workerCount int
+    queueSize   int
+    // ... 内部字段
 }
 
-// Future 异步结果
-type Future interface {
-    Get() (any, error)
-    GetWithTimeout(timeout time.Duration) (any, error)
-    IsDone() bool
-}
-```
-
----
-
-### 14. 重试机制
-
-#### 模块职责
-
-- 声明式重试
-- 多种退避策略
-- 重试监听器
-
-#### 核心接口
-
-```go
-// Retrier 重试执行器
-type Retrier interface {
-    Execute(fn func() (any, error)) (any, error)
-}
-
-// BackoffStrategy 退避策略
-type BackoffStrategy interface {
-    NextDelay(attempt int) time.Duration
+// Future 异步结果（结构体，非接口）
+type Future struct {
+    done   chan struct{}
+    result any
+    err    error
+    mu     sync.RWMutex
 }
 ```
 
 ---
 
-### 15. 审计日志
+### 14. 审计日志
 
 #### 模块职责
 
@@ -580,24 +647,42 @@ type BackoffStrategy interface {
 #### 核心接口
 
 ```go
-// Auditor 审计器
+// Auditor 审计日志器
 type Auditor interface {
-    Audit(event AuditEvent) error
+    Log(event Event)
+    Close() error
+    IsClosed() bool
 }
 
-// AuditEvent 审计事件
-type AuditEvent struct {
-    Actor     string
-    Action    string
-    Resource  string
-    Timestamp time.Time
-    Details   map[string]any
+// Event 审计事件
+type Event struct {
+    ID         string
+    Timestamp  time.Time
+    Actor      string
+    Action     EventType
+    Resource   string
+    Target     string
+    Details    map[string]any
+    Severity   EventSeverity
+    Source     string
+    Result     string
+    Duration   time.Duration
+    Tags       []string
+}
+
+// AuditLogger 审计日志助手
+type AuditLogger interface {
+    Create(resource string, target string, details map[string]any)
+    Update(resource string, target string, details map[string]any)
+    Delete(resource string, target string)
+    Login(target string, details map[string]any)
+    Severity(resource string, target string, severity EventSeverity, details map[string]any)
 }
 ```
 
 ---
 
-### 16. 国际化
+### 15. 国际化
 
 #### 模块职责
 
@@ -610,44 +695,54 @@ type AuditEvent struct {
 ```go
 // MessageSource 消息源
 type MessageSource interface {
-    GetMessage(code string, locale Locale, args ...any) string
+    GetMessage(code string, args ...any) string
+    GetMessageWithLocale(code string, locale Locale, args ...any) string
 }
 
 // Locale 区域设置
 type Locale struct {
     Language string
     Country  string
+    Variant  string
 }
 ```
 
 ---
 
-### 17. 数据验证
+### 16. 数据验证
 
 #### 模块职责
 
-- 声明式验证
-- 结构体验证
+- 字段级验证
+- 跨字段验证
 - 自定义验证器
+- HTTP 中间件集成
 
 #### 核心接口
 
 ```go
 // Validator 验证器
 type Validator interface {
-    Validate(obj any) []ValidationError
+    Validate(obj any) error
 }
 
 // ValidationError 验证错误
 type ValidationError struct {
     Field   string
     Message string
+    Value   any
+}
+
+// MiddlewareValidator 中间件验证器
+type MiddlewareValidator interface {
+    ValidateRequest(c any, obj any) error
+    HandleValidationError(c any, err error)
 }
 ```
 
 ---
 
-### 18. 异常处理
+### 17. 异常处理
 
 #### 模块职责
 
@@ -660,7 +755,9 @@ type ValidationError struct {
 ```go
 // ExceptionHandler 异常处理器
 type ExceptionHandler interface {
-    Handle(ctx context.Context, err error) Response
+    Handle(ctx context.Context, err error, response ResponseWriter) *ErrorResponse
+    RegisterResolver(resolver ExceptionResolver)
+    RegisterException(exceptionType reflect.Type, resolver ExceptionResolver)
 }
 
 // ErrorCode 错误码
@@ -673,35 +770,46 @@ type ErrorCode struct {
 
 ---
 
-### 19. 表达式语言
+### 18. 表达式语言
 
 #### 模块职责
 
 - SpEL 风格表达式
 - 属性访问
 - 方法调用
+- 变量管理
 
 #### 核心接口
 
 ```go
 // ExpressionParser 表达式解析器
 type ExpressionParser interface {
-    ParseExpression(expr string) Expression
+    ParseExpression(expression string) (Expression, error)
 }
 
 // Expression 表达式
 type Expression interface {
-    GetValue(ctx EvaluationContext) (any, error)
+    GetValue(context EvaluationContext) (any, error)
+    SetValue(context EvaluationContext, value any) error
+    String() string
+}
+
+// EvaluationContext 表达式求值上下文
+type EvaluationContext interface {
+    GetRootObject() any
+    SetRootObject(root any)
+    GetVariable(name string) (any, bool)
+    SetVariable(name string, value any)
 }
 ```
 
 ---
 
-### 20. 生命周期管理
+### 19. 生命周期管理
 
 #### 模块职责
 
-- 7 阶段状态机
+- 3 阶段状态机（INIT → RUNNING → STOPPED）
 - 生命周期回调
 - 阶段监听器
 
@@ -709,35 +817,37 @@ type Expression interface {
 
 ```go
 // LifecycleManager 生命周期管理器
-type LifecycleManager interface {
-    GetPhase() ApplicationPhase
-    SetPhase(phase ApplicationPhase) error
-    AddListener(listener PhaseListener)
+type LifecycleManager struct {
+    mu        sync.RWMutex
+    phase     ApplicationPhase
+    listeners []PhaseListener
 }
 
 // ApplicationPhase 应用阶段
 type ApplicationPhase int
 
 const (
-    PhaseInitializing ApplicationPhase = iota
-    PhaseConfiguring
-    PhaseContextRefreshed
-    PhaseReady
-    PhaseRunning
-    PhaseStopping
-    PhaseStopped
+    PhaseInit    ApplicationPhase = iota // 初始化阶段
+    PhaseRunning                         // 运行阶段
+    PhaseStopped                         // 已停止
 )
+
+// PhaseListener 生命周期阶段监听器
+type PhaseListener interface {
+    OnPhaseChange(oldPhase, newPhase ApplicationPhase) error
+}
 ```
 
 ---
 
-### 21. 弹性容错
+### 20. 弹性容错
 
 #### 模块职责
 
 - 熔断器
 - 负载均衡
 - 服务注册发现
+- 限流
 
 #### 核心接口
 
@@ -747,45 +857,77 @@ type Breaker interface {
     Allow() error
     RecordSuccess()
     RecordFailure()
+    State() State
 }
 
 // Selector 负载均衡选择器
 type Selector interface {
-    Select(instances []Instance) (Instance, error)
+    Select(instances []InstanceInfo) (InstanceInfo, error)
+}
+
+// Registry 服务注册中心
+type Registry interface {
+    Register(ctx context.Context, info InstanceInfo) error
+    Deregister(ctx context.Context, info InstanceInfo) error
+    Discover(ctx context.Context, serviceName string) ([]InstanceInfo, error)
+}
+
+// Balancer 负载均衡
+type Balancer interface {
+    Next(backends []*ServiceInstance) (*ServiceInstance, error)
 }
 ```
 
 ---
 
-### 22. 消息队列
+### 21. 消息队列
 
 #### 模块职责
 
 - 统一消息接口
 - 多后端支持
-- 消息确认
+- 消息确认（Ack/Nack）
+- 死信队列
+- 对象池优化
 
 #### 核心接口
 
 ```go
 // Queue 消息队列
 type Queue interface {
-    Send(msg Message) error
-    Receive() (Message, error)
-    Ack(msg Message) error
-    Nack(msg Message) error
+    Send(msg *Message) error
+    Receive() (*Message, error)
+    ReceiveWithTimeout(timeout time.Duration) (*Message, error)
+    Consume(handler MessageHandler) error
+    StopConsuming()
+    Purge() error
+    Close() error
+    Name() string
+    Size() int
+}
+
+// Message 消息对象
+type Message struct {
+    ID         string
+    Body       []byte
+    Headers    map[string]string
+    Timestamp  time.Time
+    QueueName  string
+    RetryCount int
+    MaxRetries int
 }
 ```
 
 ---
 
-### 23. 多租户
+### 22. 多租户
 
 #### 模块职责
 
 - 租户解析
 - 租户隔离
 - 租户上下文
+- 租户管理
 
 #### 核心接口
 
@@ -795,43 +937,51 @@ type TenantResolver interface {
     Resolve(req *http.Request) (string, error)
 }
 
-// TenantContext 租户上下文
-type TenantContext interface {
-    GetTenantID() string
-    SetTenantID(id string)
+// TenantManager 租户管理器
+type TenantManager interface {
+    RegisterTenant(tenant *Tenant)
+    GetTenant(tenantID string) (*Tenant, error)
+    SetCurrentTenant(tenantID string) error
+    GetCurrentTenant() *Tenant
 }
 ```
 
 ---
 
-### 24. 分布式追踪
+### 23. 分布式追踪
 
 #### 模块职责
 
 - 链路追踪
 - Span 管理
+- 采样策略
 - 上下文传播
 
 #### 核心接口
 
 ```go
-// Tracer 追踪器
-type Tracer interface {
-    StartSpan(name string) Span
-    Inject(span Span, carrier any) error
-    Extract(carrier any) (Span, error)
+// Tracer 追踪器（结构体）
+type Tracer struct {
+    serviceName string
+    sampler     Sampler
+    exporter    Exporter
+    maxSpans    int
 }
 
-// Span 追踪跨度
-type Span interface {
-    SetTag(key, value string)
-    Finish()
+// Sampler 采样器接口
+type Sampler interface {
+    ShouldSample() bool
+}
+
+// Exporter 导出器接口
+type Exporter interface {
+    ExportSpans(spans []*Span) error
 }
 ```
 
 ---
 
-### 25. OpenAPI 文档
+### 24. OpenAPI 文档
 
 #### 模块职责
 
@@ -853,7 +1003,7 @@ type Document interface {
 
 ---
 
-### 26. 测试框架
+### 25. 测试框架
 
 #### 模块职责
 
@@ -871,14 +1021,23 @@ type TestRunner interface {
 
 // TestContext 测试上下文
 type TestContext interface {
-    Container() core.Container
-    GetBean(name string) (any, error)
+    T() TestingT
+    Container() any
+    Register(name string, bean any)
+    AddCleanup(fn func())
+}
+
+// Mock 模拟对象
+type Mock interface {
+    Expect(method string, args []any, result any, err error) Mock
+    Call(method string, args ...any) (any, error)
+    Verify() error
 }
 ```
 
 ---
 
-### 27. 开发工具
+### 26. 开发工具
 
 #### 模块职责
 
@@ -892,27 +1051,45 @@ type TestContext interface {
 // HotReloader 热重载管理器
 type HotReloader interface {
     Start() error
-    Stop() error
-    OnReload(fn func())
+    Stop()
+    OnReload(callback ReloadCallback)
+}
+
+// FileWatcher 文件监控器
+type FileWatcher interface {
+    OnChange(callback ReloadCallback)
+    Start() error
+    Stop()
 }
 ```
 
 ---
 
-### 28. 邮件发送
+### 27. 邮件发送
 
 #### 模块职责
 
 - SMTP 邮件发送
-- 模板支持
-- 附件支持
+- 多收件人支持
+- HTML 格式邮件
 
 #### 核心接口
 
 ```go
 // Sender 邮件发送器
 type Sender interface {
-    Send(to []string, subject, body string, opts ...SendOption) error
+    Send(ctx context.Context, msg *Message) error
+    Close() error
+}
+
+// Message 邮件消息
+type Message struct {
+    From        string
+    To          []string
+    Subject     string
+    Body        string
+    HTML        string
+    Attachments []Attachment
 }
 ```
 
@@ -936,9 +1113,8 @@ type Sender interface {
 | `OnProperty` | 配置属性存在且匹配 |
 | `OnBean` | Bean 存在 |
 | `OnMissingBean` | Bean 不存在 |
-| `OnClass` | 类型存在 |
-| `OnMissingClass` | 类型不存在 |
-| `OnProfile` | Profile 匹配 |
+| `OnModuleLoaded` | 模块已加载（Go 替代 OnClass） |
+| `OnMissingModule` | 模块未加载 |
 
 ### Starter 包结构
 
@@ -1054,15 +1230,13 @@ type ApplicationListener interface {
 
 | 接口 | 说明 |
 |------|------|
-| `core.Container` | IoC 容器：Register、Get、Resolve |
+| `core.Container` | IoC 容器：Get、RegisterBean、Initialize |
 | `aop.Advice` | AOP 通知：Before、After、Around 等 |
 | `boot.Application` | 应用实例：Start、Stop、Container |
-| `data.Repository[T]` | 泛型数据访问：CRUD 操作 |
-| `data.Transactor` | 事务管理：Begin、Commit、Rollback |
-| `cache.Cache` | 缓存操作：Get、Set、Del |
-| `config.Config` | 配置访问：Get、Unmarshal、Watch |
-| `log.Logger` | 日志记录：Debug、Info、Error |
-| `metrics.MeterRegistry` | 指标注册：Counter、Gauge、Timer |
+| `cache.Cache` | 缓存操作：Get、Set、Del、Exists、TTL |
+| `config.Config` | 配置访问：Get、GetString、Set、Load、Save |
+| `log.Logger` | 日志记录：Debug、Info、Warn、Error |
+| `metrics.MeterRegistry` | 指标注册：Counter、Gauge、Histogram |
 
 ### 相关文档
 

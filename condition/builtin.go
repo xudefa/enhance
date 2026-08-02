@@ -32,8 +32,7 @@ func (p *propertyCondition) Matches(ctx ConditionContext) bool {
 		return false
 	}
 	if len(p.expectedValue) == 0 {
-		s, ok := val.(string)
-		return ok && s != ""
+		return val != nil && val != ""
 	}
 	return valAsString(val) == p.expectedValue[0]
 }

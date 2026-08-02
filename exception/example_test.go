@@ -110,3 +110,7 @@ func (m *mockResponseWriter) Write(data []byte) error {
 	m.body = data
 	return nil
 }
+
+func (m *mockResponseWriter) Context() context.Context {
+	return context.Background()
+}

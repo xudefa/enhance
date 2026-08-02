@@ -77,7 +77,7 @@ func FormatFailureAnalysis(analysis *FailureAnalysis) string {
 	if len(suggestions) > 0 {
 		sb.WriteString("\n\nSuggestions:\n")
 		for i, s := range suggestions {
-			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, s))
+			fmt.Fprintf(&sb, "  %d. %s\n", i+1, s)
 		}
 	}
 

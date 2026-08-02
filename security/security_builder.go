@@ -124,6 +124,13 @@ type builtSecurityConfig struct {
 	builder *SecurityBuilder
 }
 
+// Configure 根据构建器中的配置对 HttpSecurity 进行设置。
+//
+// 参数:
+//   - http: HttpSecurity 构建器实例
+//
+// 返回:
+//   - error: 配置过程中可能产生的错误
 func (c *builtSecurityConfig) Configure(http HttpSecurity) error {
 	if c.builder.authManager != nil {
 		http.AuthenticationManager(c.builder.authManager)

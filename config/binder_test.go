@@ -183,6 +183,88 @@ func TestBind_NonStructTarget(t *testing.T) {
 	}
 }
 
+func TestBind_IntOverflow(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig()
+	cfg.Set("small", 300)
+
+	type Config struct {
+		Small int8 `env:"small"`
+	}
+
+	var c Config
+	err := Bind(cfg, &c)
+	if err == nil {
+		t.Fatal("expected error for int8 overflow (300)")
+	}
+}
+
+func TestBind_Int16Overflow(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig()
+	cfg.Set("port", 70000)
+
+	type Config struct {
+		Port int16 `env:"port"`
+	}
+
+	var c Config
+	err := Bind(cfg, &c)
+	if err == nil {
+		t.Fatal("expected error for int16 overflow (70000)")
+	}
+}
+
+func TestBind_UintOverflow(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig()
+	cfg.Set("count", 500)
+
+	type Config struct {
+		Count uint8 `env:"count"`
+	}
+
+	var c Config
+	err := Bind(cfg, &c)
+	if err == nil {
+		t.Fatal("expected error for uint8 overflow (500)")
+	}
+}
+
+func TestBind_UintNegative(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig()
+	cfg.Set("count", -1)
+
+	type Config struct {
+		Count uint `env:"count"`
+	}
+
+	var c Config
+	err := Bind(cfg, &c)
+	if err == nil {
+		t.Fatal("expected error for negative value bound to uint")
+	}
+}
+
+func TestBind_InRangeStillWorks(t *testing.T) {
+	t.Parallel()
+	cfg := NewConfig()
+	cfg.Set("small", 100)
+
+	type Config struct {
+		Small int8 `env:"small"`
+	}
+
+	var c Config
+	if err := Bind(cfg, &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Small != 100 {
+		t.Errorf("expected 100, got %d", c.Small)
+	}
+}
+
 func TestValidate_Required(t *testing.T) {
 	t.Parallel()
 	type Config struct {

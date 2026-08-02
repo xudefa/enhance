@@ -12,12 +12,13 @@ import (
 // - 注册阶段（启动时）：写入 Bean 定义
 // - 运行阶段：高频读取 Bean 实例，极少写入
 type defaultBeanRegistry struct {
-	definitions  sync.Map   // beanID -> *BeanDef
-	instances    sync.Map   // beanID -> any (Singleton 实例缓存)
-	typeIndex    sync.Map   // reflect.Type -> []string (类型到 Bean ID 列表)
-	primaryIndex sync.Map   // reflect.Type -> string (类型到首选 Bean ID)
-	insertOrder  []string   // 记录注册顺序，用于保证销毁时的逆序
-	mu           sync.Mutex // 保护 insertOrder 和 typeIndex 更新
+	definitions     sync.Map     // beanID -> *BeanDef
+	instances       sync.Map     // beanID -> any (Singleton 实例缓存)
+	typeIndex       sync.Map     // reflect.Type -> []string (类型到 Bean ID 列表)
+	primaryIndex    sync.Map     // reflect.Type -> string (类型到首选 Bean ID)
+	customNameIndex sync.Map     // customName -> full beanID (自定义名称到完整 BeanID 的索引)
+	insertOrder     []string     // 记录注册顺序，用于保证销毁时的逆序
+	mu              sync.RWMutex // 保护 insertOrder 和 typeIndex 更新
 }
 
 // Register 注册 Bean 定义。
@@ -34,15 +35,40 @@ func (r *defaultBeanRegistry) Register(def BeanDef, beanID string) error {
 
 // registerInternal 注册 Bean 定义（内部方法，调用方必须已持有锁）。
 func (r *defaultBeanRegistry) registerInternal(def BeanDef, beanID string) error {
-	if _, exists := r.definitions.Load(beanID); exists {
+	// 重复注册检测：相同 ID 已存在
+	if existing, exists := r.definitions.Load(beanID); exists {
 		if def.Primary {
 			r.primaryIndex.Store(def.Type, beanID)
 		}
-		return nil
+		// 等价定义重复注册保持幂等，真正不同的定义返回错误
+		if sameBeanDefinition(existing.(*BeanDef), &def) {
+			return nil
+		}
+		return fmt.Errorf("%w: bean id %q already registered", ErrBeanAlreadyExists, beanID)
+	}
+
+	// 先验证自定义名称冲突，避免注册失败后留下半污染状态
+	if def.Name != "" {
+		if _, loaded := r.customNameIndex.Load(def.Name); loaded {
+			return fmt.Errorf("custom name %q already registered", def.Name)
+		}
+		if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
+			suffix := def.Name[idx+1:]
+			if _, loaded := r.customNameIndex.Load(suffix); loaded {
+				return fmt.Errorf("custom name %q already registered", suffix)
+			}
+		}
 	}
 
 	r.definitions.Store(beanID, &def)
 	r.insertOrder = append(r.insertOrder, beanID)
+
+	if def.Name != "" {
+		r.customNameIndex.Store(def.Name, beanID)
+		if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
+			r.customNameIndex.Store(def.Name[idx+1:], beanID)
+		}
+	}
 
 	var ids []string
 	if existing, ok := r.typeIndex.Load(def.Type); ok {
@@ -58,6 +84,42 @@ func (r *defaultBeanRegistry) registerInternal(def BeanDef, beanID string) error
 	}
 
 	return nil
+}
+
+// funcPtr 返回函数指针，nil 函数返回 0。
+func funcPtr(fn any) uintptr {
+	if fn == nil {
+		return 0
+	}
+	v := reflect.ValueOf(fn)
+	if v.Kind() != reflect.Func || v.IsNil() {
+		return 0
+	}
+	return v.Pointer()
+}
+
+// sameBeanDefinition 判断两个 Bean 定义是否等价（用于幂等重复注册检测）。
+//
+// 相同 beanID 的重复注册视为幂等操作，仅当定义存在实质差异时
+// （作用域、懒加载、回调存在性不同）才判定为不同的 Bean。
+// Name 不参与比较：RegisterBean 会将生成的 beanID 回填到 Name，
+// 而 RegisterInstance 的 Name 为空，两者表示同一 Bean。
+// Factory 无法可靠比较：闭包指针每次创建都不同（如实例包装工厂），
+// 框架约定同 ID 重复注册时以首次注册为准。
+func sameBeanDefinition(a, b *BeanDef) bool {
+	return a.Type == b.Type &&
+		normalizeScope(a.Scope) == normalizeScope(b.Scope) &&
+		a.Lazy == b.Lazy &&
+		funcPtr(a.Init) == funcPtr(b.Init) &&
+		funcPtr(a.Destroy) == funcPtr(b.Destroy)
+}
+
+// normalizeScope 规范化作用域：空值等同于 Singleton。
+func normalizeScope(s Scope) Scope {
+	if s == "" {
+		return Singleton
+	}
+	return s
 }
 
 // RegisterInstance 注册一个 Bean 实例，并设置为首选 Bean，作用域为 Singleton。
@@ -86,19 +148,12 @@ func (r *defaultBeanRegistry) GetDefinition(beanID string) (*BeanDef, bool) {
 		return def.(*BeanDef), true
 	}
 
-	// 尝试通过自定义名称模糊匹配
-	var foundDef *BeanDef
-	r.definitions.Range(func(key, value any) bool {
-		id := key.(string)
-		if strings.HasSuffix(id, "#"+beanID) {
-			foundDef = value.(*BeanDef)
-			return false
+	// 通过自定义名称索引查找 O(1)
+	if fullID, ok := r.customNameIndex.Load(beanID); ok {
+		fid := fullID.(string)
+		if def, ok := r.definitions.Load(fid); ok {
+			return def.(*BeanDef), true
 		}
-		return true
-	})
-
-	if foundDef != nil {
-		return foundDef, true
 	}
 
 	return nil, false
@@ -118,6 +173,9 @@ func (r *defaultBeanRegistry) SetInstance(beanID string, instance any) {
 //
 // 返回切片的副本，避免调用者修改内部数据结构。
 func (r *defaultBeanRegistry) GetByType(typ reflect.Type) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	if ids, ok := r.typeIndex.Load(typ); ok {
 		src := ids.([]string)
 		dst := make([]string, len(src))
@@ -142,18 +200,14 @@ func (r *defaultBeanRegistry) HasBean(beanID string) bool {
 		return true
 	}
 
-	// 尝试通过自定义名称模糊匹配
-	found := false
-	r.definitions.Range(func(key, _ any) bool {
-		id := key.(string)
-		// 检查是否以 "#name" 结尾
-		if strings.HasSuffix(id, "#"+beanID) {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
+	// 通过自定义名称索引查找 O(1)
+	if fullID, ok := r.customNameIndex.Load(beanID); ok {
+		fid := fullID.(string)
+		_, exists := r.definitions.Load(fid)
+		return exists
+	}
+
+	return false
 }
 
 // HasType 检查类型是否存在。
@@ -204,7 +258,9 @@ func (r *defaultBeanRegistry) BeanIDs() []string {
 func (r *defaultBeanRegistry) ListBeans() map[string]*BeanDef {
 	beanMap := make(map[string]*BeanDef)
 	r.definitions.Range(func(key, value any) bool {
-		beanMap[key.(string)] = value.(*BeanDef)
+		src := value.(*BeanDef)
+		copy := *src
+		beanMap[key.(string)] = &copy
 		return true
 	})
 	return beanMap
@@ -222,75 +278,18 @@ func (r *defaultBeanRegistry) ListInstances() map[string]any {
 
 // Clear 清空注册表。
 func (r *defaultBeanRegistry) Clear() {
-	r.definitions.Range(func(key, _ any) bool {
-		r.definitions.Delete(key)
-		return true
-	})
-	r.instances.Range(func(key, _ any) bool {
-		r.instances.Delete(key)
-		return true
-	})
-	r.typeIndex.Range(func(key, _ any) bool {
-		r.typeIndex.Delete(key)
-		return true
-	})
-	r.primaryIndex.Range(func(key, _ any) bool {
-		r.primaryIndex.Delete(key)
-		return true
-	})
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.definitions = sync.Map{}
+	r.instances = sync.Map{}
+	r.typeIndex = sync.Map{}
+	r.primaryIndex = sync.Map{}
+	r.customNameIndex = sync.Map{}
 	r.insertOrder = nil
-	r.mu.Unlock()
-}
-
-// defaultBeanIDGenerator Bean ID 生成器实现。
-type defaultBeanIDGenerator struct{}
-
-// Generate 生成 Bean ID。
-// 格式：包路径.类型名#自定义名称
-func (g *defaultBeanIDGenerator) Generate(pkgPath, typeName, customName string) string {
-	var sb strings.Builder
-	sb.WriteString(pkgPath)
-	sb.WriteString(".")
-	sb.WriteString(typeName)
-	if customName != "" {
-		sb.WriteString("#")
-		sb.WriteString(customName)
-	}
-	return sb.String()
-}
-
-// Parse 解析 Bean ID。
-func (g *defaultBeanIDGenerator) Parse(beanID string) (pkgPath, typeName, customName string) {
-	// 解析自定义名称
-	parts := strings.SplitN(beanID, "#", 2)
-	mainPart := parts[0]
-	if len(parts) > 1 {
-		customName = parts[1]
-	}
-
-	// 解析包路径和类型名
-	lastDot := strings.LastIndex(mainPart, ".")
-	if lastDot == -1 {
-		return "", mainPart, customName
-	}
-
-	pkgPath = mainPart[:lastDot]
-	typeName = mainPart[lastDot+1:]
-	return pkgPath, typeName, customName
-}
-
-// String 返回 Bean ID 的可读表示。
-func (g *defaultBeanIDGenerator) String(beanID string) string {
-	pkg, typ, name := g.Parse(beanID)
-	if name != "" {
-		return fmt.Sprintf("%s.%s#%s", pkg, typ, name)
-	}
-	return fmt.Sprintf("%s.%s", pkg, typ)
 }
 
 // NewBeanRegistry 创建 Bean 注册表实例。
 func NewBeanRegistry() BeanRegistry {
 	return &defaultBeanRegistry{}
-
 }

@@ -15,11 +15,15 @@ func (c *standardEvaluationContextImpl) SetRootObject(root any) {
 }
 
 func (c *standardEvaluationContextImpl) GetVariable(name string) (any, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	v, ok := c.variables[name]
 	return v, ok
 }
 
 func (c *standardEvaluationContextImpl) SetVariable(name string, value any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.variables[name] = value
 }
 
@@ -57,6 +61,10 @@ func (a *reflectPropertyAccessorImpl) GetProperty(target any, name string) (any,
 		return nil, fmt.Errorf("property %s not found", name)
 	}
 
+	if !field.CanInterface() {
+		return nil, fmt.Errorf("property %s is not exported", name)
+	}
+
 	return field.Interface(), nil
 }
 
@@ -83,6 +91,32 @@ func (a *reflectPropertyAccessorImpl) SetProperty(target any, name string, value
 		return fmt.Errorf("property %s is not settable", name)
 	}
 
-	field.Set(reflect.ValueOf(value))
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() {
+		// nil 值只能赋给可空类型
+		if isNilable(field.Type()) {
+			field.Set(reflect.Zero(field.Type()))
+			return nil
+		}
+		return fmt.Errorf("property %s: cannot set nil to %s", name, field.Type())
+	}
+
+	if !rv.Type().AssignableTo(field.Type()) {
+		if !rv.Type().ConvertibleTo(field.Type()) {
+			return fmt.Errorf("property %s: cannot set value of type %s to %s", name, rv.Type(), field.Type())
+		}
+		rv = rv.Convert(field.Type())
+	}
+
+	field.Set(rv)
 	return nil
+}
+
+// isNilable 判断类型是否为可空类型（指针、切片、map、通道、函数、接口）。
+func isNilable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface:
+		return true
+	}
+	return false
 }

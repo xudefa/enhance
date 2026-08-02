@@ -12,7 +12,7 @@ import (
 func BenchmarkRouter_ServeHTTP_StaticRoute(b *testing.B) {
 	router := NewRouter()
 	router.GET("/api/users", func(ctx mvc.Context) {
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
@@ -31,7 +31,7 @@ func BenchmarkRouter_ServeHTTP_PathParams(b *testing.B) {
 	router.GET("/api/users/{id}/posts/{postId}", func(ctx mvc.Context) {
 		_ = ctx.PathParam("id")
 		_ = ctx.PathParam("postId")
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users/123/posts/456", nil)
@@ -52,14 +52,14 @@ func BenchmarkRouter_ServeHTTP_MultipleRoutes(b *testing.B) {
 	for i := 0; i < 50; i++ {
 		path := "/api/resource" + string(rune('0'+i/10)) + string(rune('0'+i%10))
 		router.GET(path, func(ctx mvc.Context) {
-			ctx.JSON(200, map[string]string{"status": "ok"})
+			_ = ctx.JSON(200, map[string]string{"status": "ok"})
 		})
 	}
 
 	// 添加带参数的路由
 	router.GET("/api/users/{id}", func(ctx mvc.Context) {
 		_ = ctx.PathParam("id")
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users/999", nil)
@@ -102,7 +102,7 @@ func BenchmarkRouter_MiddlewareChain(b *testing.B) {
 	}
 
 	router.GET("/api/test", func(ctx mvc.Context) {
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
@@ -120,7 +120,7 @@ func BenchmarkRouter_ConcurrentRequests(b *testing.B) {
 	router := NewRouter()
 	router.GET("/api/users/{id}", func(ctx mvc.Context) {
 		_ = ctx.PathParam("id")
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	b.ResetTimer()

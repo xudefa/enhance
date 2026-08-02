@@ -89,9 +89,29 @@ func (v *TagValidator) Validate(obj any) error {
 	return nil
 }
 
+// splitRules 分割验证规则，保留 regexp 规则中的逗号
+//
+// 正则表达式可能包含逗号（如 regexp=^\d{1,3}$），不能直接按逗号分割，
+// 否则正则表达式会被拆坏。约定：regexp= 规则必须放在标签最后，
+// 其值将占用剩余所有内容。
+func splitRules(tag string) []string {
+	parts := strings.Split(tag, ",")
+	rules := make([]string, 0, len(parts))
+	for i, part := range parts {
+		rule := strings.TrimSpace(part)
+		if strings.HasPrefix(rule, "regexp=") && i < len(parts)-1 {
+			rule += "," + strings.Join(parts[i+1:], ",")
+			rules = append(rules, rule)
+			break
+		}
+		rules = append(rules, rule)
+	}
+	return rules
+}
+
 // validateField 验证单个字段，解析验证规则并执行验证
 func (v *TagValidator) validateField(field reflect.Value, tag, fieldName string, obj any) []ValidationError {
-	rules := strings.Split(tag, ",")
+	rules := splitRules(tag)
 	errs := make([]ValidationError, 0, len(rules))
 
 	isRequired := false
@@ -130,7 +150,15 @@ func (v *TagValidator) validateField(field reflect.Value, tag, fieldName string,
 		if strings.HasPrefix(rule, "field") {
 			err := v.validateCrossField(field, rule, fieldName, obj)
 			if err != nil {
-				errs = append(errs, err.(ValidationError))
+				if ve, ok := err.(ValidationError); ok {
+					errs = append(errs, ve)
+				} else {
+					errs = append(errs, ValidationError{
+						Field:   fieldName,
+						Message: err.Error(),
+						Value:   getFieldValueUnsafe(field),
+					})
+				}
 			}
 			continue
 		}

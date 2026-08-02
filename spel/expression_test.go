@@ -177,7 +177,7 @@ func TestEvaluate_Arithmetic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != int64(15) {
+	if val != float64(15) {
 		t.Errorf("expected 15, got %v", val)
 	}
 }

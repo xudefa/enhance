@@ -59,6 +59,7 @@ type RateLimiterAutoConfiguration struct {
 	logger  log.Logger         // 日志记录器
 	limiter *rate.Limiter      // 限流器实例
 	config  *RateLimiterConfig // 限流器配置信息
+	ctx     context.Context    // 应用上下文
 }
 
 // Configure 配置限流器。
@@ -76,10 +77,13 @@ func (c *RateLimiterAutoConfiguration) Configure(ctx boot.ApplicationContext) er
 	// 加载配置
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 RateLimiter 配置失败: %w", err)
+		return fmt.Errorf("failed to load RateLimiter config: %w", err)
 	}
 
 	c.config = cfg
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
 
 	// 创建限流器实例
 	// rate: 每秒允许的请求数
@@ -88,10 +92,10 @@ func (c *RateLimiterAutoConfiguration) Configure(ctx boot.ApplicationContext) er
 
 	// 注册限流器实例到 IoC 容器
 	if err := ctx.Container().RegisterInstance(c.limiter, reflect.TypeFor[*rate.Limiter]()); err != nil {
-		return fmt.Errorf("注册 RateLimiter 实例失败: %w", err)
+		return fmt.Errorf("failed to register RateLimiter instance: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "RateLimiter 限流器已配置",
+	c.logger.Info(ctx.Context(), "RateLimiter configured",
 		log.KeyValue{Key: "rate", Value: cfg.Rate},
 		log.KeyValue{Key: "burst", Value: cfg.Burst},
 	)
@@ -125,7 +129,7 @@ func (c *RateLimiterAutoConfiguration) Allow() bool {
 //
 // 使用示例：
 //
-//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+//	ctx, cancel := context.WithTimeout(ctx.Context(), 5*time.Second)
 //	defer cancel()
 //	err := limiter.Wait(ctx)
 func (c *RateLimiterAutoConfiguration) Wait(ctx context.Context) error {
@@ -140,7 +144,7 @@ func (c *RateLimiterAutoConfiguration) Wait(ctx context.Context) error {
 //	limiter.SetRate(50.0) // 调整为每秒 50 个请求
 func (c *RateLimiterAutoConfiguration) SetRate(r float64) {
 	c.limiter.SetLimit(rate.Limit(r))
-	c.logger.Info(context.Background(), "RateLimiter 速率已更新",
+	c.logger.Info(c.ctx, "RateLimiter rate updated",
 		log.KeyValue{Key: "rate", Value: r},
 	)
 }
@@ -153,7 +157,7 @@ func (c *RateLimiterAutoConfiguration) SetRate(r float64) {
 //	limiter.SetBurst(100) // 调整为最大突发 100 个请求
 func (c *RateLimiterAutoConfiguration) SetBurst(b int) {
 	c.limiter.SetBurst(b)
-	c.logger.Info(context.Background(), "RateLimiter 突发值已更新",
+	c.logger.Info(c.ctx, "RateLimiter burst updated",
 		log.KeyValue{Key: "burst", Value: b},
 	)
 }
@@ -200,7 +204,7 @@ func (c *RateLimiterAutoConfiguration) loadConfig(env *environment.Environment) 
 	}
 
 	if err := env.BindPrefix("ratelimiter", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 RateLimiter 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind RateLimiter config: %w", err)
 	}
 
 	return cfg, nil

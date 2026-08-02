@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/xudefa/enhance/condition"
@@ -184,4 +185,40 @@ func newMockStarterWithCondition(name string, cond condition.Condition) *mockSta
 
 func (m *mockStarterWithCondition) GetCondition() condition.Condition {
 	return m.cond
+}
+
+// mockFailingStarter 的 Start 总是失败，用于验证失败后重试
+type mockFailingStarter struct {
+	*mockStarter
+}
+
+func (m *mockFailingStarter) Start(ctx ApplicationContext) error {
+	m.started.Store(true)
+	return errors.New("boom")
+}
+
+func TestBoot_Start_RetryAfterFailure(t *testing.T) {
+	s := newMockStarter("failing")
+	failing := &mockFailingStarter{mockStarter: s}
+
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
+	t.Cleanup(func() { globalStarterRegistry.Store(orig) })
+	testReg.Register(failing)
+
+	boot, err := NewApplication(WithAppName("test"))
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+
+	// 第一次启动失败
+	if err := boot.Start(); err == nil {
+		t.Fatal("first Start() should fail")
+	}
+
+	// 重试不应是 no-op：若 started 未重置，第二次 Start() 会直接返回 nil
+	if err := boot.Start(); err == nil {
+		t.Fatal("retry Start() should also fail (must not be a no-op after previous failure)")
+	}
 }

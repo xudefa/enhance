@@ -1,9 +1,12 @@
 // Package spel 提供 Spring Expression Language (SpEL) 表达式支持，用于 enhance 框架。
 package spel
 
+import "sync"
+
 // standardEvaluationContextImpl EvaluationContext 接口的默认实现。
 type standardEvaluationContextImpl struct {
 	rootObject       any
+	mu               sync.RWMutex
 	variables        map[string]any
 	propertyAccessor PropertyAccessor
 }
@@ -45,6 +48,7 @@ type complexExpressionImpl struct {
 
 // interceptorChainImpl MethodInterceptor 接口的拦截器链实现。
 type interceptorChainImpl struct {
+	mu           sync.Mutex
 	interceptors []MethodInterceptor
 	index        int
 	invocation   MethodInvocation

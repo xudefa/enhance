@@ -107,6 +107,20 @@ func MatchClassMethod(classMatcher ClassMatcher, methodMatcher MethodMatcher) Po
 //	// 拦截所有以 Do 开头的方法
 //	aop.MatchByName("Do*")
 func MatchByName(name string) PointCut {
+	// 正则元字符优先判断，避免 glob 转换破坏正则表达式。
+	// 例如 "foo(bar)?baz" 含 ? 会被误当作 glob，实际应作为正则处理。
+	if strings.ContainsAny(name, ".^$()+[]{}\\|") {
+		re, err := regexp.Compile(name)
+		if err == nil {
+			return &pointCutImpl{
+				methodMatcher: func(m reflect.Method) bool {
+					return re.MatchString(m.Name)
+				},
+				regexPattern: name,
+				regex:        re,
+			}
+		}
+	}
 	if strings.ContainsAny(name, "*?") {
 		pattern := "^" + strings.ReplaceAll(strings.ReplaceAll(name, "*", ".*"), "?", ".") + "$"
 		re, err := regexp.Compile(pattern)
@@ -122,18 +136,6 @@ func MatchByName(name string) PointCut {
 			},
 			regexPattern: name,
 			regex:        re,
-		}
-	}
-	if strings.ContainsAny(name, "^$+[]{}|\\()") {
-		re, err := regexp.Compile(name)
-		if err == nil {
-			return &pointCutImpl{
-				methodMatcher: func(m reflect.Method) bool {
-					return re.MatchString(m.Name)
-				},
-				regexPattern: name,
-				regex:        re,
-			}
 		}
 	}
 	return &pointCutImpl{
@@ -510,5 +512,3 @@ func ComposeOr(pointcuts ...PointCut) PointCut {
 		and:       false,
 	}
 }
-
-

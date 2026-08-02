@@ -304,9 +304,9 @@ func TestCountByType(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "bean2")
-	reg.Register(def3, "strBean")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "bean2")
+	_ = reg.Register(def3, "strBean")
 
 	if reg.CountByType(typ) != 2 {
 		t.Errorf("Expected 2 TestBean, got %d", reg.CountByType(typ))
@@ -336,8 +336,8 @@ func TestTypes(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "strBean")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "strBean")
 
 	types := reg.Types()
 	if len(types) != 2 {
@@ -363,8 +363,8 @@ func TestBeanIDs(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "bean2")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "bean2")
 
 	ids := reg.BeanIDs()
 	if len(ids) != 2 {
@@ -419,7 +419,7 @@ func TestConcurrentRegister(t *testing.T) {
 				Name:  beanID,
 				Scope: Singleton,
 			}
-			reg.Register(def, beanID)
+			_ = reg.Register(def, beanID)
 		}(i)
 	}
 	wg.Wait()
@@ -441,7 +441,7 @@ func TestConcurrentGetAndSet(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def, "testBean")
+	_ = reg.Register(def, "testBean")
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -597,7 +597,7 @@ func TestHasBeanWithStandardFormat(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def, fullID)
+	_ = reg.Register(def, fullID)
 
 	// 测试部分匹配
 	if !reg.HasBean("custom") {
@@ -623,8 +623,8 @@ func TestClearWithMultipleBeans(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "bean2")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "bean2")
 
 	reg.SetInstance("bean1", &TestBean{Value: "1"})
 	reg.SetInstance("bean2", &TestBean{Value: "2"})
@@ -670,8 +670,8 @@ func TestRegisterDuplicateWithPrimary(t *testing.T) {
 		Primary: true,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "bean1")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "bean1")
 
 	// bean1 应该成为 primary
 	primaryID, ok := reg.GetPrimaryByType(typ)
@@ -709,9 +709,9 @@ func TestGetByTypeReturnsCorrectList(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "bean1")
-	reg.Register(def2, "bean2")
-	reg.Register(def3, "strBean")
+	_ = reg.Register(def1, "bean1")
+	_ = reg.Register(def2, "bean2")
+	_ = reg.Register(def3, "strBean")
 
 	ids := reg.GetByType(typ)
 	if len(ids) != 2 {
@@ -727,84 +727,6 @@ func TestGetByTypeReturnsCorrectList(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected to find bean1 or bean2, got %v", ids)
-	}
-}
-
-// ==================== BeanIDGenerator 测试 ====================
-
-func TestGenerateBeanID(t *testing.T) {
-	t.Parallel()
-	gen := &defaultBeanIDGenerator{}
-
-	// 测试无自定义名称
-	id := gen.Generate("github.com/example", "TestBean", "")
-	expected := "github.com/example.TestBean"
-	if id != expected {
-		t.Errorf("Expected %s, got %s", expected, id)
-	}
-
-	// 测试有自定义名称
-	id = gen.Generate("github.com/example", "TestBean", "myBean")
-	expected = "github.com/example.TestBean#myBean"
-	if id != expected {
-		t.Errorf("Expected %s, got %s", expected, id)
-	}
-}
-
-func TestParseBeanID(t *testing.T) {
-	t.Parallel()
-	gen := &defaultBeanIDGenerator{}
-
-	// 测试完整格式
-	pkg, typ, name := gen.Parse("github.com/example.TestBean#myBean")
-	if pkg != "github.com/example" {
-		t.Errorf("Expected pkg 'github.com/example', got '%s'", pkg)
-	}
-	if typ != "TestBean" {
-		t.Errorf("Expected type 'TestBean', got '%s'", typ)
-	}
-	if name != "myBean" {
-		t.Errorf("Expected name 'myBean', got '%s'", name)
-	}
-
-	// 测试无自定义名称
-	pkg, typ, name = gen.Parse("github.com/example.TestBean")
-	if pkg != "github.com/example" {
-		t.Errorf("Expected pkg 'github.com/example', got '%s'", pkg)
-	}
-	if typ != "TestBean" {
-		t.Errorf("Expected type 'TestBean', got '%s'", typ)
-	}
-	if name != "" {
-		t.Errorf("Expected empty name, got '%s'", name)
-	}
-
-	// 测试无包路径
-	pkg, typ, name = gen.Parse("TestBean")
-	if pkg != "" {
-		t.Errorf("Expected empty pkg, got '%s'", pkg)
-	}
-	if typ != "TestBean" {
-		t.Errorf("Expected type 'TestBean', got '%s'", typ)
-	}
-}
-
-func TestStringBeanID(t *testing.T) {
-	t.Parallel()
-	gen := &defaultBeanIDGenerator{}
-
-	// 测试有自定义名称
-	result := gen.String("github.com/example.TestBean#myBean")
-	expected := "github.com/example.TestBean#myBean"
-	if result != expected {
-		t.Errorf("Expected %s, got %s", expected, result)
-	}
-
-	// 测试无自定义名称
-	result = gen.String("github.com/example.TestBean")
-	expected = "github.com/example.TestBean"
-	if result != expected {
-		t.Errorf("Expected %s, got %s", expected, result)
 	}
 }
 
@@ -829,8 +751,8 @@ func TestGetDefinitionWithMultipleCustomNames(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "github.com/pkg1.TestBean#myBean")
-	reg.Register(def2, "github.com/pkg2.TestBean#myBean")
+	_ = reg.Register(def1, "github.com/pkg1.TestBean#myBean")
+	_ = reg.Register(def2, "github.com/pkg2.TestBean#myBean")
 
 	// 应该能找到其中一个（取决于遍历顺序）
 	_, ok := reg.GetDefinition("myBean")
@@ -858,8 +780,8 @@ func TestHasBeanWithMultipleMatches(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def1, "github.com/pkg1.TestBean#myBean")
-	reg.Register(def2, "github.com/pkg2.TestBean#myBean")
+	_ = reg.Register(def1, "github.com/pkg1.TestBean#myBean")
+	_ = reg.Register(def2, "github.com/pkg2.TestBean#myBean")
 
 	// HasBean 应该返回 true
 	if !reg.HasBean("myBean") {
@@ -874,9 +796,9 @@ func TestBeanIDsOrder(t *testing.T) {
 	typ := reflect.TypeOf((*TestBean)(nil))
 
 	// 按特定顺序注册
-	reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
-	reg.Register(BeanDef{Type: typ, Name: "bean2", Scope: Singleton}, "bean2")
-	reg.Register(BeanDef{Type: typ, Name: "bean3", Scope: Singleton}, "bean3")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean2", Scope: Singleton}, "bean2")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean3", Scope: Singleton}, "bean3")
 
 	ids := reg.BeanIDs()
 
@@ -896,7 +818,7 @@ func TestBeanIDsReturnsCopy(t *testing.T) {
 
 	typ := reflect.TypeOf((*TestBean)(nil))
 
-	reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
 
 	ids1 := reg.BeanIDs()
 	ids1[0] = "modified"
@@ -913,7 +835,7 @@ func TestClearAfterRegister(t *testing.T) {
 
 	typ := reflect.TypeOf((*TestBean)(nil))
 
-	reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
 	reg.SetInstance("bean1", &TestBean{Value: "test"})
 
 	// 验证注册成功
@@ -965,7 +887,7 @@ func TestRegisterWithPrimaryOnDuplicate(t *testing.T) {
 		Name:  "bean1",
 		Scope: Singleton,
 	}
-	reg.Register(def1, "bean1")
+	_ = reg.Register(def1, "bean1")
 
 	// 重复注册，标记为 Primary
 	def2 := BeanDef{
@@ -974,7 +896,7 @@ func TestRegisterWithPrimaryOnDuplicate(t *testing.T) {
 		Scope:   Singleton,
 		Primary: true,
 	}
-	reg.Register(def2, "bean1")
+	_ = reg.Register(def2, "bean1")
 
 	// 应该成为 primary
 	primaryID, ok := reg.GetPrimaryByType(typ)
@@ -999,7 +921,7 @@ func TestRegisterWithoutPrimaryWhenNoPrimaryExists(t *testing.T) {
 		Name:  "bean1",
 		Scope: Singleton,
 	}
-	reg.Register(def, "bean1")
+	_ = reg.Register(def, "bean1")
 
 	// 第一个 bean 应该自动成为 primary
 	primaryID, ok := reg.GetPrimaryByType(typ)
@@ -1029,7 +951,7 @@ func TestConcurrentBeanIDs(t *testing.T) {
 				Name:  beanID,
 				Scope: Singleton,
 			}
-			reg.Register(def, beanID)
+			_ = reg.Register(def, beanID)
 		}(i)
 	}
 	wg.Wait()
@@ -1047,7 +969,7 @@ func TestTypesAfterClear(t *testing.T) {
 
 	typ := reflect.TypeOf((*TestBean)(nil))
 
-	reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
+	_ = reg.Register(BeanDef{Type: typ, Name: "bean1", Scope: Singleton}, "bean1")
 
 	// 验证 types 存在
 	types := reg.Types()
@@ -1077,7 +999,7 @@ func TestGetDefinitionWithEmptyCustomName(t *testing.T) {
 		Scope: Singleton,
 	}
 
-	reg.Register(def, "github.com/example.TestBean")
+	_ = reg.Register(def, "github.com/example.TestBean")
 
 	_, ok := reg.GetDefinition("github.com/example.TestBean")
 	if !ok {

@@ -4,7 +4,9 @@ package boot
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/xudefa/enhance/condition"
 )
@@ -232,6 +234,7 @@ func WithAfter(configs ...string) AutoConfigurationOption {
 type AutoConfigRegistry struct {
 	mu      sync.RWMutex
 	entries []AutoConfigEntry
+	counter atomic.Int64
 }
 
 var globalRegistry = NewAutoConfigRegistry()
@@ -254,7 +257,7 @@ func RegisterAutoConfig(config AutoConfiguration, conditions ...condition.Condit
 	globalRegistry.Add(AutoConfigEntry{
 		Config:     config,
 		Conditions: conditions,
-		Order:      len(globalRegistry.GetAll()),
+		Order:      int(globalRegistry.counter.Add(1)),
 	})
 }
 
@@ -262,7 +265,7 @@ func RegisterAutoConfig(config AutoConfiguration, conditions ...condition.Condit
 func RegisterAutoConfigWith(config AutoConfiguration, opts ...AutoConfigurationOption) {
 	entry := AutoConfigEntry{
 		Config: config,
-		Order:  len(globalRegistry.GetAll()),
+		Order:  int(globalRegistry.counter.Add(1)),
 	}
 	for _, opt := range opts {
 		opt(&entry)
@@ -272,6 +275,9 @@ func RegisterAutoConfigWith(config AutoConfiguration, opts ...AutoConfigurationO
 
 // Add 添加自动配置条目
 func (r *AutoConfigRegistry) Add(entry AutoConfigEntry) {
+	if entry.Config == nil {
+		panic("boot: auto config must not be nil")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entries = append(r.entries, entry)
@@ -314,14 +320,14 @@ func (r *AutoConfigRegistry) GetMatchingWithExclude(ctx condition.ConditionConte
 	// 构建排除集合
 	excludedSet := make(map[string]bool)
 	for _, name := range excluded {
-		excludedSet[name] = true
+		excludedSet[stripPackagePath(name)] = true
 	}
 
 	// 第一遍：收集覆盖目标
 	overrideTargets := make(map[string]bool)
 	for _, entry := range r.entries {
 		if entry.Override && entry.OverrideTarget != "" {
-			overrideTargets[entry.OverrideTarget] = true
+			overrideTargets[stripPackagePath(entry.OverrideTarget)] = true
 		}
 	}
 
@@ -329,7 +335,7 @@ func (r *AutoConfigRegistry) GetMatchingWithExclude(ctx condition.ConditionConte
 	matched := make([]AutoConfigEntry, 0, len(r.entries))
 	for _, entry := range r.entries {
 		// 检查是否被覆盖
-		configType := reflect.TypeOf(entry.Config).String()
+		configType := stripPackagePath(reflect.TypeOf(entry.Config).String())
 		if overrideTargets[configType] {
 			continue // 被覆盖的配置跳过
 		}
@@ -360,7 +366,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 	// 构建配置类型名到索引的映射
 	typeNameToIndex := make(map[string]int)
 	for i, entry := range entries {
-		typeName := reflect.TypeOf(entry.Config).String()
+		typeName := stripPackagePath(reflect.TypeOf(entry.Config).String())
 		typeNameToIndex[typeName] = i
 	}
 
@@ -376,7 +382,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 
 		// 处理 Before：当前配置应该在指定配置之前执行
 		for _, beforeTarget := range entry.Before {
-			if targetIdx, exists := typeNameToIndex[beforeTarget]; exists {
+			if targetIdx, exists := typeNameToIndex[stripPackagePath(beforeTarget)]; exists {
 				adjList[i] = append(adjList[i], targetIdx)
 				inDegree[targetIdx]++
 			}
@@ -384,7 +390,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 
 		// 处理 After：当前配置应该在指定配置之后执行
 		for _, afterTarget := range entry.After {
-			if targetIdx, exists := typeNameToIndex[afterTarget]; exists {
+			if targetIdx, exists := typeNameToIndex[stripPackagePath(afterTarget)]; exists {
 				adjList[targetIdx] = append(adjList[targetIdx], i)
 				inDegree[i]++
 			}
@@ -401,7 +407,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 	}
 
 	// 对初始队列按 Order 排序
-	sort.Slice(queue, func(i, j int) bool {
+	sort.SliceStable(queue, func(i, j int) bool {
 		return entries[queue[i]].Order < entries[queue[j]].Order
 	})
 
@@ -423,7 +429,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 
 		// 对新就绪的节点按 Order 排序并加入队列
 		if len(newReady) > 0 {
-			sort.Slice(newReady, func(i, j int) bool {
+			sort.SliceStable(newReady, func(i, j int) bool {
 				return entries[newReady[i]].Order < entries[newReady[j]].Order
 			})
 			queue = append(queue, newReady...)
@@ -432,7 +438,7 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 
 	// 如果存在循环依赖，回退到按 Order 排序
 	if len(result) != len(entries) {
-		sort.Slice(entries, func(i, j int) bool {
+		sort.SliceStable(entries, func(i, j int) bool {
 			return entries[i].Order < entries[j].Order
 		})
 		return
@@ -457,4 +463,14 @@ func (r *AutoConfigRegistry) matchesAll(ctx condition.ConditionContext, conditio
 // GlobalRegistry 返回全局注册表
 func GlobalRegistry() *AutoConfigRegistry {
 	return globalRegistry
+}
+
+// stripPackagePath 移除类型名中的包路径，仅保留类型名（含指针前缀）。
+//
+// 例如 "*github.com/xudefa/enhance/examples/gin.GinAutoConfiguration" → "*GinAutoConfiguration"。
+func stripPackagePath(typeName string) string {
+	if idx := strings.LastIndex(typeName, "."); idx >= 0 {
+		return typeName[idx+1:]
+	}
+	return typeName
 }

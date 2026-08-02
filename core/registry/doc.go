@@ -27,7 +27,14 @@
 package registry
 
 import (
+	"errors"
 	"reflect"
+)
+
+// 注册错误。
+var (
+	// ErrBeanAlreadyExists Bean 已存在（相同 ID 下注册了不同的定义）。
+	ErrBeanAlreadyExists = errors.New("bean already exists")
 )
 
 // Scope 定义 Bean 的作用域类型。

@@ -22,7 +22,11 @@ func (s *singletonScope) Get(beanID string, factory func(c ...any) (any, error))
 
 	// 慢速路径：使用 per-beanID 锁避免并发创建
 	lock, _ := s.mu.LoadOrStore(beanID, &sync.Mutex{})
-	mu := lock.(*sync.Mutex)
+	mu, ok := lock.(*sync.Mutex)
+	if !ok {
+		mu = &sync.Mutex{}
+		s.mu.Store(beanID, mu)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -45,12 +49,17 @@ func (s *singletonScope) Get(beanID string, factory func(c ...any) (any, error))
 // Remove 移除 Bean 实例。
 func (s *singletonScope) Remove(beanID string) {
 	s.instances.Delete(beanID)
+	s.mu.Delete(beanID)
 }
 
 // Clear 清空所有实例。
 func (s *singletonScope) Clear() {
 	s.instances.Range(func(key, value any) bool {
 		s.instances.Delete(key)
+		return true
+	})
+	s.mu.Range(func(key, value any) bool {
+		s.mu.Delete(key)
 		return true
 	})
 }
@@ -87,7 +96,8 @@ func (r *defaultScopeRegistry) Register(name string, scope Scope) {
 // Get 获取指定名称的作用域。
 func (r *defaultScopeRegistry) Get(name string) Scope {
 	if scope, ok := r.scopes.Load(name); ok {
-		return scope.(Scope)
+		s, _ := scope.(Scope)
+		return s
 	}
 	return nil
 }

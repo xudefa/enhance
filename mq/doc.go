@@ -47,6 +47,7 @@
 package mq
 
 import (
+	"errors"
 	"sync/atomic"
 	"time"
 )
@@ -58,6 +59,9 @@ const (
 	// DefaultReceiveTimeout 默认接收超时时间。
 	DefaultReceiveTimeout = 1 * time.Second
 )
+
+// ErrStopped 队列已停止的错误。
+var ErrStopped = errors.New("queue has been stopped")
 
 // Message 消息对象。
 //
@@ -114,11 +118,12 @@ type Queue interface {
 	Size() int
 }
 
-// BaseQueue 基础队列结构。
+// BaseQueue 基础队列结构，提供队列的公共字段和状态管理。
 type BaseQueue struct {
 	name            string
 	maxRetries      int
 	deadLetterQueue Queue
 	consuming       atomic.Bool
+	stopped         atomic.Bool
 	stopChan        chan struct{}
 }

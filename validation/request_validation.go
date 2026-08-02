@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// ValidationRule 验证规则
+// ValidationRule 验证规则。
 type ValidationRule struct {
 	// Field 字段名称
 	Field string `json:"field"`
@@ -42,7 +42,7 @@ type ValidationRule struct {
 	In []string `json:"in,omitempty"`
 }
 
-// ValidationConfig 验证配置
+// ValidationConfig 验证配置。
 type ValidationConfig struct {
 	// Rules 验证规则
 	Rules []ValidationRule `json:"rules"`
@@ -54,7 +54,7 @@ type ValidationConfig struct {
 	FailFast bool `json:"fail_fast"`
 }
 
-// RuleValidationError 验证错误
+// RuleValidationError 验证错误。
 type RuleValidationError struct {
 	// Field 字段名称
 	Field string `json:"field"`
@@ -66,7 +66,7 @@ type RuleValidationError struct {
 	Type string `json:"type"`
 }
 
-// RuleValidationResult 验证结果
+// RuleValidationResult 验证结果。
 type RuleValidationResult struct {
 	// Valid 是否通过验证
 	Valid bool `json:"valid"`
@@ -75,7 +75,7 @@ type RuleValidationResult struct {
 	Errors []RuleValidationError `json:"errors,omitempty"`
 }
 
-// RequestValidator HTTP 请求验证器
+// RequestValidator HTTP 请求验证器。
 type RequestValidator struct {
 	config ValidationConfig
 	regexs map[string]*regexp.Regexp
@@ -103,12 +103,12 @@ func NewRequestValidator(config ValidationConfig) (*RequestValidator, error) {
 	return v, nil
 }
 
-// GetConfig 获取验证配置
+// GetConfig 获取验证配置。
 func (v *RequestValidator) GetConfig() ValidationConfig {
 	return v.config
 }
 
-// Validate 验证请求
+// Validate 验证请求。
 func (v *RequestValidator) Validate(req *http.Request) *RuleValidationResult {
 	result := &RuleValidationResult{Valid: true}
 
@@ -288,7 +288,7 @@ func (v *RequestValidator) validateRule(rule ValidationRule, value string) error
 	return nil
 }
 
-// MessageOrDefault 获取自定义消息或默认消息
+// MessageOrDefault 获取自定义消息或默认消息。
 func (r ValidationRule) MessageOrDefault(format string, args ...any) string {
 	if r.Message != "" {
 		return r.Message
@@ -296,7 +296,7 @@ func (r ValidationRule) MessageOrDefault(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
-// ValidateJSONBody 验证 JSON body
+// ValidateJSONBody 验证 JSON body。
 func ValidateJSONBody(body []byte, rules []ValidationRule) *RuleValidationResult {
 	result := &RuleValidationResult{Valid: true}
 
@@ -329,9 +329,16 @@ func ValidateJSONBody(body []byte, rules []ValidationRule) *RuleValidationResult
 				valueStr = fmt.Sprintf("%v", v)
 			}
 		}
-
-		// 复用验证逻辑
-		v := &RequestValidator{config: ValidationConfig{Rules: []ValidationRule{rule}}}
+		v, err := NewRequestValidator(ValidationConfig{Rules: []ValidationRule{rule}})
+		if err != nil {
+			result.Valid = false
+			result.Errors = append(result.Errors, RuleValidationError{
+				Field:   rule.Field,
+				Message: err.Error(),
+				Type:    "config",
+			})
+			continue
+		}
 		if err := v.validateRule(rule, valueStr); err != nil {
 			result.Valid = false
 			result.Errors = append(result.Errors, RuleValidationError{
@@ -345,7 +352,7 @@ func ValidateJSONBody(body []byte, rules []ValidationRule) *RuleValidationResult
 	return result
 }
 
-// ValidateHeaders 快速验证请求头
+// ValidateHeaders 快速验证请求头。
 func ValidateHeaders(req *http.Request, rules []ValidationRule) *RuleValidationResult {
 	v, err := NewRequestValidator(ValidationConfig{
 		Source:   "header",
@@ -365,7 +372,7 @@ func ValidateHeaders(req *http.Request, rules []ValidationRule) *RuleValidationR
 	return v.Validate(req)
 }
 
-// ValidateQuery 快速验证查询参数
+// ValidateQuery 快速验证查询参数。
 func ValidateQuery(req *http.Request, rules []ValidationRule) *RuleValidationResult {
 	v, err := NewRequestValidator(ValidationConfig{
 		Source:   "query",

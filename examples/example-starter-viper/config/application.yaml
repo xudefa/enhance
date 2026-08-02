@@ -1,0 +1,21 @@
+# Application configuration
+app:
+  name: viper-example
+  version: 1.0.0
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+# Database configuration
+database:
+  host: localhost
+  port: 5432
+  name: mydb
+  username: user
+  password: password
+
+# Logging configuration
+logging:
+  level: info
+  format: json

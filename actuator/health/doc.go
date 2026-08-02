@@ -43,4 +43,5 @@ type Indicator interface {
 type Aggregator struct {
 	mu         sync.RWMutex
 	indicators []Indicator
+	workers    chan struct{} // 限制并发健康检查的信号量，防止卡死的指标无限泄漏 goroutine
 }

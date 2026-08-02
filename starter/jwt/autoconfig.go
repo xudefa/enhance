@@ -1,9 +1,9 @@
 package jwt
 
 import (
-	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/condition"
@@ -65,38 +65,46 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger = logger
 	} else {
 		c.logger = log.Build()
-		c.logger.Warn(context.Background(), "从容器获取 Logger 失败，使用默认 slog",
+		c.logger.Warn(ctx.Context(), "failed to get Logger from container, using default slog",
 			log.KeyValue{Key: "error", Value: err.Error()})
 	}
-	c.logger.Info(context.Background(), "开始配置 JWT 认证...")
+	c.logger.Info(ctx.Context(), "configuring JWT authentication...")
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 JWT 配置失败: %w", err)
+		return fmt.Errorf("failed to load JWT config: %w", err)
 	}
 
 	if cfg.SecretKey == "" {
 		cfg.SecretKey = DefaultJWTSecretKey
-		c.logger.Warn(context.Background(), "使用默认密钥，生产环境请配置 "+JWTSecretKey)
+		c.logger.Warn(ctx.Context(), "using default secret key, configure "+JWTSecretKey)
+	}
+
+	if cfg.SigningMethod != "" && cfg.SigningMethod != DefaultJWTSigningMethod {
+		c.logger.Warn(ctx.Context(), "only HS256 signing method is supported, ignoring configured signing-method",
+			log.KeyValue{Key: "signing-method", Value: cfg.SigningMethod})
 	}
 
 	// 创建 TokenProvider
 	tokenProvider := NewTokenProvider(
 		WithSecretKey(cfg.SecretKey),
+		WithExpiration(time.Duration(cfg.ExpiresDuration)*time.Second),
+		WithRefreshExpiration(time.Duration(cfg.RefreshExpiresDuration)*time.Second),
+		WithIssuer(cfg.Issuer),
 	)
 
 	// 注册 TokenProvider
 	if err := container.RegisterInstance(tokenProvider, reflect.TypeFor[*DefaultTokenProvider]()); err != nil {
-		return fmt.Errorf("注册 TokenProvider 失败: %w", err)
+		return fmt.Errorf("failed to register TokenProvider: %w", err)
 	}
-	c.logger.Info(context.Background(), "TokenProvider 已注册")
+	c.logger.Info(ctx.Context(), "TokenProvider registered")
 
 	// 获取 UserDetailsService（可选）
 	var userDetailsService security.UserDetailsService
 	beans, err := container.Get(reflect.TypeFor[security.UserDetailsService]())
 	if err == nil && len(beans) > 0 {
-		userDetailsService = beans[0].(security.UserDetailsService)
-		c.logger.Info(context.Background(), "使用已注册的 UserDetailsService")
+		userDetailsService, _ = beans[0].(security.UserDetailsService)
+		c.logger.Info(ctx.Context(), "using registered UserDetailsService")
 	}
 
 	// 创建 JWT 认证过滤器
@@ -120,7 +128,7 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		}),
 		core.WithScope[*JwtAuthenticationFilter](registry.Singleton),
 	); err != nil {
-		return fmt.Errorf("注册 JwtAuthenticationFilter 失败: %w", err)
+		return fmt.Errorf("failed to register JwtAuthenticationFilter: %w", err)
 	}
 	// 使用接口类型注册：确保 SecurityAutoConfiguration 能通过 security.SecurityFilter 接口查找到
 	// 这是关键步骤，否则 JWT 过滤器不会被添加到安全过滤器链中
@@ -130,12 +138,12 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		}),
 		core.WithScope[security.SecurityFilter](registry.Singleton),
 	); err != nil {
-		c.logger.Warn(context.Background(), "注册 SecurityFilter 接口失败（非致命）", log.KeyValue{Key: LogFieldError, Value: err.Error()})
+		c.logger.Warn(ctx.Context(), "failed to register SecurityFilter interface (non-fatal)", log.KeyValue{Key: LogFieldError, Value: err.Error()})
 	}
-	c.logger.Info(context.Background(), "JwtAuthenticationFilter 已注册")
+	c.logger.Info(ctx.Context(), "JwtAuthenticationFilter registered")
 
 	// 打印配置信息
-	c.logger.Info(context.Background(), "JWT 配置",
+	c.logger.Info(ctx.Context(), "JWT 配置",
 		log.KeyValue{Key: LogFieldSecret, Value: maskSecret(cfg.SecretKey)},
 		log.KeyValue{Key: LogFieldExclude, Value: cfg.ExcludePaths},
 	)
@@ -155,7 +163,7 @@ func (c *JwtAutoConfiguration) loadConfig(env *environment.Environment) (*JwtCon
 	}
 
 	if err := env.BindPrefix("security.jwt", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 JWT 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind JWT config: %w", err)
 	}
 
 	return cfg, nil

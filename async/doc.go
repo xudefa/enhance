@@ -21,7 +21,7 @@
 // # 使用方式
 //
 //	// 创建执行器
-//	executor := async.NewAsyncExecutor(10, 100)
+//	executor := async.NewAsyncExecutor(context.Background(), 10, 100)
 //	executor.Start()
 //
 //	// 提交异步任务
@@ -47,6 +47,7 @@
 package async
 
 import (
+	"context"
 	"sync"
 )
 
@@ -54,6 +55,7 @@ import (
 //
 // 提供阻塞获取结果、超时获取、检查是否完成等功能。
 type Future struct {
+	ctx    context.Context
 	done   chan struct{}
 	result any
 	err    error
@@ -63,7 +65,7 @@ type Future struct {
 // ExecutorOption 执行器配置选项函数。
 type ExecutorOption func(*AsyncExecutor)
 
-// RejectHandler 任务拒绝处理函数。
+// RejectHandler 任务拒绝处理函数类型。
 //
 // 当任务队列满时调用，用于处理任务被拒绝的情况。
 type RejectHandler func(task func() (any, error))

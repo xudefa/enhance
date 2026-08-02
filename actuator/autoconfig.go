@@ -20,7 +20,7 @@ func (a *ActuatorAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 
 	if indicators, err := ctx.Container().Get(reflect.TypeOf((*health.Indicator)(nil)).Elem()); err == nil && len(indicators) > 0 {
 		for _, ind := range indicators {
-			if h, ok := ind.(health.Indicator); ok {
+			if h, ok := ind.(health.Indicator); ok && h != nil {
 				agg.AddIndicator(h)
 			}
 		}

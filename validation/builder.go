@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 )
 
-// NewRuleBuilder 创建规则构建器
+// NewRuleBuilder 创建规则构建器。
 func NewRuleBuilder() *RuleBuilder {
 	return &RuleBuilder{
 		rules:    make([]string, 0),
@@ -15,85 +16,85 @@ func NewRuleBuilder() *RuleBuilder {
 	}
 }
 
-// Required 添加必填验证
+// Required 添加必填验证。
 func (b *RuleBuilder) Required() *RuleBuilder {
 	b.rules = append(b.rules, "required")
 	return b
 }
 
-// Min 添加最小值/长度验证
+// Min 添加最小值/长度验证。
 func (b *RuleBuilder) Min(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("min=%d", n))
 	return b
 }
 
-// Max 添加最大值/长度验证
+// Max 添加最大值/长度验证。
 func (b *RuleBuilder) Max(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("max=%d", n))
 	return b
 }
 
-// Len 添加固定长度验证
+// Len 添加固定长度验证。
 func (b *RuleBuilder) Len(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("len=%d", n))
 	return b
 }
 
-// Email 添加邮箱格式验证
+// Email 添加邮箱格式验证。
 func (b *RuleBuilder) Email() *RuleBuilder {
 	b.rules = append(b.rules, "email")
 	return b
 }
 
-// URL 添加URL格式验证
+// URL 添加URL格式验证。
 func (b *RuleBuilder) URL() *RuleBuilder {
 	b.rules = append(b.rules, "url")
 	return b
 }
 
-// IP 添加IP地址验证
+// IP 添加IP地址验证。
 func (b *RuleBuilder) IP() *RuleBuilder {
 	b.rules = append(b.rules, "ip")
 	return b
 }
 
-// Gt 添加大于验证
+// Gt 添加大于验证。
 func (b *RuleBuilder) Gt(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("gt=%d", n))
 	return b
 }
 
-// Gte 添加大于等于验证
+// Gte 添加大于等于验证。
 func (b *RuleBuilder) Gte(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("gte=%d", n))
 	return b
 }
 
-// Lt 添加小于验证
+// Lt 添加小于验证。
 func (b *RuleBuilder) Lt(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("lt=%d", n))
 	return b
 }
 
-// Lte 添加小于等于验证
+// Lte 添加小于等于验证。
 func (b *RuleBuilder) Lte(n int) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("lte=%d", n))
 	return b
 }
 
-// OneOf 添加枚举值验证
+// OneOf 添加枚举值验证。
 func (b *RuleBuilder) OneOf(options ...string) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("oneof=%s", strings.Join(options, " ")))
 	return b
 }
 
-// Regexp 添加正则表达式验证
+// Regexp 添加正则表达式验证。
 func (b *RuleBuilder) Regexp(pattern string) *RuleBuilder {
 	b.rules = append(b.rules, fmt.Sprintf("regexp=%s", pattern))
 	return b
 }
 
-// CustomMessage 设置自定义错误消息
+// CustomMessage 设置自定义错误消息。
 func (b *RuleBuilder) CustomMessage(message string) *RuleBuilder {
 	for _, rule := range b.rules {
 		b.messages[rule] = message
@@ -101,54 +102,54 @@ func (b *RuleBuilder) CustomMessage(message string) *RuleBuilder {
 	return b
 }
 
-// Build 构建验证规则字符串
+// Build 构建验证规则字符串。
 func (b *RuleBuilder) Build() string {
 	return strings.Join(b.rules, ",")
 }
 
-// BuildWithMessages 构建验证规则并返回消息映射
+// BuildWithMessages 构建验证规则并返回消息映射。
 func (b *RuleBuilder) BuildWithMessages() (string, map[string]string) {
 	return b.Build(), b.messages
 }
 
-// ValidatorChain 验证器链，支持多个对象连续验证
+// ValidatorChain 验证器链，支持多个对象连续验证。
 type ValidatorChain struct {
 	validators       []Validator
 	stopOnFirstError bool
 }
 
-// NewValidatorChain 创建验证器链
+// NewValidatorChain 创建验证器链。
 func NewValidatorChain() *ValidatorChain {
 	return &ValidatorChain{
 		validators: make([]Validator, 0),
 	}
 }
 
-// StopOnFirstError 设置遇到第一个错误时停止
+// StopOnFirstError 设置遇到第一个错误时停止。
 func (c *ValidatorChain) StopOnFirstError() *ValidatorChain {
 	c.stopOnFirstError = true
 	return c
 }
 
-// Add 添加验证器
+// Add 添加验证器。
 func (c *ValidatorChain) Add(v Validator) *ValidatorChain {
 	c.validators = append(c.validators, v)
 	return c
 }
 
-// AddStruct 添加结构体验证器
+// AddStruct 添加结构体验证器。
 func (c *ValidatorChain) AddStruct(obj any) *ValidatorChain {
 	c.validators = append(c.validators, &structValidator{obj: obj})
 	return c
 }
 
-// AddValue 添加值验证器
+// AddValue 添加值验证器。
 func (c *ValidatorChain) AddValue(value any, rules string) *ValidatorChain {
 	c.validators = append(c.validators, &valueValidator{value: value, rules: rules})
 	return c
 }
 
-// Validate 执行验证链
+// Validate 执行验证链。
 func (c *ValidatorChain) Validate() error {
 	var allErrors ValidationErrors
 
@@ -197,21 +198,25 @@ func (v *valueValidator) Validate(obj any) error {
 	return Validate(v.value, v.rules)
 }
 
-// RegexCache 正则表达式缓存
+// RegexCache 正则表达式缓存。
 type RegexCache struct {
+	mu    sync.RWMutex
 	cache map[string]*regexp.Regexp
 }
 
-// NewRegexCache 创建正则表达式缓存
+// NewRegexCache 创建正则表达式缓存。
 func NewRegexCache() *RegexCache {
 	return &RegexCache{
 		cache: make(map[string]*regexp.Regexp),
 	}
 }
 
-// Get 获取或编译正则表达式
+// Get 获取或编译正则表达式。
 func (c *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
-	if re, exists := c.cache[pattern]; exists {
+	c.mu.RLock()
+	re, exists := c.cache[pattern]
+	c.mu.RUnlock()
+	if exists {
 		return re, nil
 	}
 
@@ -220,11 +225,13 @@ func (c *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
 		return nil, err
 	}
 
+	c.mu.Lock()
 	c.cache[pattern] = re
+	c.mu.Unlock()
 	return re, nil
 }
 
-// MustGet 获取或编译正则表达式，失败则panic
+// MustGet 获取或编译正则表达式，失败则panic。
 func (c *RegexCache) MustGet(pattern string) *regexp.Regexp {
 	re, err := c.Get(pattern)
 	if err != nil {
@@ -233,20 +240,25 @@ func (c *RegexCache) MustGet(pattern string) *regexp.Regexp {
 	return re
 }
 
-// Clear 清空缓存
+// Clear 清空缓存。
 func (c *RegexCache) Clear() {
+	c.mu.Lock()
 	c.cache = make(map[string]*regexp.Regexp)
+	c.mu.Unlock()
 }
 
-// Size 获取缓存大小
+// Size 获取缓存大小。
 func (c *RegexCache) Size() int {
-	return len(c.cache)
+	c.mu.RLock()
+	n := len(c.cache)
+	c.mu.RUnlock()
+	return n
 }
 
 // 全局正则表达式缓存
 var defaultRegexCache = NewRegexCache()
 
-// GetRegexCache 获取全局正则表达式缓存
+// GetRegexCache 获取全局正则表达式缓存。
 func GetRegexCache() *RegexCache {
 	return defaultRegexCache
 }

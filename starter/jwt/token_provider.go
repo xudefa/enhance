@@ -40,10 +40,11 @@ var (
 //	)
 //	token, err := provider.GenerateToken(ctx, "admin", []string{"ROLE_ADMIN"})
 type DefaultTokenProvider struct {
-	secretKey  string        // HMAC-SHA256 签名密钥
-	expiration time.Duration // Token 有效期
-	issuer     string        // 签发者标识
-	audience   string        // 受众标识
+	secretKey         string        // HMAC-SHA256 签名密钥
+	expiration        time.Duration // Token 有效期
+	refreshExpiration time.Duration // 刷新后 Token 有效期
+	issuer            string        // 签发者标识
+	audience          string        // 受众标识
 }
 
 // NewTokenProvider 创建 Token 提供者。
@@ -74,6 +75,14 @@ func WithExpiration(d time.Duration) TokenOption {
 	}
 }
 
+// WithRefreshExpiration 设置刷新后 Token 的过期时间。
+// 未设置时，刷新后的 Token 复用过期时间。
+func WithRefreshExpiration(d time.Duration) TokenOption {
+	return func(p *DefaultTokenProvider) {
+		p.refreshExpiration = d
+	}
+}
+
 // WithIssuer 设置签发者。
 func WithIssuer(issuer string) TokenOption {
 	return func(p *DefaultTokenProvider) {
@@ -90,6 +99,11 @@ func WithAudience(audience string) TokenOption {
 
 // GenerateToken 生成 JWT Token。
 func (p *DefaultTokenProvider) GenerateToken(ctx context.Context, username string, authorities []string) (string, error) {
+	return p.generateToken(ctx, username, authorities, p.expiration)
+}
+
+// generateToken 使用指定的有效期生成 JWT Token。
+func (p *DefaultTokenProvider) generateToken(ctx context.Context, username string, authorities []string, expiration time.Duration) (string, error) {
 	if p.secretKey == "" {
 		return "", ErrEmptySecret
 	}
@@ -99,7 +113,7 @@ func (p *DefaultTokenProvider) GenerateToken(ctx context.Context, username strin
 		"sub":         username,
 		"iss":         p.issuer,
 		"aud":         p.audience,
-		"exp":         now.Add(p.expiration).Unix(),
+		"exp":         now.Add(expiration).Unix(),
 		"iat":         now.Unix(),
 		"authorities": authorities,
 	}
@@ -125,7 +139,7 @@ func (p *DefaultTokenProvider) ParseToken(ctx context.Context, tokenString strin
 			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])
 		}
 		return []byte(p.secretKey), nil
-	})
+	}, jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{"HS256"}))
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -159,7 +173,12 @@ func (p *DefaultTokenProvider) RefreshToken(ctx context.Context, tokenString str
 		return "", err
 	}
 
-	return p.GenerateToken(ctx, claims.Subject, claims.Authorities)
+	refreshExpiration := p.refreshExpiration
+	if refreshExpiration <= 0 {
+		refreshExpiration = p.expiration
+	}
+
+	return p.generateToken(ctx, claims.Subject, claims.Authorities, refreshExpiration)
 }
 
 // extractClaims 从 JWT MapClaims 中提取 TokenClaims。

@@ -130,7 +130,7 @@ func TestCronExpression_Next(t *testing.T) {
 func TestScheduler_Register(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewTask("test-task", "0 * * * * *", func(ctx context.Context) error {
 		return nil
@@ -155,7 +155,7 @@ func TestScheduler_Register(t *testing.T) {
 func TestScheduler_Unregister(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewTask("test-task", "0 * * * * *", func(ctx context.Context) error {
 		return nil
@@ -180,7 +180,7 @@ func TestScheduler_Unregister(t *testing.T) {
 func TestScheduler_StartStop(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	if scheduler.IsRunning() {
 		t.Error("should not be running initially")
@@ -229,7 +229,7 @@ func TestScheduler_TaskExecution(t *testing.T) {
 		return nil
 	})
 
-	scheduler := NewScheduler(WithPoolSize(5))
+	scheduler := NewScheduler(context.Background(), WithPoolSize(5))
 
 	err := scheduler.Register(task)
 	if err != nil {
@@ -273,7 +273,7 @@ func TestScheduler_ErrorHandler(t *testing.T) {
 		return context.Canceled
 	})
 
-	scheduler := NewScheduler(WithErrorHandler(errorHandler))
+	scheduler := NewScheduler(context.Background(), WithErrorHandler(errorHandler))
 
 	err := scheduler.Register(task)
 	if err != nil {
@@ -321,7 +321,7 @@ func TestScheduler_ConcurrentControl(t *testing.T) {
 		return nil
 	})
 
-	scheduler := NewScheduler(WithPoolSize(2))
+	scheduler := NewScheduler(context.Background(), WithPoolSize(2))
 
 	for i := 0; i < 5; i++ {
 		err := scheduler.Register(NewTask(
@@ -365,7 +365,7 @@ func TestScheduler_FixedDelayTask(t *testing.T) {
 		return nil
 	})
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 	_ = scheduler.Register(task)
 
 	ctx := context.Background()
@@ -394,7 +394,7 @@ func TestScheduler_FixedRateTask(t *testing.T) {
 		return nil
 	})
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 	_ = scheduler.Register(task)
 
 	ctx := context.Background()
@@ -458,7 +458,7 @@ func TestSchedulerBuilder(t *testing.T) {
 func TestScheduleHelper(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 	helper := NewScheduleHelper(scheduler)
 
 	_ = helper.RegisterCronTask("helper-cron", "* * * * * *", func(ctx context.Context) error {
@@ -586,7 +586,7 @@ func TestSchedulerBuilder_Logger(t *testing.T) {
 func TestScheduleHelper_StartAndBlock(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 	helper := NewScheduleHelper(scheduler)
 
 	_ = helper.RegisterCronTask("block-task", "* * * * * *", func(ctx context.Context) error {
@@ -759,7 +759,7 @@ func TestFixedRateTask_Properties(t *testing.T) {
 func TestScheduler_UnregisterNonExistent(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	if scheduler.Unregister("nonexistent") {
 		t.Error("should return false for non-existent task")
@@ -769,7 +769,7 @@ func TestScheduler_UnregisterNonExistent(t *testing.T) {
 func TestScheduler_RegisterDuplicate(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewTask("duplicate-task", "* * * * * *", func(ctx context.Context) error {
 		return nil
@@ -787,7 +787,7 @@ func TestScheduler_RegisterDuplicate(t *testing.T) {
 func TestScheduler_RegisteredTasks(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task1 := NewTask("task-1", "* * * * * *", func(ctx context.Context) error {
 		return nil
@@ -811,7 +811,7 @@ func TestScheduler_WithLogger(t *testing.T) {
 
 	customLogger := log.NewLoggerBuilder().Build()
 
-	scheduler := NewScheduler(
+	scheduler := NewScheduler(context.Background(),
 		WithLogger(customLogger),
 	)
 

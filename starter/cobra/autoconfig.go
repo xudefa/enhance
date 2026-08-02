@@ -2,7 +2,6 @@
 package cobra
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -44,7 +43,7 @@ func (c *CobraAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Cobra 配置失败: %w", err)
+		return fmt.Errorf("failed to load Cobra config: %w", err)
 	}
 
 	c.config = cfg
@@ -60,10 +59,10 @@ func (c *CobraAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	c.rootCmd.SetErr(os.Stderr)
 
 	if err := ctx.Container().RegisterInstance(c.rootCmd, reflect.TypeFor[*cobra.Command]()); err != nil {
-		return fmt.Errorf("注册 Cobra RootCmd 失败: %w", err)
+		return fmt.Errorf("failed to register Cobra RootCmd: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Cobra CLI 已配置",
+	c.logger.Info(ctx.Context(), "Cobra CLI configured",
 		log.KeyValue{Key: "name", Value: cfg.Use},
 		log.KeyValue{Key: "version", Value: cfg.Version},
 	)
@@ -115,7 +114,7 @@ func (c *CobraAutoConfiguration) loadConfig(env *environment.Environment) (*Cobr
 	}
 
 	if err := env.BindPrefix("cobra", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Cobra 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Cobra config: %w", err)
 	}
 
 	return cfg, nil

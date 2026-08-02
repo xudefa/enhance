@@ -349,9 +349,8 @@ func TestUnanimousBased(t *testing.T) {
 
 func TestSecurityContext(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
-	ctx := GetSecurityContext()
+	ctx := NewSecurityContext()
 
 	if ctx.Authentication() != nil {
 		t.Errorf("Expected no authentication initially")
@@ -431,6 +430,7 @@ func TestExpressionBasedFilterInvocationSecurityMetadataSource(t *testing.T) {
 type mockSecurityRequest struct {
 	method  string
 	uri     string
+	remote  string
 	attrs   map[string]any
 	headers map[string]string
 }
@@ -448,6 +448,10 @@ func (m *mockSecurityRequest) GetHeader(key string) string {
 		return ""
 	}
 	return m.headers[key]
+}
+
+func (m *mockSecurityRequest) RemoteAddress() string {
+	return m.remote
 }
 
 func (m *mockSecurityRequest) SetHeader(key, value string) {

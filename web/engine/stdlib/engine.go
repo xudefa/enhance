@@ -20,8 +20,8 @@ type Router struct {
 	middlewares   []core.MiddlewareFunc
 	handlers      map[string]core.HandlerFunc
 	prefix        string
-	mu            sync.RWMutex
-	routePatterns []routePattern
+	mu            *sync.RWMutex // 共享的mutex，父子router共享
+	routePatterns *[]routePattern
 }
 
 type routePattern struct {
@@ -35,9 +35,12 @@ type routePattern struct {
 
 // NewRouter 创建新的路由器。
 func NewRouter() *Router {
+	patterns := make([]routePattern, 0)
 	return &Router{
-		mux:      http.NewServeMux(),
-		handlers: make(map[string]core.HandlerFunc),
+		mux:           http.NewServeMux(),
+		handlers:      make(map[string]core.HandlerFunc),
+		mu:            &sync.RWMutex{},
+		routePatterns: &patterns,
 	}
 }
 
@@ -71,11 +74,14 @@ func (r *Router) Group(prefix string) core.Router {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// 子router与父router共享handlers映射、mutex和routePatterns
 	return &Router{
-		mux:         r.mux,
-		middlewares: append([]core.MiddlewareFunc{}, r.middlewares...),
-		handlers:    r.handlers,
-		prefix:      r.prefix + prefix,
+		mux:           r.mux,
+		middlewares:   append([]core.MiddlewareFunc{}, r.middlewares...),
+		handlers:      r.handlers,
+		prefix:        r.prefix + prefix,
+		mu:            r.mu,
+		routePatterns: r.routePatterns,
 	}
 }
 
@@ -96,19 +102,27 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	fullPath := req.Method + " " + path
+	matchPath := path
 	if r.prefix != "" {
-		fullPath = req.Method + " " + r.prefix + path
+		matchPath = r.prefix + path
 	}
 
-	handler, ok := r.handlers[fullPath]
+	fullPath := req.Method + " " + matchPath
+
+	// 使用读锁保护 handlers 和 middlewares 的读取
+	r.mu.RLock()
 	var params map[string]string
+	handler, ok := r.handlers[fullPath]
 	if !ok {
-		handler, params, ok = r.findHandlerWithParams(req.Method, path)
-		if !ok {
-			http.NotFound(w, req)
-			return
-		}
+		handler, params, ok = r.findHandlerWithParamsLocked(req.Method, matchPath)
+	}
+	middlewaresCopy := make([]core.MiddlewareFunc, len(r.middlewares))
+	copy(middlewaresCopy, r.middlewares)
+	r.mu.RUnlock()
+
+	if !ok {
+		http.NotFound(w, req)
+		return
 	}
 
 	ctx := NewContext(w, req)
@@ -116,8 +130,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		ctx = ctx.WithParams(params)
 	}
 
-	allMiddleware := append([]core.MiddlewareFunc{}, r.middlewares...)
-	ctx.WithMiddleware(allMiddleware, handler)
+	ctx.WithMiddleware(middlewaresCopy, handler)
 	ctx.Next()
 }
 
@@ -130,7 +143,7 @@ func (r *Router) handle(method, path string, handler core.HandlerFunc) {
 	r.handlers[key] = handler
 
 	pattern := r.compileRoutePattern(method, fullPath, handler)
-	r.routePatterns = append(r.routePatterns, pattern)
+	*r.routePatterns = append(*r.routePatterns, pattern)
 }
 
 func (r *Router) compileRoutePattern(method, path string, handler core.HandlerFunc) routePattern {
@@ -158,14 +171,11 @@ func (r *Router) compileRoutePattern(method, path string, handler core.HandlerFu
 	}
 }
 
-func (r *Router) findHandlerWithParams(method, path string) (core.HandlerFunc, map[string]string, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
+func (r *Router) findHandlerWithParamsLocked(method, path string) (core.HandlerFunc, map[string]string, bool) {
 	pathParts := strings.Split(path, "/")
 
-	for i := range r.routePatterns {
-		pattern := &r.routePatterns[i]
+	for i := range *r.routePatterns {
+		pattern := &(*r.routePatterns)[i]
 		if pattern.method != method {
 			continue
 		}
@@ -266,10 +276,16 @@ func (s *Server) Start() error {
 // Stop 优雅地停止服务器。
 func (s *Server) Stop(ctx context.Context) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	srv := s.server
+	s.mu.Unlock()
 
+	// 在锁外执行 Shutdown：Shutdown 会等待正在处理的请求完成，
+	// 而请求处理器会获取读锁，若持写锁会形成死锁。
 	slog.Info("HTTP server stopping...")
-	return s.server.Shutdown(ctx)
+	if srv == nil {
+		return nil
+	}
+	return srv.Shutdown(ctx)
 }
 
 // SetHandler 设置处理器。
@@ -284,6 +300,8 @@ func (s *Server) SetHandler(handler any) {
 		if httpHandler, ok := h.(http.Handler); ok {
 			s.handler = httpHandler
 		}
+	default:
+		// 不支持的处理器类型，保持 handler 为 nil
 	}
 }
 
@@ -310,9 +328,11 @@ func (s *Server) Use(m any) {
 
 func (s *Server) wrapHTTPHandler(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.mu.RLock()
 		allMiddleware := append([]func(http.Handler) http.Handler{}, s.middlewares...)
+		s.mu.RUnlock()
 
-		var currentHandler http.Handler = handler
+		currentHandler := handler
 		for i := len(allMiddleware) - 1; i >= 0; i-- {
 			currentHandler = allMiddleware[i](currentHandler)
 		}

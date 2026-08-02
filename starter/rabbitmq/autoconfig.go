@@ -28,6 +28,7 @@ type RabbitMQAutoConfiguration struct {
 	logger     log.Logger
 	connection *amqp.Connection
 	channel    *amqp.Channel
+	ctx        context.Context
 }
 
 // Configure 配置 RabbitMQ 连接。
@@ -42,40 +43,43 @@ func (c *RabbitMQAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 RabbitMQ 配置失败: %w", err)
+		return fmt.Errorf("failed to load RabbitMQ config: %w", err)
 	}
 
 	url := cfg.buildURL()
 
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return fmt.Errorf("连接 RabbitMQ 失败: %w", err)
+		return fmt.Errorf("failed to connect to RabbitMQ: %w", err)
 	}
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
-		return fmt.Errorf("创建 RabbitMQ Channel 失败: %w", err)
+		_ = conn.Close()
+		return fmt.Errorf("failed to create RabbitMQ Channel: %w", err)
 	}
 
 	c.connection = conn
 	c.channel = ch
 
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
 	if err := ctx.Container().RegisterInstance(conn, reflect.TypeFor[*amqp.Connection]()); err != nil {
-		return fmt.Errorf("注册 RabbitMQ Connection 失败: %w", err)
+		return fmt.Errorf("failed to register RabbitMQ Connection: %w", err)
 	}
 
 	if err := ctx.Container().RegisterInstance(ch, reflect.TypeFor[*amqp.Channel]()); err != nil {
-		return fmt.Errorf("注册 RabbitMQ Channel 失败: %w", err)
+		return fmt.Errorf("failed to register RabbitMQ Channel: %w", err)
 	}
 
 	queue := NewRabbitMQQueue(ch, cfg)
 
 	if err := ctx.Container().RegisterInstance(queue, reflect.TypeFor[*RabbitMQQueue]()); err != nil {
-		return fmt.Errorf("注册 RabbitMQ Queue 失败: %w", err)
+		return fmt.Errorf("failed to register RabbitMQ Queue: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "RabbitMQ 连接成功",
+	c.logger.Info(ctx.Context(), "RabbitMQ connected successfully",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "vhost", Value: cfg.VHost},
@@ -88,7 +92,7 @@ func (c *RabbitMQAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 func (c *RabbitMQAutoConfiguration) Stop() error {
 	if c.channel != nil {
 		if err := c.channel.Close(); err != nil {
-			c.logger.Error(context.Background(), "关闭 RabbitMQ Channel 失败",
+			c.logger.Error(c.ctx, "failed to close RabbitMQ Channel",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -154,7 +158,7 @@ func (q *RabbitMQQueue) Subscribe(ctx context.Context, handler func([]byte) erro
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("订阅 RabbitMQ 队列失败: %w", err)
+		return fmt.Errorf("failed to subscribe to RabbitMQ queue: %w", err)
 	}
 
 	for {
@@ -163,7 +167,7 @@ func (q *RabbitMQQueue) Subscribe(ctx context.Context, handler func([]byte) erro
 			return ctx.Err()
 		case msg := <-msgs:
 			if err := handler(msg.Body); err != nil {
-				return fmt.Errorf("处理消息失败: %w", err)
+				return fmt.Errorf("failed to process message: %w", err)
 			}
 		}
 	}
@@ -220,7 +224,7 @@ func (c *RabbitMQAutoConfiguration) loadConfig(env *environment.Environment) (*R
 	}
 
 	if err := env.BindPrefix("rabbitmq", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 RabbitMQ 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind RabbitMQ config: %w", err)
 	}
 
 	return cfg, nil

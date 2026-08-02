@@ -48,8 +48,16 @@ func (aw *AdaptiveWeight) Next(backends []*ServiceInstance) (*ServiceInstance, e
 	totalScore := 0.0
 
 	for _, b := range backends {
+		if b == nil {
+			continue
+		}
 		if value, ok := aw.stats.Load(b.URL); ok {
-			stats := value.(*BackendStats)
+			stats, _ := value.(*BackendStats)
+			if stats == nil {
+				scores = append(scores, backendScore{backend: b, score: 1.0})
+				totalScore += 1.0
+				continue
+			}
 			score := aw.calculateScore(stats)
 			scores = append(scores, backendScore{backend: b, score: score})
 			totalScore += score
@@ -59,8 +67,8 @@ func (aw *AdaptiveWeight) Next(backends []*ServiceInstance) (*ServiceInstance, e
 		totalScore += 1.0
 	}
 
-	if totalScore <= 0 {
-		return backends[0], nil
+	if len(scores) == 0 || totalScore <= 0 {
+		return nil, ErrNoBackends
 	}
 
 	r := rand.Float64() * totalScore
@@ -73,7 +81,7 @@ func (aw *AdaptiveWeight) Next(backends []*ServiceInstance) (*ServiceInstance, e
 		}
 	}
 
-	return backends[len(backends)-1], nil
+	return scores[len(scores)-1].backend, nil
 }
 
 // calculateScore 计算后端综合得分
@@ -107,7 +115,10 @@ func (aw *AdaptiveWeight) calculateScore(stats *BackendStats) float64 {
 func (aw *AdaptiveWeight) RecordRequest(backendURL string, responseTimeMs float64, failed bool) {
 	// 使用 LoadOrStore 获取或创建 stats
 	value, _ := aw.stats.LoadOrStore(backendURL, &BackendStats{})
-	stats := value.(*BackendStats)
+	stats, _ := value.(*BackendStats)
+	if stats == nil {
+		return
+	}
 
 	stats.TotalRequests.Add(1)
 	if failed {
@@ -122,18 +133,31 @@ func (aw *AdaptiveWeight) RecordRequest(backendURL string, responseTimeMs float6
 // RecordConnection 记录连接数变化
 func (aw *AdaptiveWeight) RecordConnection(backendURL string, delta int64) {
 	value, _ := aw.stats.LoadOrStore(backendURL, &BackendStats{})
-	stats := value.(*BackendStats)
+	stats, _ := value.(*BackendStats)
+	if stats == nil {
+		return
+	}
 
-	newConns := stats.ActiveConnections.Add(delta)
-	if newConns < 0 {
-		stats.ActiveConnections.Store(0)
+	// 使用 CAS 循环保证非负钳制不丢失并发更新
+	for {
+		current := stats.ActiveConnections.Load()
+		next := current + delta
+		if next < 0 {
+			next = 0
+		}
+		if stats.ActiveConnections.CompareAndSwap(current, next) {
+			return
+		}
 	}
 }
 
 // GetStats 获取后端统计信息
 func (aw *AdaptiveWeight) GetStats(backendURL string) (*BackendStats, bool) {
 	if value, ok := aw.stats.Load(backendURL); ok {
-		return value.(*BackendStats), true
+		s, _ := value.(*BackendStats)
+		if s != nil {
+			return s, true
+		}
 	}
 	return nil, false
 }
@@ -142,7 +166,9 @@ func (aw *AdaptiveWeight) GetStats(backendURL string) (*BackendStats, bool) {
 func (aw *AdaptiveWeight) GetAllStats() map[string]*BackendStats {
 	result := make(map[string]*BackendStats)
 	aw.stats.Range(func(key, value any) bool {
-		result[key.(string)] = value.(*BackendStats)
+		k, _ := key.(string)
+		v, _ := value.(*BackendStats)
+		result[k] = v
 		return true
 	})
 	return result
@@ -173,17 +199,32 @@ func SortByResponseTime(backends []*ServiceInstance, stats map[string]*BackendSt
 	copy(sorted, backends)
 
 	sort.Slice(sorted, func(i, j int) bool {
-		statsI := stats[sorted[i].URL]
-		statsJ := stats[sorted[j].URL]
-
-		if statsI == nil {
-			return true
-		}
-		if statsJ == nil {
+		bi, bj := sorted[i], sorted[j]
+		if bi == nil {
 			return false
 		}
+		if bj == nil {
+			return true
+		}
 
-		return statsI.GetAvgResponseTime() < statsJ.GetAvgResponseTime()
+		statsI := stats[bi.URL]
+		statsJ := stats[bj.URL]
+
+		switch {
+		case statsI == nil && statsJ == nil:
+			return bi.URL < bj.URL
+		case statsI == nil:
+			return false // 无统计信息的后端排在后面
+		case statsJ == nil:
+			return true
+		default:
+			rtI := statsI.GetAvgResponseTime()
+			rtJ := statsJ.GetAvgResponseTime()
+			if rtI != rtJ {
+				return rtI < rtJ
+			}
+			return bi.URL < bj.URL
+		}
 	})
 
 	return sorted

@@ -39,9 +39,7 @@ func (a *HttpServerAdapter) SetHandler(handler any) {
 		// 直接传递 http.Handler（DefaultRouter 实现了 http.Handler）
 		a.server.SetHandler(h)
 	default:
-		// 其他类型，尝试转换为 http.Handler
-		// 如果无法转换，HttpServer.Start 会报错
-		a.server.SetHandler(handler.(http.Handler))
+		_ = h
 	}
 }
 
@@ -68,8 +66,7 @@ func (a *HttpServerAdapter) Use(m any) {
 		}
 		a.server.Use(adapter)
 	default:
-		// 其他类型，尝试直接传递
-		a.server.Use(m.(func(http.Handler) http.Handler))
+		_ = mw
 	}
 }
 

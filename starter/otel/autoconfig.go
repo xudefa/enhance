@@ -1,4 +1,4 @@
-// Package otel 提供 OpenTelemetry 链路追踪自动配置。
+// Package otel provides OpenTelemetry tracing auto-configuration.
 package otel
 
 import (
@@ -30,13 +30,13 @@ func init() {
 	)
 }
 
-// OtelAutoConfiguration OpenTelemetry 自动配置类。
+// OtelAutoConfiguration OpenTelemetry auto-configuration.
 type OtelAutoConfiguration struct {
 	logger         log.Logger
 	tracerProvider *sdktrace.TracerProvider
 }
 
-// Configure 配置 OpenTelemetry 链路追踪。
+// Configure configures OpenTelemetry tracing.
 func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	env := ctx.Environment()
 
@@ -48,15 +48,10 @@ func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 OpenTelemetry 配置失败: %w", err)
+		return fmt.Errorf("failed to load OpenTelemetry config: %w", err)
 	}
 
-	if !cfg.Enabled {
-		c.logger.Info(context.Background(), "OpenTelemetry 未启用，跳过配置")
-		return nil
-	}
-
-	otelCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	otelCtx, cancel := context.WithTimeout(ctx.Context(), 10*time.Second)
 	defer cancel()
 
 	exporter, err := otlptracegrpc.New(otelCtx,
@@ -64,7 +59,7 @@ func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
-		return fmt.Errorf("创建 OTLP 导出器失败: %w", err)
+		return fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
 	res, err := resource.New(otelCtx,
@@ -74,7 +69,7 @@ func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		),
 	)
 	if err != nil {
-		return fmt.Errorf("创建资源失败: %w", err)
+		return fmt.Errorf("failed to create resource: %w", err)
 	}
 
 	tracerProvider := sdktrace.NewTracerProvider(
@@ -92,10 +87,10 @@ func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	c.tracerProvider = tracerProvider
 
 	if err := ctx.Container().RegisterInstance(tracerProvider, reflect.TypeFor[*sdktrace.TracerProvider]()); err != nil {
-		return fmt.Errorf("注册 TracerProvider 失败: %w", err)
+		return fmt.Errorf("failed to register TracerProvider: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "OpenTelemetry 链路追踪已启用",
+	c.logger.Info(ctx.Context(), "OpenTelemetry tracing enabled",
 		log.KeyValue{Key: "endpoint", Value: cfg.Endpoint},
 		log.KeyValue{Key: "service_name", Value: cfg.ServiceName},
 	)
@@ -103,7 +98,7 @@ func (c *OtelAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	return nil
 }
 
-// Shutdown 关闭 OpenTelemetry。
+// Shutdown closes OpenTelemetry.
 func (c *OtelAutoConfiguration) Shutdown(ctx context.Context) error {
 	if c.tracerProvider != nil {
 		return c.tracerProvider.Shutdown(ctx)
@@ -116,7 +111,7 @@ func (c *OtelAutoConfiguration) GetTracer(name string) *sdktrace.TracerProvider 
 	return c.tracerProvider
 }
 
-// OtelConfig OpenTelemetry 配置。
+// OtelConfig OpenTelemetry config.
 type OtelConfig struct {
 	Enabled        bool    `json:"enabled" mapstructure:"enabled"`
 	Endpoint       string  `json:"endpoint" mapstructure:"endpoint"`
@@ -125,7 +120,7 @@ type OtelConfig struct {
 	SamplingRate   float64 `json:"sampling_rate" mapstructure:"sampling_rate"`
 }
 
-// 配置常量。
+// Configuration constants.
 const (
 	OtelEnabled           = "otel.enabled"
 	DefaultOtelEndpoint   = "localhost:4317"
@@ -135,7 +130,7 @@ const (
 	ConditionTrue         = "true"
 )
 
-// loadConfig 从 Environment 加载 OpenTelemetry 配置。
+// loadConfig loads OpenTelemetry config from Environment.
 func (c *OtelAutoConfiguration) loadConfig(env *environment.Environment) (*OtelConfig, error) {
 	cfg := &OtelConfig{
 		Endpoint:       DefaultOtelEndpoint,
@@ -145,7 +140,7 @@ func (c *OtelAutoConfiguration) loadConfig(env *environment.Environment) (*OtelC
 	}
 
 	if err := env.BindPrefix("otel", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 OpenTelemetry 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind OpenTelemetry config: %w", err)
 	}
 
 	return cfg, nil

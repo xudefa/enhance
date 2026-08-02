@@ -44,13 +44,16 @@ import (
 
 // init 注册 Asynq 自动配置类。
 // 当配置 asynq.enabled=true 时自动触发配置。
+var asynqAutoConfig = &AsynqAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&AsynqAutoConfiguration{},
+	boot.RegisterAutoConfigWith(asynqAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(AsynqEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityTaskLayer)),
 	)
+	boot.RegisterStarter(asynqAutoConfig)
 }
 
 // AsynqAutoConfiguration Asynq 异步任务队列自动配置类。
@@ -60,6 +63,7 @@ type AsynqAutoConfiguration struct {
 	client    *asynq.Client    // Asynq 客户端实例
 	scheduler *asynq.Scheduler // Asynq 调度器实例
 	config    *AsynqConfig     // Asynq 配置信息
+	ctx       context.Context  // 应用上下文
 }
 
 // Configure 配置 Asynq 异步任务队列。
@@ -77,10 +81,13 @@ func (c *AsynqAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 加载配置
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Asynq 配置失败: %w", err)
+		return fmt.Errorf("failed to load Asynq config: %w", err)
 	}
 
 	c.config = cfg
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
 
 	// 配置 Redis 连接选项
 	opt := asynq.RedisClientOpt{
@@ -100,17 +107,17 @@ func (c *AsynqAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	// 注册客户端实例到 IoC 容器
 	if err := ctx.Container().RegisterInstance(c.client, reflect.TypeFor[*asynq.Client]()); err != nil {
-		return fmt.Errorf("注册 Asynq Client 失败: %w", err)
+		return fmt.Errorf("failed to register Asynq Client: %w", err)
 	}
 
 	// 如果启用了调度器，注册调度器实例到 IoC 容器
 	if c.scheduler != nil {
 		if err := ctx.Container().RegisterInstance(c.scheduler, reflect.TypeFor[*asynq.Scheduler]()); err != nil {
-			return fmt.Errorf("注册 Asynq Scheduler 失败: %w", err)
+			return fmt.Errorf("failed to register Asynq Scheduler: %w", err)
 		}
 	}
 
-	c.logger.Info(context.Background(), "Asynq 异步任务队列已配置",
+	c.logger.Info(ctx.Context(), "Asynq task queue configured",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 	)
@@ -120,7 +127,7 @@ func (c *AsynqAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 // Start 启动 Asynq 调度器。
 // 如果启用了调度器，启动定时任务调度。
-func (c *AsynqAutoConfiguration) Start() error {
+func (c *AsynqAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.scheduler != nil {
 		return c.scheduler.Run()
 	}
@@ -129,14 +136,36 @@ func (c *AsynqAutoConfiguration) Start() error {
 
 // Stop 停止 Asynq 客户端。
 // 关闭客户端连接和调度器，释放资源。
-func (c *AsynqAutoConfiguration) Stop() {
+func (c *AsynqAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
+	var sCtx context.Context
+	if ctx != nil {
+		sCtx = ctx.Context()
+	} else {
+		sCtx = context.Background()
+	}
 	if c.client != nil {
 		c.client.Close()
 	}
 	if c.scheduler != nil {
 		c.scheduler.Shutdown()
 	}
-	c.logger.Info(context.Background(), "Asynq 异步任务队列已停止")
+	c.logger.Info(sCtx, "Asynq task queue stopped")
+	return nil
+}
+
+// Name 返回启动器名称。
+func (c *AsynqAutoConfiguration) Name() string {
+	return "AsynqStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *AsynqAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *AsynqAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(AsynqEnabled, ConditionTrue)
 }
 
 // GetClient 获取 Asynq Client 实例。
@@ -220,7 +249,7 @@ func (c *AsynqAutoConfiguration) loadConfig(env *environment.Environment) (*Asyn
 	}
 
 	if err := env.BindPrefix("asynq", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Asynq 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Asynq config: %w", err)
 	}
 
 	return cfg, nil

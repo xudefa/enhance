@@ -10,7 +10,6 @@
 //   - AsyncEventPublisher: 异步事件发布器接口，支持非阻塞事件发布
 //   - EventBusAccess: 事件总线访问接口，支持事件的发布与订阅
 
-//
 // # 核心功能
 //
 //   - 容器管理: 提供 IoC 容器访问，管理 Bean 的注册和获取
@@ -91,7 +90,7 @@ type EventBusAccess interface {
 // 不重复定义已有方法，通过 Container() 获取 core.Container 来操作 Bean，
 // 通过 Lifecycle() 获取 lifecycle.LifecycleManager 来控制生命周期。
 //
-// 该接口遵循小接口原则，仅包含 7 个访问方法：
+// 该接口遵循小接口原则，包含以下方法：
 //   - Container: 获取依赖注入容器
 //   - Environment: 获取环境配置
 //   - Lifecycle: 获取生命周期管理器
@@ -99,6 +98,8 @@ type EventBusAccess interface {
 //   - EventPublisher: 获取事件发布器
 //   - AsyncEventPublisher: 获取异步事件发布器
 //   - RefreshScopeManager: 获取刷新作用域管理器
+//   - Start: 启动应用，发布生命周期事件
+//   - Stop: 停止应用，发布生命周期事件
 type ApplicationContext interface {
 	// Container 返回 IoC 容器实例。
 	Container() core.Container
@@ -120,4 +121,10 @@ type ApplicationContext interface {
 
 	// RefreshScopeManager 返回刷新作用域管理器。
 	RefreshScopeManager() *refresh.RefreshScopeManager
+
+	// Start 启动应用：发布启动事件并切换至运行阶段。
+	Start() error
+
+	// Stop 停止应用：切换至停止阶段并发布停止事件。
+	Stop() error
 }

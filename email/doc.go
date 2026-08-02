@@ -33,18 +33,18 @@
 //
 // # 配置属性
 //
-//   - email.smtp.host: SMTP 服务器地址（默认 smtp.163.com）
+//   - email.smtp.host: SMTP 服务器地址（默认 localhost）
 //   - email.smtp.port: SMTP 端口（默认 25）
-//   - email.from: 发件人地址
+//   - email.from: 发件人地址（必须显式设置）
 //   - email.password: SMTP 密码（从环境变量 ENHANCE_EMAIL_PASSWORD 读取）
 //
 // # 配置示例
 //
 // 环境变量：
 //
-//	export EMAIL_SMTP_HOST=smtp.163.com
+//	export EMAIL_SMTP_HOST=localhost
 //	export EMAIL_SMTP_PORT=25
-//	export EMAIL_FROM=xudefa_163mail@163.com
+//	export EMAIL_FROM=sender@example.com
 //	export ENHANCE_EMAIL_PASSWORD=your_password
 package email
 
@@ -55,11 +55,11 @@ import (
 // 默认配置常量。
 const (
 	// DefaultSMTPHost 默认 SMTP 主机地址。
-	DefaultSMTPHost = "smtp.163.com"
+	DefaultSMTPHost = "localhost"
 	// DefaultSMTPPort 默认 SMTP 端口。
 	DefaultSMTPPort = 25
-	// DefaultFrom 默认发件人地址。
-	DefaultFrom = "xudefa_163mail@163.com"
+	// DefaultFrom 默认发件人地址（必须显式设置）。
+	DefaultFrom = ""
 	// EnvPasswordKey 环境变量密码键名。
 	EnvPasswordKey = "ENHANCE_EMAIL_PASSWORD"
 )

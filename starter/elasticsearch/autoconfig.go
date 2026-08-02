@@ -49,7 +49,7 @@ func (c *ElasticsearchAutoConfiguration) Configure(ctx boot.ApplicationContext) 
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Elasticsearch 配置失败: %w", err)
+		return fmt.Errorf("failed to load Elasticsearch config: %w", err)
 	}
 
 	c.config = cfg
@@ -75,22 +75,22 @@ func (c *ElasticsearchAutoConfiguration) Configure(ctx boot.ApplicationContext) 
 
 	client, err := elasticsearch.NewClient(esCfg)
 	if err != nil {
-		return fmt.Errorf("创建 Elasticsearch 客户端失败: %w", err)
+		return fmt.Errorf("failed to create Elasticsearch client: %w", err)
 	}
 
 	res, err := client.Ping()
 	if err != nil {
-		return fmt.Errorf("Elasticsearch 连接失败: %w", err)
+		return fmt.Errorf("failed to connect to Elasticsearch: %w", err)
 	}
 	defer res.Body.Close()
 
 	c.client = client
 
 	if err := ctx.Container().RegisterInstance(c.client, reflect.TypeFor[*elasticsearch.Client]()); err != nil {
-		return fmt.Errorf("注册 Elasticsearch Client 失败: %w", err)
+		return fmt.Errorf("failed to register Elasticsearch Client: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Elasticsearch 连接成功",
+	c.logger.Info(ctx.Context(), "Elasticsearch connected successfully",
 		log.KeyValue{Key: "addresses", Value: cfg.Addresses},
 	)
 
@@ -107,7 +107,7 @@ func (c *ElasticsearchAutoConfiguration) Index(ctx context.Context, index string
 	// 使用 JSON 序列化文档
 	data, err := json.Marshal(doc)
 	if err != nil {
-		return fmt.Errorf("JSON 序列化文档失败: %w", err)
+		return fmt.Errorf("failed to serialize document as JSON: %w", err)
 	}
 
 	req := esapi.IndexRequest{
@@ -118,12 +118,12 @@ func (c *ElasticsearchAutoConfiguration) Index(ctx context.Context, index string
 
 	res, err := req.Do(ctx, c.client)
 	if err != nil {
-		return fmt.Errorf("索引文档失败: %w", err)
+		return fmt.Errorf("failed to index document: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
-		return fmt.Errorf("索引文档失败，状态码: %d, 响应: %s", res.StatusCode, res.String())
+		return fmt.Errorf("failed to index document, status: %d, response: %s", res.StatusCode, res.String())
 	}
 
 	return nil
@@ -163,11 +163,11 @@ func (c *ElasticsearchAutoConfiguration) loadConfig(env *environment.Environment
 	}
 
 	if err := env.BindPrefix("elasticsearch", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Elasticsearch 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Elasticsearch config: %w", err)
 	}
 
 	if len(cfg.Addresses) == 0 {
-		return nil, fmt.Errorf("elasticsearch addresses 不能为空")
+		return nil, fmt.Errorf("elasticsearch addresses must not be empty")
 	}
 
 	return cfg, nil

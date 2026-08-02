@@ -91,7 +91,7 @@ func (c *caffeineCache) Get(ctx context.Context, key string) (any, error) {
 	}
 
 	// 检查是否过期
-	if time.Now().After(item.expireAt) {
+	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
 		c.deleteItem(item)
 		return nil, ErrNotFound
 	}
@@ -110,15 +110,22 @@ func (c *caffeineCache) Set(ctx context.Context, key string, value any, ttl time
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 如果 ttl <= 0，使用默认 TTL
-	if ttl <= 0 {
+	// 如果 ttl < 0，使用默认 TTL
+	if ttl < 0 {
 		ttl = c.defaultTTL
 	}
+
+	// 计算过期时间
+	var expireAt time.Time
+	if ttl > 0 {
+		expireAt = time.Now().Add(ttl)
+	}
+	// ttl <= 0 时 expireAt 保持零值，表示永不过期
 
 	// 如果键已存在，更新值并刷新 LRU 位置
 	if existing, exists := c.items[key]; exists {
 		existing.value = value
-		existing.expireAt = time.Now().Add(ttl)
+		existing.expireAt = expireAt
 		c.lru.MoveToBack(existing.lruElement)
 		return nil
 	}
@@ -132,7 +139,7 @@ func (c *caffeineCache) Set(ctx context.Context, key string, value any, ttl time
 	item := &caffeineItem{
 		key:      key,
 		value:    value,
-		expireAt: time.Now().Add(ttl),
+		expireAt: expireAt,
 	}
 	item.lruElement = c.lru.PushBack(item)
 	c.items[key] = item
@@ -166,7 +173,7 @@ func (c *caffeineCache) Exists(ctx context.Context, key string) (bool, error) {
 		return false, nil
 	}
 
-	if time.Now().After(item.expireAt) {
+	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
 		c.deleteItem(item)
 		return false, nil
 	}
@@ -176,7 +183,7 @@ func (c *caffeineCache) Exists(ctx context.Context, key string) (bool, error) {
 
 // TTL gets the remaining TTL for a key.
 // Returns ErrNotFound if the key doesn't exist.
-// Returns 0 if the item has no expiration (永不过期).
+// Returns -1 if the item has no expiration (永不过期).
 func (c *caffeineCache) TTL(ctx context.Context, key string) (time.Duration, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -186,7 +193,12 @@ func (c *caffeineCache) TTL(ctx context.Context, key string) (time.Duration, err
 		return 0, ErrNotFound
 	}
 
-	if time.Now().After(item.expireAt) {
+	// 永不过期
+	if item.expireAt.IsZero() {
+		return -1, nil
+	}
+
+	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
 		c.deleteItem(item)
 		return 0, ErrNotFound
 	}
@@ -223,10 +235,11 @@ func (c *caffeineCache) evictLRU() {
 		return
 	}
 
-	key := front.Value.(string)
-	if item, exists := c.items[key]; exists {
-		c.deleteItem(item)
+	item, ok := front.Value.(*caffeineItem)
+	if !ok {
+		return
 	}
+	c.deleteItem(item)
 }
 
 // Size 返回缓存中当前的条目数量。

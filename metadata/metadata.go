@@ -277,20 +277,17 @@ func (idx *propertyIndexImpl) GetByPrefix(prefix string) []PropertyMetadata {
 // ==================== 工具函数 ====================
 
 // GenerateFromStruct 从结构体类型直接生成元数据。
-func GenerateFromStruct(configs ...any) (*ConfigurationMetadata, error) {
+func GenerateFromStruct(configs ...any) *ConfigurationMetadata {
 	gen := NewMetadataGenerator()
 	for _, config := range configs {
 		gen.Register(config)
 	}
-	return gen.Generate(), nil
+	return gen.Generate()
 }
 
 // GenerateJSON 从结构体生成 JSON 格式的元数据。
 func GenerateJSON(configs ...any) (string, error) {
-	metadata, err := GenerateFromStruct(configs...)
-	if err != nil {
-		return "", err
-	}
+	metadata := GenerateFromStruct(configs...)
 	return metadata.ToJSON()
 }
 
@@ -301,7 +298,7 @@ func ValidateProperty(name string, value string, metadata PropertyMetadata) erro
 	}
 
 	if metadata.Secret && value != "" {
-		return fmt.Errorf("property %q contains sensitive information and should not be exposed", name)
+		fmt.Printf("[WARN] property %q is secret and its value should not be displayed\n", name)
 	}
 
 	return nil

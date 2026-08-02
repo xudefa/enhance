@@ -14,7 +14,7 @@ func TestExceptionHandlingMiddleware_Error(t *testing.T) {
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := ErrNotFound
-		resp := handler.Handle(r.Context(), err, &httpResponseWriter{w})
+		resp := handler.Handle(r.Context(), err, &httpResponseWriter{ResponseWriter: w, ctx: r.Context()})
 		if resp != nil {
 			w.WriteHeader(resp.Code)
 			_ = json.NewEncoder(w).Encode(resp)

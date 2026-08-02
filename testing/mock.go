@@ -92,11 +92,9 @@ func (m *mockImpl) Verify() error {
 	defer m.mu.RUnlock()
 
 	for _, exp := range m.expectations {
-		key := methodKey(exp.Method, exp.Args)
-		count := m.callCount[key]
-		if count < exp.Times {
+		if exp.CallCount < exp.Times {
 			return fmt.Errorf("期望 %s 被调用 %d 次，但实际被调用 %d 次",
-				exp.Method, exp.Times, count)
+				exp.Method, exp.Times, exp.CallCount)
 		}
 	}
 

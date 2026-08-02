@@ -3,6 +3,7 @@ package environment
 import (
 	"fmt"
 	"reflect"
+	"time"
 )
 
 // BindConfig 泛型配置绑定
@@ -66,12 +67,9 @@ func validateRequired(v reflect.Value) []string {
 		field := t.Field(i)
 		fieldVal := v.Field(i)
 
-		if fieldVal.Kind() == reflect.Struct && fieldVal.CanAddr() {
-			// 检查是否嵌套结构体
-			if _, hasConfig := field.Tag.Lookup("config"); !hasConfig {
-				missing = append(missing, validateRequired(fieldVal)...)
-				continue
-			}
+		// 始终递归检查嵌套结构体（time.Time 等特殊类型除外）
+		if fieldVal.Kind() == reflect.Struct && fieldVal.CanAddr() && !isTimeType(fieldVal.Type()) {
+			missing = append(missing, validateRequired(fieldVal)...)
 		}
 
 		if field.Tag.Get("required") == "true" || field.Tag.Get("validate") == "required" {
@@ -81,6 +79,12 @@ func validateRequired(v reflect.Value) []string {
 		}
 	}
 	return missing
+}
+
+// isTimeType 检查是否为 time.Time 类型
+func isTimeType(t reflect.Type) bool {
+	timeType := reflect.TypeOf(time.Time{})
+	return t == timeType
 }
 
 // isEmptyValue 检查值是否为空
@@ -98,6 +102,11 @@ func isEmptyValue(v reflect.Value) bool {
 		return v.Float() == 0
 	case reflect.Interface, reflect.Pointer:
 		return v.IsNil()
+	case reflect.Struct:
+		if !v.CanInterface() {
+			return false
+		}
+		return reflect.DeepEqual(v.Interface(), reflect.Zero(v.Type()).Interface())
 	}
 	return false
 }

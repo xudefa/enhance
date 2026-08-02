@@ -24,6 +24,7 @@ type Span struct {
 	Events       []SpanEvent       `json:"events,omitempty"`
 	Ended        bool              `json:"ended"`
 	spanContext  SpanContext
+	contextSet   bool
 	mu           sync.Mutex
 }
 

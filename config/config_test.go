@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -69,6 +70,31 @@ func TestConfig_LoadAndSave(t *testing.T) {
 	// JSON 将整数解析为 float64
 	if int(c2.Get("key2").(float64)) != 123 {
 		t.Errorf("expected 123, got %v", c2.Get("key2"))
+	}
+}
+
+func TestConfig_GetTypedAfterJSONLoad(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "app.json")
+	content := `{"name":"test-app","port":8080,"enabled":true}`
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	c := NewConfig()
+	if err := c.Load(path); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := c.GetString("name"); got != "test-app" {
+		t.Errorf("GetString(name) = %q, want test-app", got)
+	}
+	if got := c.GetInt("port"); got != 8080 {
+		t.Errorf("GetInt(port) = %d, want 8080", got)
+	}
+	if !c.GetBool("enabled") {
+		t.Error("GetBool(enabled) = false, want true")
 	}
 }
 

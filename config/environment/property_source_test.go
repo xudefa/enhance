@@ -1,6 +1,8 @@
 package environment
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -127,8 +129,8 @@ func TestNewDefaultPropertySource(t *testing.T) {
 	if src.Name() != "defaults" {
 		t.Fatalf("Name() = %s, want defaults", src.Name())
 	}
-	if src.Priority() != PriorityLowest {
-		t.Fatalf("Priority() = %d, want %d", src.Priority(), PriorityLowest)
+	if src.Priority() != PriorityFallback {
+		t.Fatalf("Priority() = %d, want %d", src.Priority(), PriorityFallback)
 	}
 
 	val, ok := src.GetProperty("server.port")
@@ -163,6 +165,32 @@ func TestDefaultPropertySource_OverriddenByOtherSource(t *testing.T) {
 	host := env.GetString("server.host", "")
 	if host != "default.com" {
 		t.Fatalf("expected default.com (fallback from defaults), got %s", host)
+	}
+}
+
+func TestDefaultPropertySource_DoesNotOverrideFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "application.json")
+	if err := os.WriteFile(configFile, []byte(`{"app":{"name":"from-file"}}`), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	env := NewEnvironment()
+	fileSource, err := NewJSONPropertySource("application-config", configFile)
+	if err != nil {
+		t.Fatalf("failed to create JSON source: %v", err)
+	}
+
+	// 模拟常见流程：先加载 application.json，再添加默认值源。
+	// 无论添加顺序如何，文件配置源都必须优先于默认值源。
+	env.AddPropertySource(fileSource)
+	env.AddPropertySource(NewDefaultPropertySource("defaults", map[string]any{
+		"app.name": "from-default",
+	}))
+
+	if got := env.GetString("app.name", ""); got != "from-file" {
+		t.Fatalf("GetString(app.name) = %q, want from-file (file must beat defaults)", got)
 	}
 }
 

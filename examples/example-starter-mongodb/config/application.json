@@ -1,0 +1,15 @@
+{
+  "mongodb": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 27017,
+    "username": "",
+    "password": "",
+    "database": "enhance",
+    "auth_source": "admin",
+    "max_pool_size": 100,
+    "min_pool_size": 10,
+    "connect_timeout": 10,
+    "server_selection_timeout": 5
+  }
+}

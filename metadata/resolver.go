@@ -11,7 +11,6 @@ import (
 
 // tagAnnotationResolverImpl TagAnnotationResolver 接口的默认实现。
 type tagAnnotationResolverImpl struct {
-	mu      sync.RWMutex
 	cache   sync.Map
 	tagName string
 }
@@ -42,7 +41,7 @@ func NewTagAnnotationResolver(tagName string) TagAnnotationResolver {
 func (r *tagAnnotationResolverImpl) ResolveAnnotations(t reflect.Type) []Annotation {
 	// 检查缓存
 	if cached, ok := r.cache.Load(t); ok {
-		return cached.([]Annotation)
+		return cloneAnnotations(cached.([]Annotation))
 	}
 
 	var annotations []Annotation
@@ -82,7 +81,21 @@ func (r *tagAnnotationResolverImpl) ResolveAnnotations(t reflect.Type) []Annotat
 	// 缓存结果
 	r.cache.Store(t, annotations)
 
-	return annotations
+	return cloneAnnotations(annotations)
+}
+
+// cloneAnnotations 深拷贝注解切片，防止调用方修改缓存中的注解。
+func cloneAnnotations(annotations []Annotation) []Annotation {
+	result := make([]Annotation, len(annotations))
+	for i, ann := range annotations {
+		attrs := make(map[string]any, len(ann.Attributes))
+		for k, v := range ann.Attributes {
+			attrs[k] = v
+		}
+		ann.Attributes = attrs
+		result[i] = ann
+	}
+	return result
 }
 
 // parseTagValue 解析 tag 值
@@ -113,7 +126,7 @@ func (r *tagAnnotationResolverImpl) parseTagValue(tagValue string, field reflect
 
 	// 解析属性
 	attrStr := strings.TrimSpace(parts[1])
-	attrs := r.parseAttributes(attrStr, field.Type)
+	attrs := r.parseAttributes(attrStr)
 
 	// 合并属性
 	for k, v := range attrs {
@@ -132,11 +145,10 @@ func (r *tagAnnotationResolverImpl) parseTagValue(tagValue string, field reflect
 //
 // 参数:
 //   - attrStr: 属性字符串
-//   - fieldType: 字段类型（用于类型推断）
 //
 // 返回值:
 //   - map[string]any: 属性映射
-func (r *tagAnnotationResolverImpl) parseAttributes(attrStr string, fieldType reflect.Type) map[string]any {
+func (r *tagAnnotationResolverImpl) parseAttributes(attrStr string) map[string]any {
 	attrs := make(map[string]any)
 
 	// 分割多个属性（支持逗号分隔）

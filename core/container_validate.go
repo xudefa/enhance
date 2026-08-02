@@ -8,20 +8,29 @@ import (
 
 // Validate 验证所有已注册Bean的依赖是否可解析，检测循环依赖。
 func (c *defaultContainer) Validate() error {
+	// 短暂持锁读取状态快照，校验过程在锁外执行，
+	// 避免在持有 RLock 时再次获取锁（validateDependencies/Types）导致死锁
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	if c.initialized {
+		c.mu.RUnlock()
 		return fmt.Errorf("container already initialized, cannot validate")
+	}
+	parent := c.parent
+	beans := c.reg.ListBeans()
+	c.mu.RUnlock()
+
+	types := make([]reflect.Type, 0, len(beans))
+	for _, def := range beans {
+		types = append(types, def.Type)
 	}
 
 	// 1. 检查所有Bean的依赖是否已注册
-	if err := c.validateDependencies(); err != nil {
+	if err := c.validateDependencies(types, parent); err != nil {
 		return err
 	}
 
 	// 2. 检测循环依赖
-	if err := c.detectCircularDependencies(); err != nil {
+	if err := c.detectCircularDependencies(types); err != nil {
 		return err
 	}
 
@@ -29,15 +38,15 @@ func (c *defaultContainer) Validate() error {
 }
 
 // validateDependencies 检查所有Bean的依赖是否已注册
-func (c *defaultContainer) validateDependencies() error {
-	types := c.Types()
+func (c *defaultContainer) validateDependencies(types []reflect.Type, parent Container) error {
 	typeSet := make(map[reflect.Type]bool)
 	for _, typ := range types {
+		typeSet[toPtrType(typ)] = true
 		typeSet[typ] = true
 	}
 
 	for _, typ := range types {
-		if err := c.validateTypeDependencies(typ, typeSet); err != nil {
+		if err := c.validateTypeDependencies(typ, typeSet, parent); err != nil {
 			return err
 		}
 	}
@@ -46,7 +55,7 @@ func (c *defaultContainer) validateDependencies() error {
 }
 
 // validateTypeDependencies 检查指定类型的依赖
-func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet map[reflect.Type]bool) error {
+func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet map[reflect.Type]bool, parent Container) error {
 	actualType := typ
 	if typ.Kind() == reflect.Ptr {
 		actualType = typ.Elem()
@@ -72,12 +81,12 @@ func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet ma
 			continue
 		}
 
-		if c.parent == nil {
+		if parent == nil {
 			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
 				field.Name, typ.String(), fieldType.String())
 		}
 
-		ext, ok := c.parent.(ContainerExt)
+		ext, ok := parent.(ContainerExt)
 		if !ok {
 			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
 				field.Name, typ.String(), fieldType.String())
@@ -101,15 +110,18 @@ func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet ma
 	return nil
 }
 
-// detectCircularDependencies 检测循环依赖
-func (c *defaultContainer) detectCircularDependencies() error {
-	types := c.Types()
+// detectCircularDependencies 检测循环依赖。
+//
+// 注意：此检测仅覆盖 struct 字段注入（inject tag）产生的依赖，
+// 构造器注入（Factory 函数闭包捕获）的循环依赖无法在此静态检测。
+func (c *defaultContainer) detectCircularDependencies(types []reflect.Type) error {
 	visited := make(map[reflect.Type]bool)
 	recStack := make(map[reflect.Type]bool)
 
 	for _, typ := range types {
-		if !visited[typ] {
-			if err := c.detectCircularDFS(typ, visited, recStack, []string{}); err != nil {
+		key := toPtrType(typ)
+		if !visited[key] {
+			if err := c.detectCircularDFS(key, visited, recStack, []string{}); err != nil {
 				return err
 			}
 		}
@@ -118,15 +130,23 @@ func (c *defaultContainer) detectCircularDependencies() error {
 	return nil
 }
 
-// detectCircularDFS 深度优先搜索检测循环依赖
-func (c *defaultContainer) detectCircularDFS(typ reflect.Type, visited, recStack map[reflect.Type]bool, path []string) error {
-	visited[typ] = true
-	recStack[typ] = true
-	path = append(path, typ.String())
+// toPtrType 将类型统一转换为指针类型，避免指针和非指针类型被当作不同 key。
+func toPtrType(typ reflect.Type) reflect.Type {
+	if typ.Kind() != reflect.Ptr {
+		return reflect.PointerTo(typ)
+	}
+	return typ
+}
 
-	actualType := typ
-	if typ.Kind() == reflect.Ptr {
-		actualType = typ.Elem()
+// detectCircularDFS 深度优先搜索检测循环依赖
+func (c *defaultContainer) detectCircularDFS(key reflect.Type, visited, recStack map[reflect.Type]bool, path []string) error {
+	visited[key] = true
+	recStack[key] = true
+	path = append(path, key.String())
+
+	actualType := key
+	if key.Kind() == reflect.Ptr {
+		actualType = key.Elem()
 	}
 
 	if actualType.Kind() == reflect.Struct {
@@ -137,15 +157,15 @@ func (c *defaultContainer) detectCircularDFS(typ reflect.Type, visited, recStack
 			}
 
 			if _, ok := field.Tag.Lookup("inject"); ok {
-				fieldType := field.Type
+				fieldKey := toPtrType(field.Type)
 
-				if recStack[fieldType] {
-					path = append(path, fieldType.String())
+				if recStack[fieldKey] {
+					path = append(path, fieldKey.String())
 					return fmt.Errorf("circular dependency detected: %s", strings.Join(path, " -> "))
 				}
 
-				if !visited[fieldType] {
-					if err := c.detectCircularDFS(fieldType, visited, recStack, path); err != nil {
+				if !visited[fieldKey] {
+					if err := c.detectCircularDFS(fieldKey, visited, recStack, path); err != nil {
 						return err
 					}
 				}
@@ -153,6 +173,6 @@ func (c *defaultContainer) detectCircularDFS(typ reflect.Type, visited, recStack
 		}
 	}
 
-	recStack[typ] = false
+	recStack[key] = false
 	return nil
 }

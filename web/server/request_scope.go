@@ -23,23 +23,25 @@ func NewRequestScope() *RequestScope {
 // Get 获取或创建指定名称的 Bean 实例
 //
 // 如果缓存中已存在该 Bean，直接返回；否则调用 factory 创建并缓存。
+// 注意：factory 在锁外执行，避免 factory 内部再次调用 Get 时发生重入死锁。
 func (s *RequestScope) Get(name string, factory func() any) any {
 	s.mu.RLock()
-	if val, ok := s.cache[name]; ok {
-		s.mu.RUnlock()
+	val, ok := s.cache[name]
+	s.mu.RUnlock()
+	if ok {
 		return val
 	}
-	s.mu.RUnlock()
+
+	val = factory()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 双重检查
-	if val, ok := s.cache[name]; ok {
-		return val
+	// 双重检查：factory 执行期间可能有其他 goroutine 写入
+	if cached, ok := s.cache[name]; ok {
+		return cached
 	}
 
-	val := factory()
 	s.cache[name] = val
 	return val
 }

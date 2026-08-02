@@ -160,6 +160,53 @@ func TestBindConfig_DefaultValue(t *testing.T) {
 	}
 }
 
+func TestBindConfig_DefaultTag(t *testing.T) {
+	t.Parallel()
+	t.Run("default applied when key missing", func(t *testing.T) {
+		t.Parallel()
+		env := NewEnvironment()
+		env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
+			"server.host": "localhost",
+		}))
+
+		type ServerConfig struct {
+			Port int    `config:"server.port" default:"8080"`
+			Host string `config:"server.host"`
+		}
+
+		cfg, err := BindConfig[ServerConfig](env)
+		if err != nil {
+			t.Fatalf("BindConfig failed: %v", err)
+		}
+		if cfg.Port != 8080 {
+			t.Errorf("expected default port 8080, got %d", cfg.Port)
+		}
+		if cfg.Host != "localhost" {
+			t.Errorf("expected host 'localhost', got '%s'", cfg.Host)
+		}
+	})
+
+	t.Run("explicit value overrides default", func(t *testing.T) {
+		t.Parallel()
+		env := NewEnvironment()
+		env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
+			"server.port": 9090,
+		}))
+
+		type ServerConfig struct {
+			Port int `config:"server.port" default:"8080"`
+		}
+
+		cfg, err := BindConfig[ServerConfig](env)
+		if err != nil {
+			t.Fatalf("BindConfig failed: %v", err)
+		}
+		if cfg.Port != 9090 {
+			t.Errorf("expected port 9090 from config, got %d", cfg.Port)
+		}
+	})
+}
+
 func TestBindConfig_NestedStruct(t *testing.T) {
 	t.Parallel()
 	env := NewEnvironment()

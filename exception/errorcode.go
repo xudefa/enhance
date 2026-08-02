@@ -2,7 +2,10 @@
 package exception
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"sync"
 )
 
 func (e ErrorCode) Error() string {
@@ -43,7 +46,8 @@ func (r *ErrorCodeRegistry) Get(detail string) (ErrorCode, bool) {
 	if !ok {
 		return ErrorCode{}, false
 	}
-	return v.(ErrorCode), true
+	ec, _ := v.(ErrorCode)
+	return ec, true
 }
 
 // MustGet 根据开发者调试信息获取错误码，不存在则 panic
@@ -59,7 +63,8 @@ func (r *ErrorCodeRegistry) MustGet(detail string) ErrorCode {
 func (r *ErrorCodeRegistry) GetAll() []ErrorCode {
 	var codes []ErrorCode
 	r.codes.Range(func(key, value any) bool {
-		codes = append(codes, value.(ErrorCode))
+		ec, _ := value.(ErrorCode)
+		codes = append(codes, ec)
 		return true
 	})
 	return codes
@@ -98,17 +103,14 @@ func NewErrorCodeExceptionResolver() *ErrorCodeExceptionResolver {
 }
 
 // Resolve 解析错误码并返回错误响应
-func (r *ErrorCodeExceptionResolver) Resolve(ctx any, err error) *ErrorResponse {
+func (r *ErrorCodeExceptionResolver) Resolve(ctx context.Context, err error) *ErrorResponse {
 	var codeErr ErrorCode
 	if !asErrorCode(err, &codeErr) {
 		return nil
 	}
 
-	return &ErrorResponse{
-		Code:    codeErr.Code,
-		Message: codeErr.Message,
-		Details: codeErr.Detail,
-	}
+	// 使用 NewErrorResponse 统一构建响应，确保 Timestamp 被正确填充
+	return NewErrorResponse(codeErr.Code, codeErr.Message, "", "", codeErr.Detail)
 }
 
 // Supports 判断是否能处理该错误
@@ -123,21 +125,26 @@ func (r *ErrorCodeExceptionResolver) Order() int {
 }
 
 // asErrorCode 尝试将错误转换为 ErrorCode
+//
+// 使用 errors.As 沿错误链查找，使 fmt.Errorf("wrap: %w", err) 等包装错误也能被识别。
 func asErrorCode(err error, target *ErrorCode) bool {
 	if err == nil {
 		return false
 	}
 
-	if code, ok := err.(ErrorCode); ok {
+	// 匹配 ErrorCode 值类型（ErrorCode 本身实现了 error 接口）
+	var code ErrorCode
+	if errors.As(err, &code) {
 		*target = code
 		return true
 	}
 
+	// 匹配实现了 ErrorCode() ErrorCode 接口的类型（如 *BusinessError）
 	type errorCodeInterface interface {
 		ErrorCode() ErrorCode
 	}
-
-	if iface, ok := err.(errorCodeInterface); ok {
+	var iface errorCodeInterface
+	if errors.As(err, &iface) {
 		*target = iface.ErrorCode()
 		return true
 	}
@@ -149,6 +156,7 @@ func asErrorCode(err error, target *ErrorCode) bool {
 //
 // 包装 ErrorCode 并支持附加详细信息。
 type BusinessError struct {
+	mu      sync.Mutex
 	code    ErrorCode
 	details map[string]any
 }
@@ -163,20 +171,26 @@ func New(code ErrorCode) *BusinessError {
 
 // WithDetail 添加详细信息
 func (e *BusinessError) WithDetail(key string, value any) *BusinessError {
+	e.mu.Lock()
 	e.details[key] = value
+	e.mu.Unlock()
 	return e
 }
 
 // WithDetails 批量添加详细信息
 func (e *BusinessError) WithDetails(details map[string]any) *BusinessError {
+	e.mu.Lock()
 	for k, v := range details {
 		e.details[k] = v
 	}
+	e.mu.Unlock()
 	return e
 }
 
 // Error 实现 error 接口
 func (e *BusinessError) Error() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if len(e.details) == 0 {
 		return e.code.Error()
 	}
@@ -185,7 +199,13 @@ func (e *BusinessError) Error() string {
 
 // GetDetails 获取详细信息
 func (e *BusinessError) GetDetails() map[string]any {
-	return e.details
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	result := make(map[string]any, len(e.details))
+	for k, v := range e.details {
+		result[k] = v
+	}
+	return result
 }
 
 // ErrorCode 返回错误码

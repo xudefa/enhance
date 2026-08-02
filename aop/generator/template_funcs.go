@@ -9,14 +9,14 @@ import (
 
 // ProxyTemplateData 代理模板数据
 type ProxyTemplateData struct {
-	Package      string               // 包名
-	ProxyName    string               // 代理类名
-	TargetName   string               // 目标结构体名
-	BeanID       string               // Bean 标识
-	Imports      []string             // 导入列表
-	Aspects      []AspectTemplateData // 切面数据列表
-	Methods      []MethodTemplateData // 方法数据列表
-	Dependencies []string             // 依赖列表
+	Package     string               // 包名
+	ProxyName   string               // 代理类名
+	TargetName  string               // 目标结构体名
+	BeanID      string               // Bean 标识
+	Imports     []string             // 导入列表
+	Aspects     []AspectTemplateData // 切面数据列表
+	Methods     []MethodTemplateData // 方法数据列表
+	IsInterface bool                 // 目标是否为接口
 }
 
 // AspectTemplateData 切面模板数据
@@ -90,29 +90,50 @@ type TemplateEngine struct {
 	adapterTemplate              *template.Template // 通知适配器模板
 }
 
+// uniqueAdviceFuncs 去重切面函数，避免为同一通知函数生成重复包装。
+//
+// 同一切面方法的多个 @Before/@Around 注解可能匹配多个目标方法，
+// 但生成的包装函数只需生成一次。
+func uniqueAdviceFuncs(aspects []AspectTemplateData) []AspectTemplateData {
+	seen := make(map[string]bool, len(aspects))
+	result := make([]AspectTemplateData, 0, len(aspects))
+	for _, a := range aspects {
+		if a.AdviceFunc == "" || seen[a.AdviceFunc] {
+			continue
+		}
+		seen[a.AdviceFunc] = true
+		result = append(result, a)
+	}
+	return result
+}
+
 // NewTemplateEngine 创建代码模板引擎
 func NewTemplateEngine() (*TemplateEngine, error) {
-	simpleTmpl, err := template.New("simpleProxy").Parse(simpleProxyTemplate)
+	funcMap := template.FuncMap{
+		"uniqueAdviceFuncs": uniqueAdviceFuncs,
+	}
+
+	simpleTmpl, err := template.New("simpleProxy").Funcs(funcMap).Parse(simpleProxyTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse simple proxy template: %w", err)
 	}
 
-	aopTmpl, err := template.New("aopProxy").Parse(aopProxyTemplate)
+	aopTmpl, err := template.New("aopProxy").Funcs(funcMap).Parse(aopProxyTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse AOP proxy template: %w", err)
 	}
 
-	staticTmpl, err := template.New("staticAopProxy").Parse(staticAopProxyTemplate)
+	staticTmpl, err := template.New("staticAopProxy").Funcs(funcMap).Parse(staticAopProxyTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse static AOP proxy template: %w", err)
 	}
 
-	staticInterfaceTmpl, err := template.New("staticInterfaceProxy").Parse(staticInterfaceProxyTemplate)
+	staticInterfaceTmpl, err := template.New("staticInterfaceProxy").Funcs(funcMap).Parse(staticInterfaceProxyTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse static interface proxy template: %w", err)
 	}
 
-	adapterTmpl, err := template.New("adapter").Parse(adviceAdapterTemplate)
+	adapterTmpl, err := template.New("adapter").Funcs(funcMap).Parse(adviceAdapterTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse adapter template: %w", err)
 	}
@@ -179,6 +200,13 @@ func (e *TemplateEngine) GenerateAdviceAdapter(data AdviceAdapterTemplateData) (
 	return buf.String(), nil
 }
 
+// safeTupleAccess generates a comma-ok type assertion that panics on mismatch.
+// The bare assertion tuple[i].(T) panics at runtime if the type is wrong.
+// This wraps the assertion so that the generated code is safe.
+func safeTupleAccess(i int, typ string) string {
+	return fmt.Sprintf("func() %[1]s { v, ok := tuple[%[2]d].(%[1]s); if !ok { panic(\"aop: type assertion failed for result[%[2]d\") }; return v }()", typ, i)
+}
+
 // buildMethodTemplateData 从方法信息构建方法模板数据
 func buildMethodTemplateData(method MethodInfo) MethodTemplateData {
 	var params []string
@@ -230,11 +258,11 @@ func buildMethodTemplateData(method MethodInfo) MethodTemplateData {
 			continue
 		}
 		if hasError {
-			returnValuesWithError = append(returnValuesWithError, fmt.Sprintf("tuple[%d].(%s)", i, result.Type))
+			returnValuesWithError = append(returnValuesWithError, safeTupleAccess(i, result.Type))
 		} else {
-			returnValues = append(returnValues, fmt.Sprintf("tuple[%d].(%s)", i, result.Type))
+			returnValues = append(returnValues, safeTupleAccess(i, result.Type))
 		}
-		returnValuesFromTuple = append(returnValuesFromTuple, fmt.Sprintf("tuple[%d].(%s)", i, result.Type))
+		returnValuesFromTuple = append(returnValuesFromTuple, safeTupleAccess(i, result.Type))
 		returnValuesFallback = append(returnValuesFallback, "nil")
 	}
 

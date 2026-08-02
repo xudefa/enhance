@@ -16,6 +16,9 @@ func TestRefreshManager_Refresh(t *testing.T) {
 	})
 
 	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	err := manager.Refresh()
 	if err != nil {
@@ -28,6 +31,9 @@ func TestRefreshManager_AddRefreshListener(t *testing.T) {
 
 	env := environment.NewMapEnvironment(map[string]string{})
 	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	called := false
 	listener := &mockRefreshListener{
@@ -51,6 +57,9 @@ func TestRefreshManager_RefreshListenerError(t *testing.T) {
 
 	env := environment.NewMapEnvironment(map[string]string{})
 	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	expectedErr := errors.New("listener error")
 	listener := &mockRefreshListener{
@@ -74,6 +83,9 @@ func TestRefreshManager_RefreshEventFields(t *testing.T) {
 		"app.name": "test-app",
 	})
 	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	var receivedEvent RefreshEvent
 	listener := &mockRefreshListener{
@@ -100,6 +112,9 @@ func TestRefreshManager_MultipleListeners(t *testing.T) {
 
 	env := environment.NewMapEnvironment(map[string]string{})
 	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	callCount := 0
 	for i := 0; i < 3; i++ {
@@ -131,6 +146,102 @@ func TestRefreshManager_StartStop(t *testing.T) {
 
 	if err := manager.Stop(); err != nil {
 		t.Errorf("Stop() error = %v", err)
+	}
+}
+
+func TestRefreshManager_StopPreventsRefresh(t *testing.T) {
+	t.Parallel()
+
+	env := environment.NewMapEnvironment(map[string]string{})
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	called := false
+	listener := &mockRefreshListener{
+		onRefresh: func(event RefreshEvent) error {
+			called = true
+			return nil
+		},
+	}
+	manager.AddRefreshListener(listener)
+
+	if err := manager.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	_ = manager.Refresh()
+	if called {
+		t.Error("RefreshListener.OnRefresh() called after Stop()")
+	}
+}
+
+func TestRefreshManager_PlaceholderKey_NoFalseChange(t *testing.T) {
+	t.Parallel()
+
+	env := environment.NewMapEnvironment(map[string]string{
+		"app.name": "${app.real}",
+		"app.real": "enhance",
+	})
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	var count int
+	var secondKeys []string
+	listener := &mockRefreshListener{
+		onRefresh: func(event RefreshEvent) error {
+			count++
+			if count == 2 {
+				secondKeys = event.ChangedKeys
+			}
+			return nil
+		},
+	}
+	manager.AddRefreshListener(listener)
+
+	_ = manager.Refresh()
+	_ = manager.Refresh()
+
+	if count != 2 {
+		t.Fatalf("expected 2 refreshes, got %d", count)
+	}
+	if len(secondKeys) != 0 {
+		t.Errorf("expected no changed keys when values are unchanged, got %v", secondKeys)
+	}
+}
+
+func TestRefreshManager_DetectsRealChange(t *testing.T) {
+	t.Parallel()
+
+	env := environment.NewMapEnvironment(map[string]string{
+		"app.name": "one",
+	})
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	var changed []string
+	listener := &mockRefreshListener{
+		onRefresh: func(event RefreshEvent) error {
+			changed = event.ChangedKeys
+			return nil
+		},
+	}
+	manager.AddRefreshListener(listener)
+
+	_ = manager.Refresh()
+
+	env.AddPropertySource(environment.NewMapPropertySource("override", environment.PriorityHigh, map[string]any{
+		"app.name": "two",
+	}))
+	_ = manager.Refresh()
+
+	if len(changed) != 1 || changed[0] != "app.name" {
+		t.Errorf("expected changed=[app.name], got %v", changed)
 	}
 }
 

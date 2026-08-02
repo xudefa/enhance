@@ -26,7 +26,7 @@ func TestBefore(t *testing.T) {
 	}
 
 	// 执行通知
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if !called {
 		t.Error("Before advice should have been called")
@@ -51,7 +51,7 @@ func TestAfter(t *testing.T) {
 		args:   nil,
 	}
 
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if !called {
 		t.Error("After advice should have been called")
@@ -77,8 +77,9 @@ func TestAfterReturning(t *testing.T) {
 		args:        nil,
 		proceedFunc: func() (any, error) { return expectedResult, nil },
 	}
+	jp.SetResult(expectedResult)
 
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if receivedResult != expectedResult {
 		t.Errorf("expected result %v, got %v", expectedResult, receivedResult)
@@ -104,8 +105,9 @@ func TestAfterThrowing(t *testing.T) {
 		args:        nil,
 		proceedFunc: func() (any, error) { return nil, testErr },
 	}
+	jp.SetError(testErr)
 
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if receivedError != testErr {
 		t.Errorf("expected error %v, got %v", testErr, receivedError)
@@ -169,7 +171,7 @@ func TestAroundWithArgs(t *testing.T) {
 		},
 	}
 
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if len(passedArgs) != 2 || passedArgs[0] != "arg1" || passedArgs[1] != 42 {
 		t.Errorf("expected args [arg1, 42], got %v", passedArgs)
@@ -220,7 +222,7 @@ func TestAfterThrowing_NoError(t *testing.T) {
 		proceedFunc: func() (any, error) { return "success", nil },
 	}
 
-	advice.Execute(context.Background(), jp)
+	_, _ = advice.Execute(context.Background(), jp)
 
 	if callbackCalled {
 		t.Error("AfterThrowing callback should not have been called when no error")
@@ -267,6 +269,7 @@ func TestAdviceType_Values(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.expected, func(t *testing.T) {
 			t.Parallel()
 			// 验证枚举值不同
@@ -283,6 +286,8 @@ type mockJoinPointForAdvice struct {
 	method      string
 	args        []any
 	proceedFunc func() (any, error)
+	result      any
+	lastErr     error
 }
 
 func (j *mockJoinPointForAdvice) Target() any    { return j.target }
@@ -297,3 +302,8 @@ func (j *mockJoinPointForAdvice) Proceed() (any, error) {
 func (j *mockJoinPointForAdvice) ProceedWithArgs(args []any) (any, error) {
 	return j.Proceed()
 }
+func (j *mockJoinPointForAdvice) Context() context.Context { return context.Background() }
+func (j *mockJoinPointForAdvice) GetResult() any           { return j.result }
+func (j *mockJoinPointForAdvice) GetError() error          { return j.lastErr }
+func (j *mockJoinPointForAdvice) SetResult(v any)          { j.result = v }
+func (j *mockJoinPointForAdvice) SetError(err error)       { j.lastErr = err }

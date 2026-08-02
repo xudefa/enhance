@@ -215,6 +215,37 @@ func TestLRUCache_EvictCallback(t *testing.T) {
 	}
 }
 
+func TestLRUCache_EvictCallbackReentrant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	var cache Cache
+	cache = NewLRUCache(2, WithEvictCallback(func(key string, value any) {
+		// 回调内重新进入缓存，验证不会死锁
+		_, _ = cache.Get(ctx, "key2")
+		_ = cache.Set(ctx, "reentrant", "value", time.Minute)
+	}))
+	_ = cache.Set(ctx, "key1", "value1", time.Minute)
+	_ = cache.Set(ctx, "key2", "value2", time.Minute)
+	_ = cache.Set(ctx, "key3", "value3", time.Minute) // 应该淘汰 key1 并触发回调
+}
+
+func TestLRUCache_BuilderDefaultTTL(t *testing.T) {
+	t.Parallel()
+	cache := NewMemoryCacheBuilder().
+		InitialCapacity(10).
+		TTL(50 * time.Millisecond).
+		Build()
+	ctx := context.Background()
+
+	if err := cache.Set(ctx, "key", "value", 0); err != nil {
+		t.Fatalf("failed to set: %v", err)
+	}
+	time.Sleep(80 * time.Millisecond)
+	if _, err := cache.Get(ctx, "key"); err != ErrNotFound {
+		t.Errorf("expected ErrNotFound after default TTL expiry, got %v", err)
+	}
+}
+
 func TestLRUCache_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	cache := NewLRUCache(100)
@@ -288,5 +319,72 @@ func TestLRUCache_Exists_NeverExpire(t *testing.T) {
 	}
 	if val != "value1" {
 		t.Errorf("expected value1, got %v", val)
+	}
+}
+
+func TestLRUCache_ConcurrentStress(t *testing.T) {
+	t.Parallel()
+	cache := NewLRUCache(100)
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	for i := 0; i < 20; i++ {
+		go func(n int) {
+			defer func() { done <- struct{}{} }()
+			key := "key" + string(rune('A'+n%26))
+			val := "value" + string(rune('0'+n%10))
+			_ = cache.Set(ctx, key, val, time.Minute)
+			_, _ = cache.Get(ctx, key)
+		}(i)
+	}
+	for i := 0; i < 20; i++ {
+		<-done
+	}
+}
+
+func TestLRUCache_EvictionUnderPressure(t *testing.T) {
+	t.Parallel()
+	cache := NewLRUCache(5)
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		_ = cache.Set(ctx, string(rune('a'+i)), i, time.Minute)
+	}
+
+	for i := 0; i < 100; i++ {
+		_ = cache.Set(ctx, string(rune('A'+i%26))+string(rune('0'+i/26)), i, time.Minute)
+	}
+
+	size := cache.Len()
+	if size > 5 {
+		t.Errorf("cache size %d exceeds capacity 5", size)
+	}
+}
+
+func TestLRUCache_ZeroCapacity(t *testing.T) {
+	t.Parallel()
+	cache := NewLRUCache(0)
+	ctx := context.Background()
+
+	_ = cache.Set(ctx, "key", "value", time.Minute)
+
+	// 零容量缓存行为取决于实现
+	// 设置后立即淘汰或不存储均可接受
+	_, _ = cache.Get(ctx, "key")
+}
+
+func TestLRUCache_NilValue(t *testing.T) {
+	t.Parallel()
+	cache := NewLRUCache(10)
+	ctx := context.Background()
+
+	_ = cache.Set(ctx, "nil-key", nil, time.Minute)
+
+	val, err := cache.Get(ctx, "nil-key")
+	if err != nil {
+		t.Fatalf("Get failed for nil value: %v", err)
+	}
+	if val != nil {
+		t.Errorf("expected nil, got %v", val)
 	}
 }

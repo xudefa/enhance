@@ -94,5 +94,3 @@ func NewApplication(opts ...any) (*Boot, error) {
 
 	return b, nil
 }
-
-

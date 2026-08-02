@@ -232,6 +232,14 @@ func (r *MemoryRegistry) Deregister(ctx context.Context, info InstanceInfo) erro
 		}
 	}
 
+	// 通知watchers
+	for _, ch := range r.watchers[info.ServiceName] {
+		select {
+		case ch <- r.instances[info.ServiceName]:
+		default:
+		}
+	}
+
 	return nil
 }
 
@@ -256,6 +264,21 @@ func (r *MemoryRegistry) Watch(ctx context.Context, serviceName string) (<-chan 
 
 	ch := make(chan []InstanceInfo, 10)
 	r.watchers[serviceName] = append(r.watchers[serviceName], ch)
+
+	// 启动 goroutine 监听 context 取消，清理 watcher
+	go func() {
+		<-ctx.Done()
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		watchers := r.watchers[serviceName]
+		for i, w := range watchers {
+			if w == ch {
+				r.watchers[serviceName] = append(watchers[:i], watchers[i+1:]...)
+				break
+			}
+		}
+		close(ch)
+	}()
 
 	return ch, nil
 }

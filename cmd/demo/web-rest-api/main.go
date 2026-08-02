@@ -11,6 +11,8 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/xudefa/enhance/web/mvc"
 	"github.com/xudefa/enhance/web/server"
@@ -26,6 +28,7 @@ type User struct {
 
 // UserController 用户控制器
 type UserController struct {
+	mu     sync.Mutex
 	users  []User
 	nextID int
 }
@@ -49,7 +52,10 @@ func (c *UserController) Routes(router mvc.Router) {
 
 // ListUsers 获取用户列表
 func (c *UserController) ListUsers(ctx mvc.Context) {
-	ctx.JSON(http.StatusOK, map[string]any{
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	_ = ctx.JSON(http.StatusOK, map[string]any{
 		"code":  0,
 		"data":  c.users,
 		"total": len(c.users),
@@ -58,11 +64,14 @@ func (c *UserController) ListUsers(ctx mvc.Context) {
 
 // GetUser 获取单个用户
 func (c *UserController) GetUser(ctx mvc.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	id := ctx.PathParam("id")
 
 	for _, user := range c.users {
 		if fmt.Sprintf("%d", user.ID) == id {
-			ctx.JSON(http.StatusOK, map[string]any{
+			_ = ctx.JSON(http.StatusOK, map[string]any{
 				"code": 0,
 				"data": user,
 			})
@@ -70,7 +79,7 @@ func (c *UserController) GetUser(ctx mvc.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusNotFound, map[string]any{
+	_ = ctx.JSON(http.StatusNotFound, map[string]any{
 		"code":    404,
 		"message": "用户不存在",
 	})
@@ -87,12 +96,15 @@ type CreateUserRequest struct {
 func (c *UserController) CreateUser(ctx mvc.Context) {
 	var req CreateUserRequest
 	if err := ctx.BindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, map[string]any{
+		_ = ctx.JSON(http.StatusBadRequest, map[string]any{
 			"code":    400,
 			"message": "请求参数错误: " + err.Error(),
 		})
 		return
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	user := User{
 		ID:    c.nextID,
@@ -103,7 +115,7 @@ func (c *UserController) CreateUser(ctx mvc.Context) {
 	c.nextID++
 	c.users = append(c.users, user)
 
-	ctx.JSON(http.StatusCreated, map[string]any{
+	_ = ctx.JSON(http.StatusCreated, map[string]any{
 		"code": 0,
 		"data": user,
 	})
@@ -115,12 +127,15 @@ func (c *UserController) UpdateUser(ctx mvc.Context) {
 
 	var req CreateUserRequest
 	if err := ctx.BindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, map[string]any{
+		_ = ctx.JSON(http.StatusBadRequest, map[string]any{
 			"code":    400,
 			"message": "请求参数错误: " + err.Error(),
 		})
 		return
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	for i, user := range c.users {
 		if fmt.Sprintf("%d", user.ID) == id {
@@ -128,7 +143,7 @@ func (c *UserController) UpdateUser(ctx mvc.Context) {
 			c.users[i].Email = req.Email
 			c.users[i].Age = req.Age
 
-			ctx.JSON(http.StatusOK, map[string]any{
+			_ = ctx.JSON(http.StatusOK, map[string]any{
 				"code": 0,
 				"data": c.users[i],
 			})
@@ -136,7 +151,7 @@ func (c *UserController) UpdateUser(ctx mvc.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusNotFound, map[string]any{
+	_ = ctx.JSON(http.StatusNotFound, map[string]any{
 		"code":    404,
 		"message": "用户不存在",
 	})
@@ -144,12 +159,15 @@ func (c *UserController) UpdateUser(ctx mvc.Context) {
 
 // DeleteUser 删除用户
 func (c *UserController) DeleteUser(ctx mvc.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	id := ctx.PathParam("id")
 
 	for i, user := range c.users {
 		if fmt.Sprintf("%d", user.ID) == id {
 			c.users = append(c.users[:i], c.users[i+1:]...)
-			ctx.JSON(http.StatusOK, map[string]any{
+			_ = ctx.JSON(http.StatusOK, map[string]any{
 				"code":    0,
 				"message": "删除成功",
 			})
@@ -157,7 +175,7 @@ func (c *UserController) DeleteUser(ctx mvc.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusNotFound, map[string]any{
+	_ = ctx.JSON(http.StatusNotFound, map[string]any{
 		"code":    404,
 		"message": "用户不存在",
 	})
@@ -183,8 +201,8 @@ func main() {
 	// 创建服务器
 	srv := server.NewHTTPServer(
 		server.WithHost(":8080"),
-		server.WithReadTimeout(30),
-		server.WithWriteTimeout(30),
+		server.WithReadTimeout(30*time.Second),
+		server.WithWriteTimeout(30*time.Second),
 	)
 	srv.SetHandler(router)
 

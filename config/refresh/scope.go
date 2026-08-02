@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/core"
@@ -60,11 +59,6 @@ func NewRefreshScopeManager(beanCreator core.BeanCreator, logger *slog.Logger, o
 //
 // 设置刷新标记并通知代理，代理会在下次 GetTarget 时重建实例。
 func (m *RefreshScopeManager) MarkBeanForRefresh(beanID string) {
-	startTime := time.Now()
-	defer func() {
-		m.metrics.RecordRefresh(time.Since(startTime), true)
-	}()
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -126,12 +120,19 @@ func (m *RefreshScopeManager) incrementBeanVersion(beanID string) int64 {
 //
 // 遍历所有已注册的可刷新 Bean，逐一通知配置变更。
 // 如果某个 Bean 通知失败，记录错误日志但不中断其他 Bean 的通知。
+//
+// 注意：此方法在读锁内复制 Bean 列表后释放锁再回调，避免回调内部
+// 调用 RegisterRefreshableBean 等写方法时产生死锁。
 func (m *RefreshScopeManager) OnConfigChange(event environment.ConfigChangeEvent) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	beans := make(map[string]RefreshableBean, len(m.refreshableBeans))
+	for k, v := range m.refreshableBeans {
+		beans[k] = v
+	}
+	m.mu.RUnlock()
 
-	// 通知所有 RefreshableBean
-	for beanID, bean := range m.refreshableBeans {
+	// 在锁外通知，避免死锁
+	for beanID, bean := range beans {
 		if err := bean.OnConfigChange(event); err != nil {
 			m.logger.Error("Failed to notify refreshable bean",
 				"beanID", beanID,

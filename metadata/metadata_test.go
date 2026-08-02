@@ -188,10 +188,7 @@ func TestMetadataGenerator_ToJSON(t *testing.T) {
 
 func TestGenerateFromStruct(t *testing.T) {
 	t.Parallel()
-	metadata, err := GenerateFromStruct(&ServerConfig{}, &DatabaseConfig{})
-	if err != nil {
-		t.Fatalf("GenerateFromStruct failed: %v", err)
-	}
+	metadata := GenerateFromStruct(&ServerConfig{}, &DatabaseConfig{})
 
 	if len(metadata.Properties) != 5 {
 		t.Errorf("expected 5 properties, got %d", len(metadata.Properties))
@@ -267,8 +264,8 @@ func TestValidateProperty(t *testing.T) {
 	}
 
 	err = ValidateProperty("database.password", "secret123", secretProp)
-	if err == nil {
-		t.Error("expected error for secret property with value")
+	if err != nil {
+		t.Errorf("secret property with value should be allowed: %v", err)
 	}
 }
 

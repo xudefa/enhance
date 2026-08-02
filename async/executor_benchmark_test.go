@@ -1,12 +1,13 @@
 package async
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
 
 func BenchmarkAsyncExecutor_Submit(b *testing.B) {
-	executor := NewAsyncExecutor(4, 100)
+	executor := NewAsyncExecutor(context.Background(), 4, 100)
 	defer executor.Shutdown()
 
 	b.ResetTimer()
@@ -19,7 +20,7 @@ func BenchmarkAsyncExecutor_Submit(b *testing.B) {
 }
 
 func BenchmarkAsyncExecutor_SubmitVoid(b *testing.B) {
-	executor := NewAsyncExecutor(4, 100)
+	executor := NewAsyncExecutor(context.Background(), 4, 100)
 	defer executor.Shutdown()
 
 	b.ResetTimer()
@@ -32,7 +33,7 @@ func BenchmarkAsyncExecutor_SubmitVoid(b *testing.B) {
 }
 
 func BenchmarkAsyncExecutor_Concurrent(b *testing.B) {
-	executor := NewAsyncExecutor(8, 1000)
+	executor := NewAsyncExecutor(context.Background(), 8, 1000)
 	defer executor.Shutdown()
 
 	b.RunParallel(func(pb *testing.PB) {
@@ -49,7 +50,7 @@ func BenchmarkAsyncExecutor_Concurrent(b *testing.B) {
 
 func BenchmarkAsyncExecutor_DifferentWorkerCounts(b *testing.B) {
 	b.Run("1-Worker", func(b *testing.B) {
-		executor := NewAsyncExecutor(1, 100)
+		executor := NewAsyncExecutor(context.Background(), 1, 100)
 		defer executor.Shutdown()
 
 		b.RunParallel(func(pb *testing.PB) {
@@ -65,7 +66,7 @@ func BenchmarkAsyncExecutor_DifferentWorkerCounts(b *testing.B) {
 	})
 
 	b.Run("4-Workers", func(b *testing.B) {
-		executor := NewAsyncExecutor(4, 100)
+		executor := NewAsyncExecutor(context.Background(), 4, 100)
 		defer executor.Shutdown()
 
 		b.RunParallel(func(pb *testing.PB) {
@@ -81,7 +82,7 @@ func BenchmarkAsyncExecutor_DifferentWorkerCounts(b *testing.B) {
 	})
 
 	b.Run("8-Workers", func(b *testing.B) {
-		executor := NewAsyncExecutor(8, 100)
+		executor := NewAsyncExecutor(context.Background(), 8, 100)
 		defer executor.Shutdown()
 
 		b.RunParallel(func(pb *testing.PB) {
@@ -97,7 +98,7 @@ func BenchmarkAsyncExecutor_DifferentWorkerCounts(b *testing.B) {
 	})
 
 	b.Run("16-Workers", func(b *testing.B) {
-		executor := NewAsyncExecutor(16, 100)
+		executor := NewAsyncExecutor(context.Background(), 16, 100)
 		defer executor.Shutdown()
 
 		b.RunParallel(func(pb *testing.PB) {
@@ -114,7 +115,7 @@ func BenchmarkAsyncExecutor_DifferentWorkerCounts(b *testing.B) {
 }
 
 func BenchmarkFuture_GetWithTimeout(b *testing.B) {
-	executor := NewAsyncExecutor(4, 100)
+	executor := NewAsyncExecutor(context.Background(), 4, 100)
 	defer executor.Shutdown()
 
 	b.ResetTimer()

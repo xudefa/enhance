@@ -1,0 +1,32 @@
+{
+  "db": {
+    "xorm": {
+      "enabled": true,
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "username": "root",
+      "password": "password",
+      "database": "enhance",
+      "charset": "utf8mb4",
+      "max_open_conns": 100,
+      "max_idle_conns": 10,
+      "conn_max_lifetime": 3600,
+      "show_sql": true
+    }
+  },
+  "security": {
+    "enabled": true,
+    "casbin": {
+      "enabled": true,
+      "model_type": "file",
+      "model_path": "./config/casbin_model.conf",
+      "policy_type": "xorm",
+      "auto_create_table": true,
+      "table_name": "casbin_rule",
+      "database_prefix": "",
+      "auto_load": false,
+      "auto_load_interval": 5
+    }
+  }
+}

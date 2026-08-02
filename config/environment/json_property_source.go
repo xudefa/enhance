@@ -60,14 +60,17 @@ func NewJSONPropertySourceOrDefault(name, filePath string) *JSONPropertySource {
 	}
 }
 
+// Name 返回 JSONPropertySource 的名称。
 func (j *JSONPropertySource) Name() string {
 	return j.name
 }
 
+// Priority 返回 JSONPropertySource 的优先级。
 func (j *JSONPropertySource) Priority() Priority {
 	return j.priority
 }
 
+// Contains 检查 JSON 配置源中是否存在指定键。
 func (j *JSONPropertySource) Contains(key string) bool {
 	_, ok := j.GetProperty(key)
 	return ok

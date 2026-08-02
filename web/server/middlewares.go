@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/xudefa/enhance/web/mvc"
@@ -32,10 +34,11 @@ func (c RequestIDConfig) Validate() error {
 
 // DefaultRequestIDConfig 返回默认的 RequestID 配置。
 func DefaultRequestIDConfig() RequestIDConfig {
+	var counter atomic.Int64
 	return RequestIDConfig{
 		HeaderName: "X-Request-ID",
 		Generator: func() string {
-			return fmt.Sprintf("%d", time.Now().UnixNano())
+			return fmt.Sprintf("%d-%d", time.Now().UnixNano(), counter.Add(1))
 		},
 	}
 }
@@ -185,6 +188,14 @@ func (c CORSConfig) Validate() error {
 	if len(c.AllowMethods) == 0 {
 		return fmt.Errorf("允许的 HTTP 方法列表不能为空")
 	}
+	// CORS 规范要求：当 AllowCredentials 为 true 时，Access-Control-Allow-Origin 不能为 "*"
+	if c.AllowCredentials {
+		for _, o := range c.AllowOrigins {
+			if o == "*" {
+				return fmt.Errorf("当 AllowCredentials 为 true 时，AllowOrigins 不能包含 \"*\"")
+			}
+		}
+	}
 	return nil
 }
 
@@ -194,7 +205,7 @@ func DefaultCORSConfig() CORSConfig {
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}
 }
@@ -225,18 +236,26 @@ func CORSMiddleware(config CORSConfig) mvc.MiddlewareFunc {
 		// O(1) 查找，替代原来的 O(n) 遍历
 		allowed := hasWildcardOrigin || originSet[origin]
 
-		if allowed {
-			ctx.SetHeader("Access-Control-Allow-Origin", origin)
-			if config.AllowCredentials {
-				ctx.SetHeader("Access-Control-Allow-Credentials", "true")
+		isPreflight := ctx.RequestMethod() == "OPTIONS"
+
+		if !allowed {
+			// 不允许的来源：预检直接拒绝，实际请求不返回 CORS 头
+			if isPreflight {
+				ctx.AbortWithStatus(http.StatusForbidden)
 			}
+			return
+		}
+
+		ctx.SetHeader("Access-Control-Allow-Origin", origin)
+		if config.AllowCredentials {
+			ctx.SetHeader("Access-Control-Allow-Credentials", "true")
+		}
+
+		if isPreflight {
 			ctx.SetHeader("Access-Control-Allow-Methods", allowMethodsStr)
 			ctx.SetHeader("Access-Control-Allow-Headers", allowHeadersStr)
 			ctx.SetHeader("Access-Control-Max-Age", maxAgeStr)
-		}
-
-		if ctx.RequestMethod() == "OPTIONS" {
-			ctx.AbortWithStatus(204)
+			ctx.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 
@@ -285,14 +304,12 @@ func LoggingMiddleware() mvc.MiddlewareFunc {
 }
 
 // GzipMiddleware 创建 Gzip 压缩中间件。
+//
+// 注意：此中间件需要配合 ResponseWriter 包装器才能真正压缩响应体。
+// 仅设置 Content-Encoding 头而不压缩响应体会导致客户端收到乱码数据。
+// 如需 Gzip 压缩，建议使用 compress/gzip 包实现自定义中间件。
 func GzipMiddleware() mvc.MiddlewareFunc {
 	return func(ctx mvc.Context) {
-		acceptEncoding := ctx.Header("Accept-Encoding")
-
-		if contains(acceptEncoding, "gzip") {
-			ctx.SetHeader("Content-Encoding", "gzip")
-		}
-
 		ctx.Next()
 	}
 }
@@ -305,11 +322,12 @@ func RealIPMiddleware() mvc.MiddlewareFunc {
 			realIP = ctx.Header("X-Forwarded-For")
 		}
 		if realIP == "" {
-			host, _, _ := net.SplitHostPort(ctx.RequestURI())
+			host, _, _ := net.SplitHostPort(ctx.Request().RemoteAddr)
 			realIP = host
 		}
 
-		ctx.SetHeader("X-Real-IP", realIP)
+		// 写入请求头供下游中间件/处理器读取，而不是响应头
+		ctx.Request().Header.Set("X-Real-IP", realIP)
 		ctx.Next()
 	}
 }

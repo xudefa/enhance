@@ -49,6 +49,7 @@ func (c *ScheduleAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 	}
 
 	scheduler := NewScheduler(
+		ctx.Context(),
 		WithPoolSize(cfg.PoolSize),
 		WithLogger(c.logger),
 	)
@@ -58,7 +59,7 @@ func (c *ScheduleAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 		return fmt.Errorf("注册调度器失败: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "调度器已配置",
+	c.logger.Info(ctx.Context(), "调度器已配置",
 		log.KeyValue{Key: "pool_size", Value: cfg.PoolSize})
 
 	return nil
@@ -120,7 +121,11 @@ func (s *ScheduleStarter) Configure(ctx boot.ApplicationContext) error {
 		return nil
 	}
 
-	s.scheduler = bean.(*DefaultScheduler)
+	scheduler, ok := bean.(*DefaultScheduler)
+	if !ok {
+		return fmt.Errorf("unexpected scheduler type: %T", bean)
+	}
+	s.scheduler = scheduler
 	return nil
 }
 
@@ -130,12 +135,11 @@ func (s *ScheduleStarter) Start(ctx boot.ApplicationContext) error {
 		return nil
 	}
 
-	appCtx := context.Background()
-	if err := s.scheduler.Start(appCtx); err != nil {
+	if err := s.scheduler.Start(ctx.Context()); err != nil {
 		return fmt.Errorf("启动调度器失败: %w", err)
 	}
 
-	s.logger.Info(context.Background(), "调度器已启动")
+	s.logger.Info(ctx.Context(), "调度器已启动")
 	return nil
 }
 
@@ -145,15 +149,14 @@ func (s *ScheduleStarter) Stop(ctx boot.ApplicationContext) error {
 		return nil
 	}
 
-	appCtx := context.Background()
-	shutdownCtx, cancel := context.WithTimeout(appCtx, 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
 	defer cancel()
 
 	if err := s.scheduler.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("关闭调度器失败: %w", err)
 	}
 
-	s.logger.Info(context.Background(), "调度器已停止")
+	s.logger.Info(ctx.Context(), "调度器已停止")
 	return nil
 }
 

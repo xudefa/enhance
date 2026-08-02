@@ -70,6 +70,7 @@ func (h *MockHandler) Invoke(target any, method string, args []any) (any, error)
 
 // SpyHandler 间谍调用处理器（记录调用并转发）
 type SpyHandler struct {
+	mu    sync.Mutex
 	Calls []CallRecord
 }
 
@@ -81,7 +82,9 @@ type CallRecord struct {
 
 // Invoke 实现 InvocationHandler 接口
 func (h *SpyHandler) Invoke(target any, method string, args []any) (any, error) {
+	h.mu.Lock()
 	h.Calls = append(h.Calls, CallRecord{Method: method, Args: args})
+	h.mu.Unlock()
 
 	// 转发到实际方法
 	switch method {

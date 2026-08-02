@@ -2,7 +2,8 @@ package log
 
 import (
 	"context"
-	"sync/atomic"
+	"math/rand/v2"
+	"os"
 )
 
 // NewRandomSampler 创建随机采样器
@@ -72,21 +73,27 @@ func (l *SampledLogger) Error(ctx context.Context, msg string, keys ...KeyValue)
 func (l *SampledLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.DPanic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Panic 记录日志并 panic
 func (l *SampledLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.Panic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Fatal 记录致命级别日志
 func (l *SampledLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.Fatal(ctx, msg, keys...)
+		return
 	}
+	os.Exit(1)
 }
 
 // Sync 同步日志缓冲区
@@ -104,11 +111,7 @@ func (l *SampledLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 
 var _ Logger = (*SampledLogger)(nil)
 
-// randomFloat 生成 0.0-1.0 之间的随机数
-// 使用简单的线性同余生成器，避免引入 math/rand 包
+// randomFloat 生成 0.0-1.0 之间的随机数。
 func randomFloat() float64 {
-	// 使用 atomic 操作保证并发安全
-	return float64(atomic.AddUint64(&randomSeed, 1)%1000) / 1000.0
+	return rand.Float64()
 }
-
-var randomSeed uint64

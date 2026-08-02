@@ -1,6 +1,7 @@
 package event
 
 import (
+	"log/slog"
 	"reflect"
 	"sort"
 	"time"
@@ -29,7 +30,7 @@ func (b *EventBusWithOrdering) SubscribeWithConfig(eventType string, config List
 	// 使用 CAS 无锁算法添加监听器
 	for {
 		oldValue, _ := b.listeners.LoadOrStore(eventType, &listenerSlice{})
-		old := oldValue.(*listenerSlice)
+		old, _ := oldValue.(*listenerSlice)
 
 		// 在锁外创建新列表，减少锁持有时间
 		newList := make([]orderedListener, len(old.list)+1)
@@ -56,13 +57,13 @@ func (b *EventBusWithOrdering) SubscribeOnce(eventType string, listener EventLis
 
 	var wrapper EventListener = func(e ApplicationEvent) {
 		listener(e)
-		b.Unsubscribe(eventType, listener)
+		b.unsubscribeByID(eventType, id)
 	}
 
 	// 使用 CAS 无锁算法添加监听器
 	for {
 		oldValue, _ := b.listeners.LoadOrStore(eventType, &listenerSlice{})
-		old := oldValue.(*listenerSlice)
+		old, _ := oldValue.(*listenerSlice)
 
 		// 在锁外创建新列表，减少锁持有时间
 		newList := make([]orderedListener, len(old.list)+1)
@@ -94,7 +95,7 @@ func (b *EventBusWithOrdering) Unsubscribe(eventType string, target EventListene
 		if !ok {
 			return
 		}
-		old := oldValue.(*listenerSlice)
+		old, _ := oldValue.(*listenerSlice)
 
 		// 在锁外查找索引
 		found := -1
@@ -121,6 +122,41 @@ func (b *EventBusWithOrdering) Unsubscribe(eventType string, target EventListene
 	}
 }
 
+// unsubscribeByID 通过 wrapperID 取消订阅，用于 SubscribeOnce 内部
+func (b *EventBusWithOrdering) unsubscribeByID(eventType string, id int) {
+	for {
+		oldValue, ok := b.listeners.Load(eventType)
+		if !ok {
+			return
+		}
+		old, ok := oldValue.(*listenerSlice)
+		if !ok {
+			return
+		}
+
+		found := -1
+		for i, ol := range old.list {
+			if ol.wrapperID == id {
+				found = i
+				break
+			}
+		}
+
+		if found == -1 {
+			return
+		}
+
+		newList := make([]orderedListener, len(old.list)-1)
+		copy(newList, old.list[:found])
+		copy(newList[found:], old.list[found+1:])
+		newSlice := &listenerSlice{list: newList}
+
+		if b.listeners.CompareAndSwap(eventType, old, newSlice) {
+			return
+		}
+	}
+}
+
 // Publish 发布事件，按优先级排序并应用过滤条件
 //
 // 性能优化：
@@ -131,7 +167,8 @@ func (b *EventBusWithOrdering) Publish(event ApplicationEvent) {
 	if !ok {
 		return
 	}
-	listeners := oldValue.(*listenerSlice).list
+	old, _ := oldValue.(*listenerSlice)
+	listeners := old.list
 
 	if len(listeners) == 0 {
 		return
@@ -154,7 +191,37 @@ func (b *EventBusWithOrdering) Publish(event ApplicationEvent) {
 		}
 
 		if ol.config.Async {
-			go ol.config.Handler(event)
+			handler := ol.config.Handler
+			b.closeMu.Lock()
+			b.wg.Add(1)
+			b.closeMu.Unlock()
+			go func() {
+				defer b.wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("async event handler panic", "event", event.Type(), "recover", r)
+					}
+				}()
+
+				timer := time.NewTimer(30 * time.Second)
+				defer timer.Stop()
+
+				done := make(chan struct{}, 1)
+				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+							slog.Error("async event handler panic", "event", event.Type(), "recover", r)
+						}
+						close(done)
+					}()
+					handler(event)
+				}()
+				select {
+				case <-done:
+				case <-timer.C:
+					slog.Error("async event handler timeout", "event", event.Type())
+				}
+			}()
 			continue
 		}
 		ol.config.Handler(event)
@@ -167,7 +234,24 @@ func (b *EventBusWithOrdering) Listeners(eventType string) int {
 	if !ok {
 		return 0
 	}
-	return len(oldValue.(*listenerSlice).list)
+	old, _ := oldValue.(*listenerSlice)
+	return len(old.list)
+}
+
+// WaitAsync 等待所有异步事件处理器完成。
+//
+// 在应用关闭时调用此方法，确保所有异步事件处理完成后再退出。
+func (b *EventBusWithOrdering) WaitAsync() {
+	b.closeMu.Lock()
+	defer b.closeMu.Unlock()
+	b.wg.Wait()
+}
+
+// Close 等待所有异步事件处理器完成并关闭事件总线。
+func (b *EventBusWithOrdering) Close() {
+	b.closeMu.Lock()
+	defer b.closeMu.Unlock()
+	b.wg.Wait()
 }
 
 // Clear 清除指定事件类型的所有监听器

@@ -15,24 +15,28 @@ func NewMapPropertySource(name string, priority Priority, data map[string]any) *
 
 // NewDefaultPropertySource 创建最低优先级的默认配置源
 //
-// 使用 PriorityLowest 优先级，被所有其他配置源覆盖。
+// 使用 PriorityFallback 优先级，被所有其他配置源（含文件配置源）覆盖。
 func NewDefaultPropertySource(name string, data map[string]any) *MapPropertySource {
-	return NewMapPropertySource(name, PriorityLowest, data)
+	return NewMapPropertySource(name, PriorityFallback, data)
 }
 
+// Name 返回 MapPropertySource 的名称。
 func (m *MapPropertySource) Name() string {
 	return m.name
 }
 
+// GetProperty 从 MapPropertySource 中获取指定键的值。
 func (m *MapPropertySource) GetProperty(key string) (any, bool) {
 	val, ok := m.data[key]
 	return val, ok
 }
 
+// Priority 返回 MapPropertySource 的优先级。
 func (m *MapPropertySource) Priority() Priority {
 	return m.priority
 }
 
+// Contains 检查 MapPropertySource 中是否存在指定键。
 func (m *MapPropertySource) Contains(key string) bool {
 	_, ok := m.data[key]
 	return ok
@@ -55,14 +59,17 @@ func NewEnvPropertySource(name, prefix string) *EnvPropertySource {
 	return &EnvPropertySource{name: name, prefix: prefix, priority: PriorityHigh}
 }
 
+// Name 返回 EnvPropertySource 的名称。
 func (e *EnvPropertySource) Name() string {
 	return e.name
 }
 
+// Priority 返回 EnvPropertySource 的优先级。
 func (e *EnvPropertySource) Priority() Priority {
 	return e.priority
 }
 
+// Contains 检查环境变量配置源中是否存在指定键。
 func (e *EnvPropertySource) Contains(key string) bool {
 	_, ok := e.GetProperty(key)
 	return ok
@@ -102,19 +109,23 @@ func NewArgsPropertySource(name string, args []string) *ArgsPropertySource {
 	return &ArgsPropertySource{name: name, args: data, priority: PriorityHighest}
 }
 
+// Name 返回 ArgsPropertySource 的名称。
 func (a *ArgsPropertySource) Name() string {
 	return a.name
 }
 
+// Priority 返回 ArgsPropertySource 的优先级。
 func (a *ArgsPropertySource) Priority() Priority {
 	return a.priority
 }
 
+// Contains 检查命令行参数配置源中是否存在指定键。
 func (a *ArgsPropertySource) Contains(key string) bool {
 	_, ok := a.args[key]
 	return ok
 }
 
+// GetProperty 从命令行参数配置源中获取指定键的值。
 func (a *ArgsPropertySource) GetProperty(key string) (any, bool) {
 	val, ok := a.args[key]
 	return val, ok

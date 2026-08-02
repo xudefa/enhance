@@ -41,10 +41,13 @@ func (r *InMemoryRegistry) Deregister(ctx context.Context, info InstanceInfo) er
 		return nil
 	}
 
-	// 移除匹配的实例
+	// 移除匹配的实例（创建新切片，避免修改原切片底层数组）
 	for i, inst := range instances {
 		if inst.ID == info.ID {
-			r.instances[serviceName] = append(instances[:i], instances[i+1:]...)
+			newInstances := make([]InstanceInfo, 0, len(instances)-1)
+			newInstances = append(newInstances, instances[:i]...)
+			newInstances = append(newInstances, instances[i+1:]...)
+			r.instances[serviceName] = newInstances
 			break
 		}
 	}

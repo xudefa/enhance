@@ -113,10 +113,22 @@ func bindStruct(data map[string]any, v reflect.Value) error {
 			continue
 		}
 
-		// 处理嵌套结构体（但有转换器的结构体类型优先使用转换器）
-		if field.Type.Kind() == reflect.Struct {
+		// 处理嵌套结构体（含指针结构体）
+		fieldType := field.Type
+		fieldKind := fieldType.Kind()
+		if fieldKind == reflect.Ptr {
+			if fieldVal.IsNil() && fieldVal.CanSet() {
+				fieldVal.Set(reflect.New(fieldType.Elem()))
+			}
+			if !fieldVal.IsNil() {
+				fieldKind = fieldVal.Elem().Kind()
+				fieldVal = fieldVal.Elem()
+				fieldType = fieldType.Elem()
+			}
+		}
+		if fieldKind == reflect.Struct {
 			// 检查是否有注册的转换器，有则当作普通字段处理
-			if _, ok := GetConverter(field.Type); ok {
+			if _, ok := GetConverter(fieldType); ok {
 				if err := bindField(data, field, fieldVal); err != nil {
 					return err
 				}
@@ -187,6 +199,9 @@ func bindField(data map[string]any, field reflect.StructField, fieldVal reflect.
 
 	// 如果值已经是目标类型，直接设置
 	if reflect.TypeOf(value) == field.Type {
+		if !fieldVal.CanSet() {
+			return fmt.Errorf("field %s is not addressable", field.Name)
+		}
 		fieldVal.Set(reflect.ValueOf(value))
 		return nil
 	}
@@ -194,6 +209,9 @@ func bindField(data map[string]any, field reflect.StructField, fieldVal reflect.
 	// 尝试字符串转换
 	strVal, ok := value.(string)
 	if !ok {
+		if value == nil {
+			return fmt.Errorf("cannot convert nil to %s", field.Type)
+		}
 		// 尝试 fmt.Sprintf 转换
 		strVal = fmt.Sprintf("%v", value)
 	}
@@ -217,6 +235,9 @@ func setFieldValue(fieldVal reflect.Value, targetType reflect.Type, strVal strin
 		if !convertedVal.Type().AssignableTo(fieldVal.Type()) {
 			return fmt.Errorf("converted value of type %s is not assignable to field type %s", convertedVal.Type(), fieldVal.Type())
 		}
+		if !fieldVal.CanSet() {
+			return fmt.Errorf("field %s is not addressable", targetType)
+		}
 		fieldVal.Set(convertedVal)
 		return nil
 	}
@@ -226,13 +247,13 @@ func setFieldValue(fieldVal reflect.Value, targetType reflect.Type, strVal strin
 	case reflect.String:
 		fieldVal.SetString(strVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(strVal, 10, 64)
+		v, err := strconv.ParseInt(strVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("failed to parse int %q: %w", strVal, err)
 		}
 		fieldVal.SetInt(v)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(strVal, 10, 64)
+		v, err := strconv.ParseUint(strVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("failed to parse uint %q: %w", strVal, err)
 		}
@@ -371,6 +392,10 @@ func validateRequired(fieldVal reflect.Value, fieldName string) error {
 	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
 		if fieldVal.IsNil() {
 			return ValidationError{Field: fieldName, Message: "required field is nil"}
+		}
+	case reflect.Struct:
+		if fieldVal.IsZero() {
+			return ValidationError{Field: fieldName, Message: "required field is zero value"}
 		}
 	}
 	return nil

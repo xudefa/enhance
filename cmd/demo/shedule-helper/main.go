@@ -15,7 +15,7 @@ func main() {
 	fmt.Println("=== Schedule Builder Example ===")
 
 	// 使用 Helper 工具
-	scheduler := schedule.NewScheduler()
+	scheduler := schedule.NewScheduler(context.Background())
 	helper := schedule.NewScheduleHelper(scheduler)
 
 	if err := helper.RegisterCronTask("backup-task", "0 30 * * * *", func(ctx context.Context) error {
@@ -27,7 +27,7 @@ func main() {
 	}
 
 	fmt.Printf("Registered tasks: %d\n", helper.GetTaskCount())
-	fmt.Printf("Has cleanup-task: %v\n", helper.HasTask("cleanup-task"))
+	fmt.Printf("Has backup-task: %v\n", helper.HasTask("backup-task"))
 
 	// 启动调度器
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,11 +40,11 @@ func main() {
 
 	fmt.Println("Scheduler started. Press Ctrl+C to stop.")
 
-	// 等待10秒后注销monitor-task
+	// 等待10秒后注销backup-task
 	go func() {
 		time.Sleep(10 * time.Second)
-		fmt.Println("\n=== Unregistering monitor-task ===")
-		if helper.UnregisterTask("monitor-task") {
+		fmt.Println("\n=== Unregistering backup-task ===")
+		if helper.UnregisterTask("backup-task") {
 			fmt.Println("Task unregistered successfully")
 		} else {
 			fmt.Println("Task not found")

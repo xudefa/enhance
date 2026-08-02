@@ -143,10 +143,10 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
-// ResponseWriterInterface 响应写入器接口。
+// ResponseWriter 响应写入器接口。
 //
 // 抽象层，适配不同 HTTP 框架的响应写入。
-type ResponseWriterInterface interface {
+type ResponseWriter interface {
 	// SetStatusCode 设置 HTTP 状态码。
 	SetStatusCode(code int)
 	// SetHeader 设置响应头。

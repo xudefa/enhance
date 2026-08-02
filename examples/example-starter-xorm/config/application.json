@@ -1,0 +1,18 @@
+{
+  "db": {
+    "xorm": {
+      "enabled": true,
+      "type": "mysql",
+      "host": "localhost",
+      "port": 3306,
+      "username": "root",
+      "password": "password",
+      "database": "enhance",
+      "charset": "utf8mb4",
+      "max_open_conns": 100,
+      "max_idle_conns": 10,
+      "conn_max_lifetime": 3600,
+      "show_sql": true
+    }
+  }
+}

@@ -1,5 +1,7 @@
 package authorization
 
+import "strings"
+
 // expressionBasedUrlRegistry 表达式拦截 URL 注册表实现。
 //
 // 管理 URL 授权规则的注册和构建。
@@ -90,11 +92,6 @@ func (r *expressionBasedUrlRegistry) requestMatchers(patterns ...string) UrlAuth
 		attrs:    make([]string, 0),
 	}
 	return r
-}
-
-// anyRequest 配置所有请求。
-func (r *expressionBasedUrlRegistry) anyRequest() UrlAuthorizationRuleBuilder {
-	return r.requestMatchers("**")
 }
 
 // addAttr 向当前规则添加属性。
@@ -212,12 +209,5 @@ func (w *registryWrapper) anyRequest() UrlAuthorizationRuleBuilder {
 
 // joinStrings 使用分隔符连接字符串切片。
 func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
-	}
-	result := strs[0]
-	for _, s := range strs[1:] {
-		result += sep + s
-	}
-	return result
+	return strings.Join(strs, sep)
 }

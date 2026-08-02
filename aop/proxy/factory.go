@@ -55,7 +55,7 @@ func (f *defaultProxyFactory) CreateProxyWithAdvisors(target any, handler Invoca
 		if iface == nil {
 			iface = targetType
 		}
-		proxy := NewJdkDynamicProxy(target, iface, handler)
+		proxy := NewJdkDynamicProxy(target, iface, handler, advisors...)
 		return proxy, nil
 	}
 
@@ -69,6 +69,6 @@ func (f *defaultProxyFactory) CreateProxyWithAdvisors(target any, handler Invoca
 		return nil, fmt.Errorf("proxy: struct target must be a pointer")
 	}
 
-	proxy := NewCglibProxy(target, handler)
+	proxy := NewCglibProxy(target, handler, advisors...)
 	return proxy, nil
 }

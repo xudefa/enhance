@@ -147,6 +147,7 @@ func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
 	// 替换事件总线（如果自定义）
 	if b.eventBus != nil {
 		ctx.events = b.eventBus
+		ctx.asyncPublisher = event.NewAsyncPublisher(b.eventBus, event.WithWorkerCount(5))
 	}
 
 	// 替换生命周期管理器（如果自定义）
@@ -160,10 +161,8 @@ func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
 	}
 
 	// 注册阶段监听器
-	if b.lifecycle != nil {
-		for _, listener := range b.phaseListeners {
-			ctx.lifecycle.AddListener(listener)
-		}
+	for _, listener := range b.phaseListeners {
+		ctx.lifecycle.AddListener(listener)
 	}
 
 	// 注册事件监听器
@@ -311,15 +310,15 @@ func (h *ApplicationContextHelper) Invoke(fn any) error {
 		return fmt.Errorf("Invoke: fn must be a function")
 	}
 
-	numIn := rv.Type().NumIn()
+	fnType := rv.Type()
+	numIn := fnType.NumIn()
 	if numIn == 0 {
-		rv.Call(nil)
-		return nil
+		return extractInvokeError(rv.Call(nil), fnType)
 	}
 
 	args := make([]reflect.Value, numIn)
 	for i := 0; i < numIn; i++ {
-		paramType := rv.Type().In(i)
+		paramType := fnType.In(i)
 		instances, err := h.ctx.Container().Get(paramType)
 		if err != nil || len(instances) == 0 {
 			return fmt.Errorf("Invoke: cannot resolve parameter %d of type %s", i+1, paramType)
@@ -327,8 +326,7 @@ func (h *ApplicationContextHelper) Invoke(fn any) error {
 		args[i] = reflect.ValueOf(instances[0])
 	}
 
-	rv.Call(args)
-	return nil
+	return extractInvokeError(rv.Call(args), fnType)
 }
 
 // ApplicationRunner 应用运行器，简化应用的启动和停止
@@ -343,7 +341,7 @@ func NewApplicationRunner(ctx ApplicationContext) *ApplicationRunner {
 
 // Run 运行应用，阻塞直到应用停止
 func (r *ApplicationRunner) Run() error {
-	if err := r.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
+	if err := r.ctx.Start(); err != nil {
 		return fmt.Errorf("failed to start application: %w", err)
 	}
 
@@ -360,7 +358,7 @@ func (r *ApplicationRunner) Run() error {
 
 // Stop 停止应用
 func (r *ApplicationRunner) Stop() error {
-	if err := r.ctx.Lifecycle().SetPhase(lifecycle.PhaseStopped); err != nil {
+	if err := r.ctx.Stop(); err != nil {
 		return fmt.Errorf("failed to stop application: %w", err)
 	}
 

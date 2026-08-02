@@ -1,7 +1,6 @@
 package gorm
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -54,25 +53,28 @@ func (c *GormAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	} else {
 		c.logger = log.Build()
 	}
-	c.logger.Info(context.Background(), "开始配置 GORM 数据库连接...")
+	c.logger.Info(ctx.Context(), "configuring GORM database connection...")
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 GORM 配置失败: %w", err)
+		return fmt.Errorf("failed to load GORM config: %w", err)
 	}
 
-	dialector := c.getDialector(cfg)
+	dialector, err := c.getDialector(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to get database dialector: %w", err)
+	}
 
 	db, err := gormlib.Open(dialector, &gormlib.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
-		return fmt.Errorf("连接数据库失败: %w", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return fmt.Errorf("获取底层数据库连接失败: %w", err)
+		return fmt.Errorf("failed to get underlying database connection: %w", err)
 	}
 
 	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -80,10 +82,10 @@ func (c *GormAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Second)
 
 	if err := ctx.Container().RegisterInstance(db, reflect.TypeFor[*gormlib.DB]()); err != nil {
-		return fmt.Errorf("注册 GORM DB 失败: %w", err)
+		return fmt.Errorf("failed to register GORM DB: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "GORM 数据库连接成功",
+	c.logger.Info(ctx.Context(), "GORM database connected successfully",
 		log.KeyValue{Key: LogFieldHost, Value: cfg.Host},
 		log.KeyValue{Key: LogFieldPort, Value: cfg.Port},
 		log.KeyValue{Key: LogFieldDatabase, Value: cfg.Database},
@@ -123,11 +125,11 @@ func (c *GormAutoConfiguration) loadConfig(env *environment.Environment) (*GormC
 	}
 
 	if err := env.BindPrefix("db.gorm", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 GORM 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind GORM config: %w", err)
 	}
 
 	if cfg.Database == "" {
-		return nil, fmt.Errorf("%s 配置不能为空", GORMDatabase)
+		return nil, fmt.Errorf("%s config must not be empty", GORMDatabase)
 	}
 
 	return cfg, nil
@@ -161,16 +163,16 @@ func (c *GormAutoConfiguration) buildDSN(cfg *GormConfig) string {
 }
 
 // getDialector 获取数据库驱动。
-func (c *GormAutoConfiguration) getDialector(cfg *GormConfig) gormlib.Dialector {
+func (c *GormAutoConfiguration) getDialector(cfg *GormConfig) (gormlib.Dialector, error) {
 	dsn := c.buildDSN(cfg)
 	switch cfg.Driver {
 	case "mysql":
-		return mysql.Open(dsn)
+		return mysql.Open(dsn), nil
 	case "postgres":
-		return postgres.Open(dsn)
+		return postgres.Open(dsn), nil
 	case "sqlite":
-		return sqlite.Open(dsn)
+		return sqlite.Open(dsn), nil
 	default:
-		return mysql.Open(dsn)
+		return nil, fmt.Errorf("unsupported database driver %q, supported drivers: mysql, postgres, sqlite", cfg.Driver)
 	}
 }

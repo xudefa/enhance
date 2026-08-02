@@ -70,6 +70,12 @@ const (
 	PriorityHighest
 )
 
+// PriorityFallback 回退优先级（最低），默认值/回退配置源使用。
+//
+// 低于所有常规优先级（含 PriorityLowest），确保文件配置源总是优先于默认值，
+// 不受添加顺序影响。
+const PriorityFallback Priority = PriorityLowest - 1
+
 // PropertySource 配置源接口。
 //
 // 代表一个配置数据源，具有名称和优先级。

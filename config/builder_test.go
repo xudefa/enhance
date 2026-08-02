@@ -2,6 +2,8 @@ package config
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -84,6 +86,42 @@ func TestConfigBuilder_BuildAndLoad_NoLoader(t *testing.T) {
 
 	if model == nil {
 		t.Fatal("expected non-nil model")
+	}
+}
+
+func TestConfigBuilder_BuildAndLoad_DefaultFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "application.json"), []byte(`{"app.name":"from-file"}`), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	model, err := NewConfigBuilder().Paths(tmpDir).BuildAndLoad()
+	if err != nil {
+		t.Fatalf("BuildAndLoad() error = %v", err)
+	}
+	if model.Config == nil {
+		t.Fatal("expected loaded config")
+	}
+	if model.Config["app.name"] != "from-file" {
+		t.Errorf("expected app.name=from-file, got %v", model.Config["app.name"])
+	}
+}
+
+func TestConfigBuilder_BuildAndLoad_ExplicitFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "custom.json")
+	if err := os.WriteFile(path, []byte(`{"app.name":"custom"}`), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	model, err := NewConfigBuilder().File(path).BuildAndLoad()
+	if err != nil {
+		t.Fatalf("BuildAndLoad() error = %v", err)
+	}
+	if model.Config["app.name"] != "custom" {
+		t.Errorf("expected app.name=custom, got %v", model.Config["app.name"])
 	}
 }
 

@@ -88,15 +88,16 @@ func (r *TestRunner) Run(fn func(TestContext)) {
 	}
 
 	r.context = NewTestContext(r.t)
-	r.context.(*testContextImpl).app = app
-	r.context.(*testContextImpl).container = app.Context().Container()
-	r.context.(*testContextImpl).mockBeans = r.config.MockBeans
+	impl, _ := r.context.(*testContextImpl)
+	impl.app = app
+	impl.container = app.Context().Container()
+	impl.mockBeans = r.config.MockBeans
 
 	r.registerMockBeans()
 
-	fn(r.context)
+	defer r.context.Close()
 
-	r.context.Close()
+	fn(r.context)
 }
 
 // GetContext 获取测试上下文
@@ -132,7 +133,10 @@ func (r *TestRunner) registerMockBeans() {
 		return
 	}
 
-	container := r.context.Container().(core.Container)
+	container, ok := r.context.Container().(core.Container)
+	if !ok {
+		return
+	}
 	for name, bean := range r.config.MockBeans {
 		beanType := reflect.TypeOf(bean)
 		def := registry.BeanDef{
@@ -276,7 +280,8 @@ func Test(t *testing.T, fn func(ctx TestContext)) {
 func TestWithContainer(t *testing.T, container core.Container, fn func(ctx TestContext)) {
 	t.Helper()
 	ctx := NewTestContext(t)
-	ctx.(*testContextImpl).container = container
+	impl, _ := ctx.(*testContextImpl)
+	impl.container = container
 	defer ctx.Cleanup()
 
 	fn(ctx)
@@ -324,7 +329,10 @@ func Parallel(t *testing.T, tests map[string]func(ctx TestContext)) {
 // MustGetByType 必须获取指定类型的 Bean，否则测试失败。
 func MustGetByType[T any](ctx TestContext) T {
 	ctx.T().Helper()
-	container := ctx.Container().(core.Container)
+	container, ok := ctx.Container().(core.Container)
+	if !ok {
+		ctx.T().Fatalf("container type assertion failed: got %T", ctx.Container())
+	}
 	bean, err := core.GetByName[T](container, "")
 	if err != nil {
 		ctx.T().Fatalf("获取类型 %T 失败: %v", bean, err)
@@ -335,7 +343,7 @@ func MustGetByType[T any](ctx TestContext) T {
 // GetByType 获取指定类型的 Bean。
 func GetByType[T any](ctx TestContext) (T, error) {
 	ctx.T().Helper()
-	container := ctx.Container().(core.Container)
+	container, _ := ctx.Container().(core.Container)
 	return core.GetByName[T](container, "")
 }
 

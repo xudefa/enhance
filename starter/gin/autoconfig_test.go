@@ -17,9 +17,8 @@ func TestGinConfig_LoadConfig(t *testing.T) {
 		"gin.enable_logger":  "false",
 	}))
 
-	cfg := &GinConfig{}
-
-	err := env.BindProperties(cfg)
+	autoConfig := &GinAutoConfiguration{}
+	cfg, err := autoConfig.loadConfig(env)
 	if err != nil {
 		t.Fatalf("绑定配置失败: %v", err)
 	}
@@ -47,9 +46,8 @@ func TestGinConfig_LoadConfig(t *testing.T) {
 func TestGinConfig_DefaultValues(t *testing.T) {
 	env := environment.NewEnvironment()
 
-	cfg := &GinConfig{}
-
-	err := env.BindProperties(cfg)
+	autoConfig := &GinAutoConfiguration{}
+	cfg, err := autoConfig.loadConfig(env)
 	if err != nil {
 		t.Fatalf("绑定配置失败: %v", err)
 	}

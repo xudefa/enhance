@@ -2,7 +2,6 @@
 package tracing
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -45,7 +44,7 @@ func (c *TracingAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Tracing 配置失败: %w", err)
+		return fmt.Errorf("failed to load tracing config: %w", err)
 	}
 
 	c.config = cfg
@@ -65,10 +64,10 @@ func (c *TracingAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 	c.tracer = NewTracer(opts...)
 
 	if err := ctx.Container().RegisterInstance(c.tracer, reflect.TypeFor[*Tracer]()); err != nil {
-		return fmt.Errorf("注册 Tracer 失败: %w", err)
+		return fmt.Errorf("failed to register tracer: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "分布式链路追踪已启用",
+	c.logger.Info(ctx.Context(), "tracing enabled",
 		log.KeyValue{Key: "service_name", Value: cfg.ServiceName},
 		log.KeyValue{Key: "sampling_rate", Value: cfg.SamplingRate},
 	)
@@ -104,7 +103,7 @@ func (c *TracingAutoConfiguration) loadConfig(env *environment.Environment) (*Tr
 	}
 
 	if err := env.BindPrefix("tracing", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Tracing 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind tracing config: %w", err)
 	}
 
 	return cfg, nil

@@ -189,6 +189,7 @@ func (v *RoleVoter) hasRole(authentication authorization.Authentication, role st
 	return false
 }
 
+// SetRolePrefix 设置角色前缀（默认为 ROLE_）。
 func (v *RoleVoter) SetRolePrefix(prefix string) {
 	v.rolePrefix = prefix
 }
@@ -267,7 +268,7 @@ func (m *AffirmativeBased) Decide(ctx context.Context, authentication authorizat
 	if deny > 0 {
 		return ErrAccessDenied
 	}
-	if m.allowIfAllAbstainDecisions {
+	if m.allowIfAllAbstainDecisions || abstain == 0 {
 		return nil
 	}
 	return ErrAccessDenied
@@ -278,10 +279,12 @@ func (m *AffirmativeBased) Supports(attribute string) bool {
 	return true
 }
 
+// AddVoter 添加访问决策投票者到决策管理器。
 func (m *AffirmativeBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
+// SetAllowIfAllAbstainDecisions 设置当所有投票者都弃权时是否允许访问。
 func (m *AffirmativeBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }
@@ -334,10 +337,12 @@ func (m *UnanimousBased) Supports(attribute string) bool {
 	return true
 }
 
+// AddVoter 添加访问决策投票者到决策管理器。
 func (m *UnanimousBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
+// SetAllowIfAllAbstainDecisions 设置当所有投票者都弃权时是否允许访问。
 func (m *UnanimousBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }
@@ -398,14 +403,17 @@ func (m *ConsensusBased) Supports(attribute string) bool {
 	return true
 }
 
+// AddVoter 添加访问决策投票者到决策管理器。
 func (m *ConsensusBased) AddVoter(voter AccessDecisionVoter) {
 	m.decisionVoters = append(m.decisionVoters, voter)
 }
 
+// SetAllowIfEqualGrantedDenied 设置当授予和拒绝票数相等时是否允许访问。
 func (m *ConsensusBased) SetAllowIfEqualGrantedDenied(allow bool) {
 	m.allowIfEqualGrantedDenied = allow
 }
 
+// SetAllowIfAllAbstainDecisions 设置当所有投票者都弃权时是否允许访问。
 func (m *ConsensusBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }

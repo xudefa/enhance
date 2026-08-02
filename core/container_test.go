@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -20,6 +21,11 @@ type TestService struct {
 type TestRepository struct {
 	Service *TestService
 }
+
+// FactoryCircularA/B 用于测试工厂型循环依赖检测。
+type FactoryCircularA struct{}
+
+type FactoryCircularB struct{}
 
 type LifecycleBeanImpl struct {
 	InitCalled    bool
@@ -518,7 +524,7 @@ func TestLifecycleDestroyError(t *testing.T) {
 		t.Fatal("Expected Destroy to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected destroy error, got: %v", err)
 	}
 }
@@ -896,6 +902,30 @@ func TestConcurrentGetAndInitialize(t *testing.T) {
 	}
 }
 
+func TestFactoryCircularDependency(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	_ = Register[*FactoryCircularA](container, WithFactory[*FactoryCircularA](func(c ...any) (any, error) {
+		if _, err := container.Get(reflect.TypeOf((*FactoryCircularB)(nil))); err != nil {
+			return nil, err
+		}
+		return &FactoryCircularA{}, nil
+	}))
+	_ = Register[*FactoryCircularB](container, WithFactory[*FactoryCircularB](func(c ...any) (any, error) {
+		if _, err := container.Get(reflect.TypeOf((*FactoryCircularA)(nil))); err != nil {
+			return nil, err
+		}
+		return &FactoryCircularB{}, nil
+	}))
+
+	// 工厂型循环依赖应返回 ErrCircularDependency 而非死锁
+	_, err := container.Get(reflect.TypeOf((*FactoryCircularA)(nil)))
+	if !errors.Is(err, ErrCircularDependency) {
+		t.Fatalf("Expected ErrCircularDependency, got: %v", err)
+	}
+}
+
 // ==================== BeanCount 测试 ====================
 
 func TestBeanCount(t *testing.T) {
@@ -907,9 +937,9 @@ func TestBeanCount(t *testing.T) {
 		t.Errorf("Expected 0 beans, got %d", ext.BeanCount())
 	}
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestService](container, WithName[*TestService]("svc2"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
 
 	if ext.BeanCount() != 3 {
 		t.Errorf("Expected 3 beans, got %d", ext.BeanCount())
@@ -928,10 +958,10 @@ func TestGetAll(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
 		return &TestService{Name: "svc1"}, nil
 	}))
-	Register[*TestService](container, WithName[*TestService]("svc2"), WithFactory[*TestService](func(c ...any) (any, error) {
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"), WithFactory[*TestService](func(c ...any) (any, error) {
 		return &TestService{Name: "svc2"}, nil
 	}))
 
@@ -1300,8 +1330,8 @@ func TestTypes(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo"))
 
 	types := container.Types()
 	if len(types) != 2 {
@@ -1323,10 +1353,10 @@ func TestTypesWithMultipleSameTypeBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestService](container, WithName[*TestService]("svc2"))
-	Register[*TestService](container, WithName[*TestService]("svc3"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc3"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo"))
 
 	types := container.Types()
 	if len(types) != 2 {
@@ -1338,8 +1368,8 @@ func TestTypesAfterDestroy(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo"))
 
 	err := container.Destroy()
 	if err != nil {
@@ -1357,7 +1387,7 @@ func TestTypesWithInterfaceBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[fmt.Stringer](container, WithName[fmt.Stringer]("stringer"), WithFactory[fmt.Stringer](func(c ...any) (any, error) {
+	_ = Register[fmt.Stringer](container, WithName[fmt.Stringer]("stringer"), WithFactory[fmt.Stringer](func(c ...any) (any, error) {
 		return &TestService{Name: "test"}, nil
 	}))
 
@@ -1377,7 +1407,7 @@ func TestTypesWithFactoryBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("factory"), WithFactory[*TestService](func(c ...any) (any, error) {
+	_ = Register[*TestService](container, WithName[*TestService]("factory"), WithFactory[*TestService](func(c ...any) (any, error) {
 		return &TestService{Name: "factory-created"}, nil
 	}))
 
@@ -1391,7 +1421,7 @@ func TestTypesWithLazyBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("lazy"), WithLazy[*TestService](true))
+	_ = Register[*TestService](container, WithName[*TestService]("lazy"), WithLazy[*TestService](true))
 
 	// 懒加载 Bean 注册后应该出现在 Types 中
 	types := container.Types()
@@ -1404,7 +1434,7 @@ func TestTypesWithPrototypeBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("prototype"), WithScope[*TestService]("prototype"))
+	_ = Register[*TestService](container, WithName[*TestService]("prototype"), WithScope[*TestService]("prototype"))
 
 	types := container.Types()
 	if len(types) != 1 {
@@ -1417,9 +1447,9 @@ func TestBeanCountType(t *testing.T) {
 	container := NewContainer()
 	ext := container.(ContainerExt)
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestService](container, WithName[*TestService]("svc2"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo"))
 
 	// 测试类型计数
 	svcCount := ext.BeanCountType(reflect.TypeOf((*TestService)(nil)))
@@ -1600,8 +1630,8 @@ func TestValidateSuccess(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container)
-	Register[*TestRepository](container)
+	_ = Register[*TestService](container)
+	_ = Register[*TestRepository](container)
 
 	ext := container.(ContainerExt)
 	err := ext.Validate()
@@ -1618,7 +1648,7 @@ func TestValidateMissingDependency(t *testing.T) {
 		Service *TestService `inject:""`
 	}
 
-	Register[*TestBean](container)
+	_ = Register[*TestBean](container)
 	// 注意：没有注册 TestService
 
 	ext := container.(ContainerExt)
@@ -1640,8 +1670,8 @@ func TestValidateCircularDependency(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*A](container)
-	Register[*B](container)
+	_ = Register[*A](container)
+	_ = Register[*B](container)
 
 	ext := container.(ContainerExt)
 	err := ext.Validate()
@@ -1653,7 +1683,7 @@ func TestValidateCircularDependency(t *testing.T) {
 func TestValidateAlreadyInitialized(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
-	Register[*TestService](container)
+	_ = Register[*TestService](container)
 
 	// 先初始化
 	err := container.Initialize()
@@ -1671,7 +1701,7 @@ func TestValidateAlreadyInitialized(t *testing.T) {
 func TestValidateWithParent(t *testing.T) {
 	t.Parallel()
 	parent := NewContainer()
-	Register[*TestService](parent)
+	_ = Register[*TestService](parent)
 
 	child := NewContainer()
 	ext := child.(ContainerExt)
@@ -1681,7 +1711,7 @@ func TestValidateWithParent(t *testing.T) {
 		Service *TestService `inject:""`
 	}
 
-	Register[*TestBean](child)
+	_ = Register[*TestBean](child)
 
 	err := ext.Validate()
 	if err != nil {
@@ -1703,7 +1733,7 @@ func TestValidateWithEmptyContainer(t *testing.T) {
 func TestValidateWithNonStructType(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
-	Register[*TestService](container)
+	_ = Register[*TestService](container)
 
 	ext := container.(ContainerExt)
 	err := ext.Validate()
@@ -1728,9 +1758,9 @@ func TestValidateWithMultipleDependencies(t *testing.T) {
 		Config *Config `inject:""`
 	}
 
-	Register[*Config](container)
-	Register[*ServiceA](container)
-	Register[*ServiceB](container)
+	_ = Register[*Config](container)
+	_ = Register[*ServiceA](container)
+	_ = Register[*ServiceB](container)
 
 	ext := container.(ContainerExt)
 	err := ext.Validate()
@@ -1756,8 +1786,8 @@ func TestValidateWithPartialDependencies(t *testing.T) {
 		DepB *DependencyB `inject:""`
 	}
 
-	Register[*DependencyA](container)
-	Register[*Service](container)
+	_ = Register[*DependencyA](container)
+	_ = Register[*Service](container)
 
 	ext := container.(ContainerExt)
 	err := ext.Validate()
@@ -1772,10 +1802,10 @@ func TestListBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
 		return &TestService{Name: "svc1"}, nil
 	}))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
 
 	beanGet := container.(BeanGet)
 	beanDefs := beanGet.ListBeans()
@@ -1847,7 +1877,7 @@ func TestListBeansWithInitializedContainer(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"), WithFactory[*TestService](func(c ...any) (any, error) {
 		return &TestService{Name: "svc1"}, nil
 	}))
 
@@ -1875,8 +1905,8 @@ func TestHasTypeWithMultipleTypes(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
 
 	if !container.HasType(reflect.TypeOf((*TestService)(nil))) {
 		t.Error("Expected HasType to return true for TestService")
@@ -1892,8 +1922,8 @@ func TestBeanCountTypeWithPrototypeScope(t *testing.T) {
 	container := NewContainer()
 	ext := container.(ContainerExt)
 
-	Register[*TestService](container, WithName[*TestService]("proto1"), WithScope[*TestService]("prototype"))
-	Register[*TestService](container, WithName[*TestService]("proto2"), WithScope[*TestService]("prototype"))
+	_ = Register[*TestService](container, WithName[*TestService]("proto1"), WithScope[*TestService]("prototype"))
+	_ = Register[*TestService](container, WithName[*TestService]("proto2"), WithScope[*TestService]("prototype"))
 
 	count := ext.BeanCountType(reflect.TypeOf((*TestService)(nil)))
 	if count != 2 {
@@ -1920,7 +1950,7 @@ func TestHasTypeWithInterfaceType(t *testing.T) {
 	container := NewContainer()
 
 	// 注册接口类型的 Bean
-	Register[fmt.Stringer](container, WithName[fmt.Stringer]("stringer"), WithFactory[fmt.Stringer](func(c ...any) (any, error) {
+	_ = Register[fmt.Stringer](container, WithName[fmt.Stringer]("stringer"), WithFactory[fmt.Stringer](func(c ...any) (any, error) {
 		return &TestService{Name: "test"}, nil
 	}))
 
@@ -1934,8 +1964,8 @@ func TestBeanCountTypeAfterDestroy(t *testing.T) {
 	container := NewContainer()
 	ext := container.(ContainerExt)
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestService](container, WithName[*TestService]("svc2"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"))
 
 	err := container.Destroy()
 	if err != nil {
@@ -1953,7 +1983,7 @@ func TestListBeansAfterDestroy(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
 
 	err := container.Destroy()
 	if err != nil {
@@ -1972,9 +2002,9 @@ func TestGetBeanDefWithMultipleBeans(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	Register[*TestService](container, WithName[*TestService]("svc1"))
-	Register[*TestService](container, WithName[*TestService]("svc2"))
-	Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc1"))
+	_ = Register[*TestService](container, WithName[*TestService]("svc2"))
+	_ = Register[*TestRepository](container, WithName[*TestRepository]("repo1"))
 
 	// 获取所有 BeanDef
 	beanGet := container.(BeanGet)
@@ -1988,7 +2018,7 @@ func TestGetBeanDefWithMultipleBeans(t *testing.T) {
 func TestHasTypeWithParentContainer(t *testing.T) {
 	t.Parallel()
 	parent := NewContainer()
-	Register[*TestService](parent, WithName[*TestService]("parentSvc"))
+	_ = Register[*TestService](parent, WithName[*TestService]("parentSvc"))
 
 	child := NewContainer()
 	child.(ContainerExt).SetParent(parent)

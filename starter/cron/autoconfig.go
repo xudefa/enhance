@@ -42,21 +42,26 @@ import (
 
 // init 注册 Cron 自动配置类。
 // 当配置 cron.enabled=true 时自动触发配置。
+var cronAutoConfig = &CronAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&CronAutoConfiguration{},
+	boot.RegisterAutoConfigWith(cronAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(CronEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityTaskLayer)),
 	)
+	boot.RegisterStarter(cronAutoConfig)
 }
 
 // CronAutoConfiguration 定时任务自动配置类。
 // 负责初始化 cron.Cron 调度器并注册到 IoC 容器。
 type CronAutoConfiguration struct {
-	logger log.Logger  // 日志记录器
-	cron   *cron.Cron  // Cron 调度器实例
-	config *CronConfig // Cron 配置信息
+	logger log.Logger         // 日志记录器
+	cron   *cron.Cron         // Cron 调度器实例
+	config *CronConfig        // Cron 配置信息
+	ctx    context.Context    // 应用上下文
+	cancel context.CancelFunc // 取消函数
 }
 
 // Configure 配置定时任务。
@@ -74,7 +79,7 @@ func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 加载配置
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Cron 配置失败: %w", err)
+		return fmt.Errorf("failed to load Cron config: %w", err)
 	}
 
 	c.config = cfg
@@ -86,18 +91,21 @@ func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	// 如果启用日志，配置自定义日志适配器
 	if cfg.WithLogger {
-		opts = append(opts, cron.WithLogger(&cronLogger{logger: c.logger}))
+		opts = append(opts, cron.WithLogger(&cronLogger{logger: c.logger, ctx: c.ctx}))
 	}
+
+	// 存储应用上下文
+	c.ctx, c.cancel = context.WithCancel(ctx.Context())
 
 	// 创建 Cron 调度器实例
 	c.cron = cron.New(opts...)
 
 	// 注册 Cron 实例到 IoC 容器
 	if err := ctx.Container().RegisterInstance(c.cron, reflect.TypeFor[*cron.Cron]()); err != nil {
-		return fmt.Errorf("注册 Cron 实例失败: %w", err)
+		return fmt.Errorf("failed to register Cron instance: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Cron 定时任务已配置")
+	c.logger.Info(ctx.Context(), "Cron scheduler configured")
 
 	return nil
 }
@@ -105,20 +113,40 @@ func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 // Start 启动定时任务。
 // 启动 Cron 调度器，开始执行已注册的定时任务。
 // 注意：启动前需要确保已添加至少一个定时任务。
-func (c *CronAutoConfiguration) Start() {
+func (c *CronAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.cron != nil {
 		c.cron.Start()
-		c.logger.Info(context.Background(), "Cron 定时任务已启动")
+		c.logger.Info(c.ctx, "Cron scheduler started")
 	}
+	return nil
 }
 
 // Stop 停止定时任务。
 // 停止 Cron 调度器，等待正在执行的任务完成后退出。
-func (c *CronAutoConfiguration) Stop() {
+func (c *CronAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.cron != nil {
 		c.cron.Stop()
-		c.logger.Info(context.Background(), "Cron 定时任务已停止")
+		c.logger.Info(c.ctx, "Cron scheduler stopped")
 	}
+	if c.cancel != nil {
+		c.cancel()
+	}
+	return nil
+}
+
+// Name 返回启动器名称。
+func (c *CronAutoConfiguration) Name() string {
+	return "CronStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *CronAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *CronAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(CronEnabled, ConditionTrue)
 }
 
 // GetCron 获取 Cron 实例。
@@ -175,16 +203,17 @@ type CronConfig struct {
 // 将 Cron 的日志输出适配到 enhance 的日志系统。
 type cronLogger struct {
 	logger log.Logger
+	ctx    context.Context
 }
 
 // Info 输出信息级别日志。
 func (l *cronLogger) Info(msg string, keysAndValues ...interface{}) {
-	l.logger.Info(context.Background(), msg, log.KeyValue{Key: "details", Value: keysAndValues})
+	l.logger.Info(l.ctx, msg, log.KeyValue{Key: "details", Value: keysAndValues})
 }
 
 // Error 输出错误级别日志。
 func (l *cronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	l.logger.Error(context.Background(), msg, log.KeyValue{Key: "error", Value: err.Error()})
+	l.logger.Error(l.ctx, msg, log.KeyValue{Key: "error", Value: err.Error()})
 }
 
 // loadConfig 从 Environment 加载 Cron 配置。
@@ -195,7 +224,7 @@ func (c *CronAutoConfiguration) loadConfig(env *environment.Environment) (*CronC
 	}
 
 	if err := env.BindPrefix("cron", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Cron 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Cron config: %w", err)
 	}
 
 	return cfg, nil

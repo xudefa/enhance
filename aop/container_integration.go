@@ -17,7 +17,7 @@ type AopBeanPostProcessor struct {
 // NewAopBeanPostProcessor 创建AOP Bean后置处理器
 func NewAopBeanPostProcessor(integration *AopIntegration) *AopBeanPostProcessor {
 	if integration == nil {
-		integration = GlobalAopIntegration
+		integration = GetGlobalAopIntegration()
 	}
 	return &AopBeanPostProcessor{
 		integration: integration,

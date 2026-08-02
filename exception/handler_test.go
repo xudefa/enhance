@@ -29,6 +29,10 @@ func (m *mockResponseWriter) Write(data []byte) error {
 	return nil
 }
 
+func (m *mockResponseWriter) Context() context.Context {
+	return context.Background()
+}
+
 func TestDefaultExceptionHandler_Handle(t *testing.T) {
 	t.Parallel()
 	handler := NewDefaultExceptionHandler()

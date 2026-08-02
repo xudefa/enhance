@@ -2,7 +2,6 @@
 package consul
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -43,7 +42,7 @@ func (c *ConsulAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Consul 配置失败: %w", err)
+		return fmt.Errorf("failed to load Consul config: %w", err)
 	}
 
 	c.config = cfg
@@ -56,21 +55,21 @@ func (c *ConsulAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	client, err := consulapi.NewClient(consulCfg)
 	if err != nil {
-		return fmt.Errorf("创建 Consul 客户端失败: %w", err)
+		return fmt.Errorf("failed to create Consul client: %w", err)
 	}
 
 	_, err = client.Status().Leader()
 	if err != nil {
-		return fmt.Errorf("Consul 连接失败: %w", err)
+		return fmt.Errorf("failed to connect to Consul: %w", err)
 	}
 
 	c.client = client
 
 	if err := ctx.Container().RegisterInstance(c.client, reflect.TypeFor[*consulapi.Client]()); err != nil {
-		return fmt.Errorf("注册 Consul Client 失败: %w", err)
+		return fmt.Errorf("failed to register Consul Client: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Consul 连接成功",
+	c.logger.Info(ctx.Context(), "Consul connected successfully",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 	)
@@ -115,7 +114,7 @@ func (c *ConsulAutoConfiguration) loadConfig(env *environment.Environment) (*Con
 	}
 
 	if err := env.BindPrefix("consul", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Consul 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Consul config: %w", err)
 	}
 
 	return cfg, nil

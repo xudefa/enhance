@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -346,6 +347,47 @@ func TestParseProfiles(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestEnvironment_NotifyAfterClose(t *testing.T) {
+	t.Parallel()
+	env := NewEnvironment()
+
+	done := make(chan struct{})
+	env.AddConfigChangeListener(func(event ConfigChangeEvent) {
+		close(done)
+	})
+
+	env.Close()
+
+	env.notifyConfigChange(NewConfigChangeEvent("modify", []string{"k"}, nil, nil, "test"))
+
+	select {
+	case <-done:
+		t.Fatal("config change listener called after Close()")
+	case <-time.After(100 * time.Millisecond):
+		// 预期：Close 后不再通知监听器
+	}
+}
+
+func TestEnvironment_CloseConcurrentWithNotify(t *testing.T) {
+	t.Parallel()
+	env := NewEnvironment()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			env.notifyConfigChange(NewConfigChangeEvent("modify", []string{"k"}, nil, nil, "test"))
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		env.Close()
+	}()
+	wg.Wait()
 }
 
 func TestEnvironment_ConfigChangeListener(t *testing.T) {

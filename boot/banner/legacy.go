@@ -116,7 +116,7 @@ func (b *LegacyBanner) render(version string) string {
 	}
 
 	profileStr := formatProfiles(b.profiles)
-	sb.WriteString(fmt.Sprintf(":: %s :: v%s :: profiles(%s)", appName, version, profileStr))
+	fmt.Fprintf(&sb, ":: %s :: v%s :: profiles(%s)", appName, version, profileStr)
 
 	return sb.String()
 }

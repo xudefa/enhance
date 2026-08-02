@@ -1,6 +1,7 @@
 package context
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -268,6 +269,61 @@ func TestBuilder_Build_WithPhaseListeners(t *testing.T) {
 
 	if ctx.Lifecycle() == nil {
 		t.Fatal("lifecycle should be set")
+	}
+}
+
+func TestBuilder_Build_WithPhaseListeners_DefaultLifecycle(t *testing.T) {
+	t.Parallel()
+	builder := NewApplicationContextBuilder()
+	notified := false
+	listener := &testPhaseListener{
+		onPhase: func(old, new lifecycle.ApplicationPhase) error {
+			notified = true
+			return nil
+		},
+	}
+
+	builder.WithPhaseListener(listener)
+
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build should succeed: %v", err)
+	}
+
+	// 使用默认生命周期管理器时，自定义阶段监听器也必须生效
+	if err := ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
+		t.Fatalf("SetPhase should succeed: %v", err)
+	}
+	if !notified {
+		t.Error("phase listener should be notified with default lifecycle")
+	}
+}
+
+func TestInvoke_TypedNilError(t *testing.T) {
+	t.Parallel()
+	builder := NewApplicationContextBuilder()
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build should succeed: %v", err)
+	}
+	helper := NewApplicationContextHelper(ctx)
+
+	// 函数返回 typed-nil error，不应被当作错误
+	fn := func() error {
+		var e *typedNilErr
+		return e
+	}
+	if err := helper.Invoke(fn); err != nil {
+		t.Errorf("typed-nil error should be treated as nil, got %v", err)
+	}
+
+	// 真实错误应正常返回
+	realErr := errors.New("boom")
+	fn2 := func() error {
+		return realErr
+	}
+	if err := helper.Invoke(fn2); err != realErr {
+		t.Errorf("expected realErr, got %v", err)
 	}
 }
 
@@ -841,6 +897,11 @@ func TestApplicationRunner_Stop_NotStarted(t *testing.T) {
 type testPhaseListener struct {
 	onPhase func(old, new lifecycle.ApplicationPhase) error
 }
+
+// typedNilErr 用于测试 typed-nil error 场景。
+type typedNilErr struct{}
+
+func (e *typedNilErr) Error() string { return "typed-nil-err" }
 
 func (l *testPhaseListener) OnPhaseChange(old, new lifecycle.ApplicationPhase) error {
 	if l.onPhase != nil {

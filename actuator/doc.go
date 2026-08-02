@@ -64,12 +64,15 @@ import (
 
 // AppContext 应用上下文接口。
 type AppContext interface {
+	// Container 返回 IoC 容器实例。
 	Container() core.Container
+	// Environment 返回环境配置实例。
 	Environment() *environment.Environment
 }
 
 // RouteRegistrar 路由注册器接口。
 type RouteRegistrar interface {
+	// Handle 注册 HTTP 路由处理函数。
 	Handle(pattern string, handler http.Handler)
 }
 

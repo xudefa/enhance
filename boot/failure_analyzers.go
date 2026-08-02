@@ -128,7 +128,7 @@ func NewPortInUseAnalyzer() *PortInUseAnalyzer {
 // CanAnalyze 检查是否能分析该错误
 func (a *PortInUseAnalyzer) CanAnalyze(err error) bool {
 	return strings.Contains(err.Error(), "address already in use") ||
-		strings.Contains(err.Error(), "port") && strings.Contains(err.Error(), "bind")
+		(strings.Contains(err.Error(), "port") && strings.Contains(err.Error(), "bind"))
 }
 
 // Analyze 分析错误并返回失败报告

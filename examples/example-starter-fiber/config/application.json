@@ -1,0 +1,12 @@
+{
+  "fiber": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 3000,
+    "prefork": false,
+    "body_limit": 4194304,
+    "concurrency": 262144,
+    "server_header": "Fiber",
+    "app_name": "fiber-example"
+  }
+}

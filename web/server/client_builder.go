@@ -58,13 +58,24 @@ func NewClient(baseURL string, opts ...ClientOption) *NetClient {
 }
 
 // NewRetryableClient 创建可重试的 HTTP 客户端。
-func NewRetryableClient(client *NetClient, opts ...RetryOption) *RetryableClient {
+//
+// 接受任意 HTTPClient（如 *NetClient 或 *CircuitBreakerClient），
+// 支持重试与断路器组合使用。
+func NewRetryableClient(client HTTPClient, opts ...RetryOption) *RetryableClient {
 	cfg := RetryConfig{
 		maxAttempts: 3,
 		strategy:    NewExponentialBackoff(100*time.Millisecond, 10*time.Second),
 	}
 	for _, opt := range opts {
 		opt(&cfg)
+	}
+
+	// 校验配置：maxAttempts 至少为 1，strategy 不能为 nil
+	if cfg.maxAttempts < 1 {
+		cfg.maxAttempts = 3
+	}
+	if cfg.strategy == nil {
+		cfg.strategy = NewExponentialBackoff(100*time.Millisecond, 10*time.Second)
 	}
 
 	return &RetryableClient{

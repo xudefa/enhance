@@ -6,7 +6,7 @@
 
 > **设计理念**：零外部依赖的工程化框架，借鉴 Spring Boot 的设计思想，为 Go 开发者提供熟悉的企业级开发体验。
 > 
-> **Go 版本要求**：1.21+ | **当前版本**：v0.0.0
+> **Go 版本要求**：1.22+ | **当前版本**：v0.0
 
 ---
 
@@ -20,6 +20,8 @@
 - 🛡️ **安全框架** — 认证、授权、过滤器链、JWT、Casbin
 - 💾 **数据访问** — 泛型 Repository，事务管理，多 ORM 支持
 - 🌐 **Web 框架** — HTTP 服务器，MVC 控制器，中间件，WebSocket
+- 📨 **消息队列** — 统一消息队列抽象，支持同步/异步消息发送、死信队列
+- 🔍 **分布式追踪** — Span 创建、采样策略、上下文传播
 
 ---
 
@@ -112,6 +114,8 @@ func main() {
 | 模块 | 说明 | 文档 |
 |------|------|------|
 | [Web 框架](web/README.md) | HTTP 服务器、路由器、中间件 | [→](web/README.md) |
+| [消息队列](mq/README.md) | 消息队列抽象、消息发送消费、死信队列 | [→](mq/README.md) |
+| [OpenAPI](openapi/README.md) | OpenAPI 3.0 文档生成、Swagger UI 集成 | [→](openapi/README.md) |
 | [弹性与容错](resilience/README.md) | 服务注册发现、负载均衡、熔断器 | [→](resilience/README.md) |
 
 ### 可观测性
@@ -121,6 +125,7 @@ func main() {
 | [日志抽象](log/README.md) | Logger 接口、slog 默认实现 | [→](log/README.md) |
 | [运维端点](actuator/README.md) | /health、/metrics、/env 端点 | [→](actuator/README.md) |
 | [指标收集](metrics/README.md) | Counter、Gauge、MeterRegistry | [→](metrics/README.md) |
+| [分布式追踪](tracing/README.md) | Span 创建、采样策略、上下文传播 | [→](tracing/README.md) |
 | [可观测性](observability/README.md) | 日志、指标可观测性 | [→](observability/README.md) |
 
 ### 安全与验证
@@ -144,10 +149,12 @@ func main() {
 | 模块 | 说明 | 文档 |
 |------|------|------|
 | [配置管理](config/README.md) | Config 接口、Loader 链、Validator | [→](config/README.md) |
+| [多租户](tenant/README.md) | 租户上下文管理、租户隔离、数据源切换 | [→](tenant/README.md) |
 | [国际化](i18n/README.md) | MessageSource 消息源、多区域支持 | [→](i18n/README.md) |
 | [异常处理](exception/README.md) | 全局异常处理、错误码体系 | [→](exception/README.md) |
 | [表达式语言](spel/README.md) | SpEL 风格表达式解析 | [→](spel/README.md) |
 | [测试框架](testing/README.md) | TestRunner、Mock、断言 | [→](testing/README.md) |
+| [Web 测试](webtest/README.md) | HTTP 测试客户端、响应验证、中间件测试 | [→](webtest/README.md) |
 
 ---
 
@@ -399,6 +406,8 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | 文档 | 说明 |
 |------|------|
 | [Web 框架](web/README.md) | HTTP 服务器、路由器、中间件 |
+| [消息队列](mq/README.md) | 消息队列抽象、消息发送消费、死信队列 |
+| [OpenAPI](openapi/README.md) | OpenAPI 3.0 文档生成、Swagger UI 集成 |
 | [弹性与容错](resilience/README.md) | 服务注册发现、负载均衡、熔断器 |
 
 #### 可观测性
@@ -408,6 +417,7 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | [日志抽象](log/README.md) | Logger 接口、slog 默认实现 |
 | [运维端点](actuator/README.md) | /health、/metrics、/env 端点 |
 | [指标收集](metrics/README.md) | Counter、Gauge、MeterRegistry |
+| [分布式追踪](tracing/README.md) | Span 创建、采样策略、上下文传播 |
 | [可观测性](observability/README.md) | 日志、指标可观测性 |
 
 #### 安全与验证
@@ -432,15 +442,31 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | 文档 | 说明 |
 |------|------|
 | [国际化](i18n/README.md) | MessageSource 消息源、多区域支持 |
+| [多租户](tenant/README.md) | 租户上下文管理、租户隔离、数据源切换 |
 | [异常处理](exception/README.md) | 全局异常处理、错误码体系 |
 | [表达式语言](spel/README.md) | SpEL 风格表达式解析 |
 | [元数据](metadata/README.md) | 元数据管理、解析器 |
 | [测试框架](testing/README.md) | TestRunner、Mock、断言 |
+| [Web 测试](webtest/README.md) | HTTP 测试客户端、响应验证、中间件测试 |
 | [开发工具](devtools/README.md) | 开发辅助工具 |
 
 ---
 
 ## 开发指南
+
+### 本地开发时，需要在项目跟路径下执行以下命令：
+
+```bash
+mv go.work.back go.work
+# 安装依赖
+go work sync
+```
+windows 环境下，需要执行以下命令：go
+
+```bash
+rename go.work.back go.work
+go work sync
+```
 
 ### 构建与测试
 

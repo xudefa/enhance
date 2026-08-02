@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"reflect"
 	"strings"
 
@@ -49,7 +48,7 @@ func (c *SecurityAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 	} else {
 		c.logger = log.Build()
 	}
-	c.logger.Info(context.Background(), "开始配置安全模块...")
+	c.logger.Info(ctx.Context(), "开始配置安全模块...")
 
 	// 获取或注册 UserDetailsService
 	userDetailsService := c.getUserDetailsService(ctx, container)
@@ -61,41 +60,46 @@ func (c *SecurityAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 	authManager := c.buildAuthenticationManager(ctx, userDetailsService, passwordEncoder)
 	// 使用接口类型注册，确保可以通过接口类型获取
 	if regErr := ctx.Container().RegisterInstance(authManager, reflect.TypeOf(authManager)); regErr != nil {
-		c.logger.Error(context.Background(), "注册 AuthenticationManager 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
+		c.logger.Error(ctx.Context(), "注册 AuthenticationManager 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
 		return regErr
 	}
-	c.logger.Info(context.Background(), "AuthenticationManager 已注册")
+	c.logger.Info(ctx.Context(), "AuthenticationManager 已注册")
 
 	filterChain := c.getOrBuildSecurityFilterChain(ctx, authManager, userDetailsService, env, container)
 
 	// 使用接口类型注册，确保可以通过接口类型获取
 	if regErr := ctx.Container().RegisterInstance(filterChain, reflect.TypeOf(filterChain)); regErr != nil {
-		c.logger.Error(context.Background(), "注册 SecurityFilterChain 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
+		c.logger.Error(ctx.Context(), "注册 SecurityFilterChain 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
 		return regErr
 	}
 	// 同时注册接口类型，确保可以通过 security.SecurityFilterChain 接口查找
 	if regErr := ctx.Container().RegisterInstance(filterChain, reflect.TypeFor[SecurityFilterChain]()); regErr != nil {
-		c.logger.Warn(context.Background(), "注册 SecurityFilterChain 接口类型失败（非致命）", log.KeyValue{Key: "error", Value: regErr.Error()})
+		c.logger.Warn(ctx.Context(), "注册 SecurityFilterChain 接口类型失败（非致命）", log.KeyValue{Key: "error", Value: regErr.Error()})
 	}
-	c.logger.Info(context.Background(), "SecurityFilterChain 已注册")
+	c.logger.Info(ctx.Context(), "SecurityFilterChain 已注册")
 
-	c.logger.Info(context.Background(), "安全模块配置完成")
+	c.logger.Info(ctx.Context(), "安全模块配置完成")
 	return nil
 }
 
 func (c *SecurityAutoConfiguration) getUserDetailsService(ctx boot.ApplicationContext, container core.Container) UserDetailsService {
-	c.logger.Debug(context.Background(), "尝试获取 UserDetailsService...")
+	c.logger.Debug(ctx.Context(), "尝试获取 UserDetailsService...")
 	beans, err := container.Get(reflect.TypeOf((*UserDetailsService)(nil)).Elem())
 	if err != nil || len(beans) == 0 {
-		c.logger.Debug(context.Background(), "未找到 UserDetailsService，创建默认实例")
+		c.logger.Debug(ctx.Context(), "未找到 UserDetailsService，创建默认实例")
 		service := NewInMemoryUserDetailsService()
 		if regErr := ctx.Container().RegisterInstance(service, reflect.TypeOf(service)); regErr != nil {
-			c.logger.Error(context.Background(), "注册 UserDetailsService 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
+			c.logger.Error(ctx.Context(), "注册 UserDetailsService 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
 		}
 		return service
 	}
-	c.logger.Debug(context.Background(), "找到已注册的 UserDetailsService", log.KeyValue{Key: "count", Value: len(beans)})
-	return beans[0].(UserDetailsService)
+	c.logger.Debug(ctx.Context(), "找到已注册的 UserDetailsService", log.KeyValue{Key: "count", Value: len(beans)})
+	service, ok := beans[0].(UserDetailsService)
+	if !ok {
+		c.logger.Error(ctx.Context(), "beans[0] is not UserDetailsService")
+		return nil
+	}
+	return service
 }
 
 func (c *SecurityAutoConfiguration) getPasswordEncoder(ctx boot.ApplicationContext, container core.Container) PasswordEncoder {
@@ -103,15 +107,20 @@ func (c *SecurityAutoConfiguration) getPasswordEncoder(ctx boot.ApplicationConte
 	if err != nil || len(beans) == 0 {
 		// 使用 NoOp 作为默认编码器
 		// 生产环境应通过 starter/bcrypt 模块注入真实的 bcrypt 编码器
-		c.logger.Debug(context.Background(), "未找到 PasswordEncoder，创建 NoOp 编码器")
+		c.logger.Debug(ctx.Context(), "未找到 PasswordEncoder，创建 NoOp 编码器")
 		encoder := NewNoOpPasswordEncoder()
 		if regErr := ctx.Container().RegisterInstance(encoder, reflect.TypeOf(encoder)); regErr != nil {
-			c.logger.Error(context.Background(), "注册 PasswordEncoder 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
+			c.logger.Error(ctx.Context(), "注册 PasswordEncoder 失败", log.KeyValue{Key: "error", Value: regErr.Error()})
 		}
 		return encoder
 	}
-	c.logger.Debug(context.Background(), "找到已注册的 PasswordEncoder")
-	return beans[0].(PasswordEncoder)
+	c.logger.Debug(ctx.Context(), "找到已注册的 PasswordEncoder")
+	encoder, ok := beans[0].(PasswordEncoder)
+	if !ok {
+		c.logger.Error(ctx.Context(), "beans[0] is not PasswordEncoder")
+		return NewNoOpPasswordEncoder()
+	}
+	return encoder
 }
 
 // buildAuthenticationManager 构建 AuthenticationManager
@@ -135,7 +144,12 @@ func (c *SecurityAutoConfiguration) getOrBuildSecurityFilterChain(ctx boot.Appli
 		return c.buildSecurityFilterChain(authManager, userDetailsService, env, container)
 	}
 	// 如果用户注入的过滤器链中不存在CORS、限流过滤器，则添加默认的
-	return c.addDefaultFiltersIfMissing(beans[0].(SecurityFilterChain), env, container)
+	chain, ok := beans[0].(SecurityFilterChain)
+	if !ok {
+		c.logger.Error(ctx.Context(), "beans[0] is not SecurityFilterChain")
+		return c.buildSecurityFilterChain(authManager, userDetailsService, env, container)
+	}
+	return c.addDefaultFiltersIfMissing(chain, env, container)
 }
 
 // buildSecurityFilterChain 构建安全过滤器链
@@ -153,8 +167,7 @@ func (c *SecurityAutoConfiguration) buildSecurityFilterChain(authManager Authent
 	}
 
 	// 添加安全上下文持有者过滤器（必须在最前面，保存初始状态）
-	securityContext := GetSecurityContext()
-	contextHolderFilter := NewSecurityContextHolderFilter(securityContext)
+	contextHolderFilter := NewSecurityContextHolderFilter()
 	filters = append(filters, contextHolderFilter)
 
 	// 添加JWT认证过滤器（如果容器中存在）
@@ -197,8 +210,7 @@ func (c *SecurityAutoConfiguration) buildDefaultSecurityFilters(authManager Auth
 	}
 
 	if !skip {
-		securityContext := GetSecurityContext()
-		contextHolderFilter := NewSecurityContextHolderFilter(securityContext)
+		contextHolderFilter := NewSecurityContextHolderFilter()
 		filters = append(filters, contextHolderFilter)
 	}
 
@@ -272,7 +284,9 @@ func (c *SecurityAutoConfiguration) getOrCreateCorsFilter(env *environment.Envir
 	// 优先从容器获取
 	beans, _ := container.Get(reflect.TypeOf((*CorsFilter)(nil)).Elem())
 	if len(beans) > 0 {
-		return beans[0].(*CorsFilter)
+		if corsFilter, ok := beans[0].(*CorsFilter); ok {
+			return corsFilter
+		}
 	}
 	// 创建默认的CORS过滤器
 	return c.createDefaultCorsFilter(env)
@@ -299,7 +313,9 @@ func (c *SecurityAutoConfiguration) getOrCreateRateLimitFilter(env *environment.
 	// 优先从容器获取
 	beans, _ := container.Get(reflect.TypeOf((*RateLimitFilter)(nil)).Elem())
 	if len(beans) > 0 {
-		return beans[0].(*RateLimitFilter)
+		if rateLimitFilter, ok := beans[0].(*RateLimitFilter); ok {
+			return rateLimitFilter
+		}
 	}
 	// 创建默认的限流过滤器
 	return c.createDefaultRateLimitFilter(env, container)
@@ -314,11 +330,13 @@ func (c *SecurityAutoConfiguration) createDefaultRateLimitFilter(env *environmen
 		logger = log.Build()
 	}
 	rateLimitConfig := RateLimitConfig{
-		Enabled:      true,
-		Rate:         env.GetInt("security.rate-limit.rate", 100),
-		Burst:        env.GetInt("security.rate-limit.burst", 200),
-		ExcludePaths: parseStringSlice(env.GetString("security.rate-limit.exclude-paths", "/health,/actuator/health")),
-		Log:          logger,
+		Enabled:           true,
+		Rate:              env.GetInt("security.rate-limit.rate", 100),
+		Burst:             env.GetInt("security.rate-limit.burst", 200),
+		ExcludePaths:      parseStringSlice(env.GetString("security.rate-limit.exclude-paths", "/health,/actuator/health")),
+		TrustProxyHeaders: env.GetBool("security.rate-limit.trust-proxy-headers", false),
+		TrustedProxies:    parseStringSlice(env.GetString("security.rate-limit.trusted-proxies", "")),
+		Log:               logger,
 	}
 	return NewRateLimitFilter(rateLimitConfig)
 }

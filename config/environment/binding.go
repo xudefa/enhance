@@ -27,7 +27,11 @@ func (e *Environment) BindKey(key string, target any) error {
 	if !ok {
 		return fmt.Errorf("property not found: %s", key)
 	}
-	val.Elem().Set(reflectValueOf(v))
+	converted, err := globalTypeConverter.ConvertTo(v, val.Elem().Type())
+	if err != nil {
+		return fmt.Errorf("failed to convert property %q: %w", key, err)
+	}
+	val.Elem().Set(converted)
 	return nil
 }
 
@@ -220,7 +224,13 @@ func (e *Environment) bindStruct(val reflect.Value, prefix string) error {
 			continue
 		}
 		if pv, ok := e.GetProperty(fullKey); ok {
-			setField(fieldVal, pv)
+			if err := setField(fieldVal, pv); err != nil {
+				slog.Warn("[environment] set field failed", "key", fullKey, "error", err)
+			}
+		} else if defaultVal, ok := field.Tag.Lookup("default"); ok {
+			if err := setField(fieldVal, defaultVal); err != nil {
+				slog.Warn("[environment] set default failed", "key", fullKey, "error", err)
+			}
 		}
 	}
 	return nil
@@ -284,14 +294,14 @@ func toConfigKey(name string) string {
 	return result.String()
 }
 
-func setField(fieldVal reflect.Value, val any) {
+func setField(fieldVal reflect.Value, val any) error {
 	targetType := fieldVal.Type()
 	converted, err := globalTypeConverter.ConvertTo(val, targetType)
 	if err != nil {
-		// 转换失败，忽略
-		return
+		return fmt.Errorf("set field %s: %w", targetType, err)
 	}
 	fieldVal.Set(converted)
+	return nil
 }
 
 func reflectValueOf(v any) reflect.Value {
@@ -317,7 +327,10 @@ func (e *Environment) resolveConfigKey(field reflect.StructField) (string, bool)
 	return toConfigKey(field.Name), false
 }
 
-// hasNestedExplicitKeys 检查嵌套结构体的字段是否都有显式 key
+// hasNestedExplicitKeys 检查嵌套结构体的所有导出字段是否都有显式 key
+//
+// 只有当全部导出字段都有显式 key 时才返回 true，否则该嵌套结构体不应跳过父前缀，
+// 避免部分字段（无显式 key）因跳过前缀而解析到错误路径。
 func hasNestedExplicitKeys(val reflect.Value) bool {
 	typ := val.Type()
 	for i := 0; i < typ.NumField(); i++ {
@@ -325,19 +338,26 @@ func hasNestedExplicitKeys(val reflect.Value) bool {
 		if !field.IsExported() {
 			continue
 		}
-		// 检查是否有显式 tag
-		if _, hasConfig := field.Tag.Lookup("config"); hasConfig {
-			return true
+		if !hasExplicitConfigKey(field) {
+			return false
 		}
-		if _, hasMapstructure := field.Tag.Lookup("mapstructure"); hasMapstructure {
-			return true
-		}
-		if _, hasEnv := field.Tag.Lookup("env"); hasEnv {
-			return true
-		}
-		if _, hasValue := field.Tag.Lookup("value"); hasValue {
-			return true
-		}
+	}
+	return true
+}
+
+// hasExplicitConfigKey 检查字段是否带显式配置 key tag
+func hasExplicitConfigKey(field reflect.StructField) bool {
+	if _, hasConfig := field.Tag.Lookup("config"); hasConfig {
+		return true
+	}
+	if _, hasMapstructure := field.Tag.Lookup("mapstructure"); hasMapstructure {
+		return true
+	}
+	if _, hasEnv := field.Tag.Lookup("env"); hasEnv {
+		return true
+	}
+	if _, hasValue := field.Tag.Lookup("value"); hasValue {
+		return true
 	}
 	return false
 }

@@ -1,6 +1,7 @@
 package boot
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -39,9 +40,16 @@ type Module struct {
 //	boot.Provide(NewUserService)
 func Provide(constructor any) BeanProvider {
 	return func(c core.Container) error {
+		if constructor == nil {
+			return fmt.Errorf("constructor must not be nil")
+		}
 		typ := reflect.TypeOf(constructor)
 		if typ.Kind() != reflect.Func {
 			return core.ErrInvalidBeanName
+		}
+
+		if typ.NumOut() < 1 {
+			return fmt.Errorf("constructor must return at least one value")
 		}
 
 		numIn := typ.NumIn()
@@ -64,6 +72,13 @@ func Provide(constructor any) BeanProvider {
 				}
 
 				results := fnVal.Call(callArgs)
+				if typ.NumOut() >= 2 {
+					if !isNilReflectValue(results[1]) {
+						if err, ok := results[1].Interface().(error); ok {
+							return nil, err
+						}
+					}
+				}
 				return results[0].Interface(), nil
 			},
 		}
@@ -84,6 +99,9 @@ func Provide(constructor any) BeanProvider {
 //	})
 func Invoke(fn any) BeanProvider {
 	return func(c core.Container) error {
+		if fn == nil {
+			return fmt.Errorf("invoke function must not be nil")
+		}
 		fnVal := reflect.ValueOf(fn)
 		fnType := fnVal.Type()
 
@@ -106,7 +124,14 @@ func Invoke(fn any) BeanProvider {
 			args[i] = reflect.ValueOf(instances[0])
 		}
 
-		fnVal.Call(args)
+		results := fnVal.Call(args)
+		if fnType.NumOut() >= 1 {
+			if !isNilReflectValue(results[len(results)-1]) {
+				if err, ok := results[len(results)-1].Interface().(error); ok {
+					return err
+				}
+			}
+		}
 		return nil
 	}
 }
@@ -370,6 +395,9 @@ func (b *ModuleBuilder) Bean(provider BeanProvider) *ModuleBuilder {
 // Invoke 添加一个安装时立即调用的函数
 func (b *ModuleBuilder) Invoke(fn any) *ModuleBuilder {
 	b.invokes = append(b.invokes, func(c core.Container) error {
+		if fn == nil {
+			return fmt.Errorf("invoke function must not be nil")
+		}
 		fnVal := reflect.ValueOf(fn)
 		fnType := fnVal.Type()
 
@@ -392,7 +420,14 @@ func (b *ModuleBuilder) Invoke(fn any) *ModuleBuilder {
 			args[i] = reflect.ValueOf(instances[0])
 		}
 
-		fnVal.Call(args)
+		results := fnVal.Call(args)
+		if fnType.NumOut() >= 1 {
+			if !isNilReflectValue(results[len(results)-1]) {
+				if err, ok := results[len(results)-1].Interface().(error); ok {
+					return err
+				}
+			}
+		}
 		return nil
 	})
 	return b
@@ -500,4 +535,29 @@ func WithModules(modules ...any) BootOption {
 			}
 		}
 	}
+}
+
+// isNilReflectValue 判断反射值是否为 nil，兼容接口包裹 typed-nil（如 (*MyErr)(nil)）的情况。
+func isNilReflectValue(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice:
+		return v.IsNil()
+	case reflect.Interface:
+		if v.IsNil() {
+			return true
+		}
+		inner := v.Elem()
+		if !inner.IsValid() {
+			return true
+		}
+		switch inner.Kind() {
+		case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice, reflect.Interface:
+			return inner.IsNil()
+		}
+		return false
+	}
+	return false
 }

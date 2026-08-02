@@ -4,6 +4,7 @@ package aop
 import (
 	"context"
 	"reflect"
+	"sync"
 )
 
 // joinPointImpl 连接点实现。
@@ -14,17 +15,22 @@ type joinPointImpl struct {
 	proceed         func() (any, error)
 	proceedWithArgs func([]any) (any, error)
 	ctx             context.Context
+	result          any
+	lastErr         error
 }
 
-// NewJoinPoint 创建连接点。
-func NewJoinPoint(target any, method string, args []any, proceed func() (any, error), proceedWithArgs func([]any) (any, error)) JoinPoint {
+// NewJoinPointWithContext 创建带上下文的连接点。
+func NewJoinPointWithContext(ctx context.Context, target any, method string, args []any, proceed func() (any, error), proceedWithArgs func([]any) (any, error)) JoinPoint {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return &joinPointImpl{
 		target:          target,
 		method:          method,
 		args:            args,
 		proceed:         proceed,
 		proceedWithArgs: proceedWithArgs,
-		ctx:             context.Background(),
+		ctx:             ctx,
 	}
 }
 
@@ -54,11 +60,32 @@ func (j *joinPointImpl) ProceedWithArgs(args []any) (any, error) {
 	return nil, nil
 }
 
+func (j *joinPointImpl) Context() context.Context {
+	return j.ctx
+}
+
+func (j *joinPointImpl) GetResult() any {
+	return j.result
+}
+
+func (j *joinPointImpl) GetError() error {
+	return j.lastErr
+}
+
+func (j *joinPointImpl) SetResult(v any) {
+	j.result = v
+}
+
+func (j *joinPointImpl) SetError(err error) {
+	j.lastErr = err
+}
+
 // invocationImpl 调用实现。
 type invocationImpl struct {
 	joinPoint JoinPoint
-	args      []any
 	proceed   func() (any, error)
+	mu        sync.Mutex // 保护 args 和 lastErr
+	args      []any
 	lastErr   error
 }
 
@@ -76,7 +103,18 @@ func (i *invocationImpl) JoinPoint() JoinPoint {
 }
 
 func (i *invocationImpl) Arguments() []any {
-	return i.args
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	dst := make([]any, len(i.args))
+	copy(dst, i.args)
+	return dst
+}
+
+// SetArgs 设置参数。
+func (i *invocationImpl) SetArgs(args []any) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.args = args
 }
 
 func (i *invocationImpl) Proceed() (any, error) {
@@ -88,11 +126,15 @@ func (i *invocationImpl) Proceed() (any, error) {
 
 // SetError 在调用上存储错误信息。
 func (i *invocationImpl) SetError(err error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	i.lastErr = err
 }
 
 // Error 返回已存储的错误信息。
 func (i *invocationImpl) Error() error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	return i.lastErr
 }
 

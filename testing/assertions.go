@@ -1,6 +1,9 @@
 package testing
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 // Assert 断言条件为真。
 func Assert(t *testing.T, condition bool, msg string) {
@@ -13,7 +16,7 @@ func Assert(t *testing.T, condition bool, msg string) {
 // AssertEqual 断言两个值相等。
 func AssertEqual(t *testing.T, expected, actual any, msg ...string) {
 	t.Helper()
-	if expected != actual {
+	if !reflect.DeepEqual(expected, actual) {
 		message := "assertion failed"
 		if len(msg) > 0 {
 			message = msg[0]

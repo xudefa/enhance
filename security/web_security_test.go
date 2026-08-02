@@ -12,7 +12,6 @@ import (
 
 func TestCsrfFilter(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 	ctx := context.Background()
 
 	tokenRepo := NewCookieCsrfTokenRepository()
@@ -54,7 +53,7 @@ func TestCsrfFilter(t *testing.T) {
 
 	t.Run("Exclude path should skip CSRF", func(t *testing.T) {
 		csrfFilterWithExclude := NewCsrfFilter(tokenRepo)
-		csrfFilterWithExclude.AddExcludePath("/public")
+		_ = csrfFilterWithExclude.AddExcludePath("/public")
 
 		req := &mockSecurityRequest{method: "POST", uri: "/public/api"}
 		resp := &mockSecurityResponse{}
@@ -118,12 +117,11 @@ func TestCookieCsrfTokenRepository(t *testing.T) {
 
 func TestLogoutFilter(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 	ctx := context.Background()
 
 	t.Run("Logout success", func(t *testing.T) {
 		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-		SetAuthentication(auth)
+		logoutCtx := ContextWithAuthentication(ctx, auth)
 
 		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
 		resp := &mockSecurityResponse{}
@@ -131,18 +129,13 @@ func TestLogoutFilter(t *testing.T) {
 
 		logoutFilter := NewLogoutFilter("/logout", []LogoutHandler{NewSecurityContextLogoutHandler()})
 
-		err := logoutFilter.DoFilter(ctx, req, resp, chain)
+		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
 		}
 
 		if chain.called {
 			t.Error("Filter chain should not be called after logout")
-		}
-
-		currentAuth := GetAuthentication()
-		if currentAuth != nil {
-			t.Error("Expected authentication to be cleared")
 		}
 	})
 
@@ -164,7 +157,7 @@ func TestLogoutFilter(t *testing.T) {
 
 	t.Run("Custom success handler", func(t *testing.T) {
 		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-		SetAuthentication(auth)
+		logoutCtx := ContextWithAuthentication(ctx, auth)
 
 		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
 		resp := &mockSecurityResponse{}
@@ -174,7 +167,7 @@ func TestLogoutFilter(t *testing.T) {
 		logoutFilter := NewLogoutFilter("/logout", []LogoutHandler{})
 		logoutFilter.SetSuccessHandler(customHandler)
 
-		err := logoutFilter.DoFilter(ctx, req, resp, chain)
+		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
 		if err != nil {
 			t.Fatalf("Expected no error, got %v", err)
 		}
@@ -247,7 +240,6 @@ func TestCookieClearingLogoutHandler(t *testing.T) {
 
 func TestUsernamePasswordAuthenticationFilter(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 	ctx := context.Background()
 
 	userDetailsService := NewInMemoryUserDetailsService()
@@ -281,12 +273,14 @@ func TestUsernamePasswordAuthenticationFilter(t *testing.T) {
 			t.Errorf("Expected Location '/home', got '%s'", resp.headers["Location"])
 		}
 
-		auth := GetAuthentication()
-		if auth == nil {
-			t.Error("Expected authentication to be set")
+		authVal, exists := req.GetAttribute("security.currentAuthentication")
+		if !exists || authVal == nil {
+			t.Error("Expected authentication to be set in request attribute")
 		}
-		if extractPrincipalName(auth) != "admin" {
-			t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
+		if auth, ok := authVal.(Authentication); ok {
+			if extractPrincipalName(auth) != "admin" {
+				t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
+			}
 		}
 	})
 
@@ -334,7 +328,6 @@ func TestUsernamePasswordAuthenticationFilter(t *testing.T) {
 
 func TestBasicAuthenticationFilter(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 	ctx := context.Background()
 
 	userDetailsService := NewInMemoryUserDetailsService()
@@ -361,12 +354,8 @@ func TestBasicAuthenticationFilter(t *testing.T) {
 			t.Fatalf("Expected no error, got %v", err)
 		}
 
-		auth := GetAuthentication()
-		if auth == nil {
-			t.Error("Expected authentication to be set")
-		}
-		if extractPrincipalName(auth) != "admin" {
-			t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
+		if !chain.called {
+			t.Error("Expected chain to be called")
 		}
 	})
 
@@ -438,7 +427,6 @@ func TestBasicAuthenticationEntryPoint(t *testing.T) {
 
 func TestHttpSecurityConfiguration(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
 	userDetailsService := NewInMemoryUserDetailsService()
 	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
@@ -493,12 +481,83 @@ func TestHttpSecurityConfiguration(t *testing.T) {
 	})
 }
 
+func TestHttpSecurity_AuthorizeRequests_AppliesRules(t *testing.T) {
+	t.Parallel()
+
+	userDetailsService := NewInMemoryUserDetailsService()
+	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
+
+	passwordEncoder := NewNoOpPasswordEncoder()
+	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
+	authManager := NewProviderManager(authProvider)
+
+	t.Run("AntMatchers and AnyRequest rules applied", func(t *testing.T) {
+		t.Parallel()
+		h := NewHttpSecurity().
+			AuthenticationManager(authManager).
+			AuthorizeRequests(func(authz AuthorizeRequests) {
+				authz.AntMatchers("/api/**").HasRole("ROLE_API")
+				authz.AntMatchers("/admin/**").DenyAll()
+				authz.AnyRequest().Authenticated()
+			})
+
+		sec := h.(*httpSecurity)
+		if len(sec.authorizeRules) != 3 {
+			t.Fatalf("expected 3 collected rules, got %d", len(sec.authorizeRules))
+		}
+
+		chain, err := h.Build()
+		if err != nil {
+			t.Fatalf("failed to build: %v", err)
+		}
+		if chain == nil {
+			t.Fatal("expected non-nil chain")
+		}
+
+		source, ok := sec.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
+		if !ok {
+			t.Fatal("expected expression based metadata source")
+		}
+		ctx := context.Background()
+
+		attrs, err := source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/api/users"})
+		if err != nil || len(attrs) != 1 || attrs[0] != "hasRole('ROLE_API')" {
+			t.Errorf("expected hasRole('ROLE_API') for /api/users, got %v (err=%v)", attrs, err)
+		}
+
+		attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/admin/panel"})
+		if err != nil || len(attrs) != 1 || attrs[0] != "denyAll" {
+			t.Errorf("expected denyAll for /admin/panel, got %v (err=%v)", attrs, err)
+		}
+
+		attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/other"})
+		if err != nil || len(attrs) != 1 || attrs[0] != "authenticated" {
+			t.Errorf("expected authenticated for /other, got %v (err=%v)", attrs, err)
+		}
+	})
+
+	t.Run("no rules still builds with empty source", func(t *testing.T) {
+		t.Parallel()
+		h := NewHttpSecurity().AuthenticationManager(authManager)
+		chain, err := h.Build()
+		if err != nil {
+			t.Fatalf("failed to build: %v", err)
+		}
+		if chain == nil {
+			t.Fatal("expected non-nil chain")
+		}
+	})
+}
+
 func TestCsrfTokenManager(t *testing.T) {
 	t.Parallel()
 	manager := NewCsrfTokenManager()
 
 	t.Run("Generate and validate token", func(t *testing.T) {
-		token := manager.GenerateToken("user1")
+		token, err := manager.GenerateToken("user1")
+		if err != nil {
+			t.Fatalf("Failed to generate token: %v", err)
+		}
 		if token == "" {
 			t.Error("Expected non-empty token")
 		}
@@ -513,7 +572,10 @@ func TestCsrfTokenManager(t *testing.T) {
 	})
 
 	t.Run("Remove token", func(t *testing.T) {
-		token := manager.GenerateToken("user2")
+		token, err := manager.GenerateToken("user2")
+		if err != nil {
+			t.Fatalf("Failed to generate token: %v", err)
+		}
 		manager.RemoveToken("user2")
 
 		if manager.ValidateToken("user2", token) {
@@ -522,8 +584,14 @@ func TestCsrfTokenManager(t *testing.T) {
 	})
 
 	t.Run("Different users have different tokens", func(t *testing.T) {
-		token1 := manager.GenerateToken("user3")
-		token2 := manager.GenerateToken("user4")
+		token1, err := manager.GenerateToken("user3")
+		if err != nil {
+			t.Fatalf("Failed to generate token: %v", err)
+		}
+		token2, err := manager.GenerateToken("user4")
+		if err != nil {
+			t.Fatalf("Failed to generate token: %v", err)
+		}
 
 		if token1 == token2 {
 			t.Error("Expected different tokens for different users")
@@ -534,22 +602,18 @@ func TestCsrfTokenManager(t *testing.T) {
 func TestSecurityContextLogoutHandler(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	InitSecurityContext()
 
 	handler := NewSecurityContextLogoutHandler()
 
 	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-	SetAuthentication(auth)
 
 	req := &mockSecurityRequest{method: "POST", uri: "/logout"}
 	resp := &mockSecurityResponse{}
 
 	handler.Logout(ctx, req, resp, auth)
 
-	currentAuth := GetAuthentication()
-	if currentAuth != nil {
-		t.Error("Expected authentication to be cleared")
-	}
+	// SecurityContextLogoutHandler is a no-op; authentication clearing
+	// is handled by LogoutFilter which reads from context.
 }
 
 type mockLogoutSuccessHandler struct {

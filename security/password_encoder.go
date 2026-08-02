@@ -2,6 +2,7 @@ package security
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -24,12 +25,13 @@ func (e *NoOpPasswordEncoder) Encode(rawPassword string) string {
 
 // Matches 直接比较原始密码和编码后密码
 func (e *NoOpPasswordEncoder) Matches(rawPassword, encodedPassword string) bool {
-	return rawPassword == encodedPassword
+	return subtle.ConstantTimeCompare([]byte(rawPassword), []byte(encodedPassword)) == 1
 }
 
 // Sha256PasswordEncoder 基于 SHA256 的密码编码器
 //
-// 注意: 此实现仅适用于兼容性场景，不推荐用于生产环境。
+// Deprecated: 此实现不使用 salt，易受彩虹表攻击。
+// 仅适用于兼容性场景，不推荐用于生产环境。
 // 生产环境应使用 BCryptPasswordEncoder 或 Argon2PasswordEncoder。
 type Sha256PasswordEncoder struct{}
 
@@ -46,7 +48,7 @@ func (e *Sha256PasswordEncoder) Encode(rawPassword string) string {
 
 // Matches 比较编码后的密码
 func (e *Sha256PasswordEncoder) Matches(rawPassword, encodedPassword string) bool {
-	return e.Encode(rawPassword) == encodedPassword
+	return subtle.ConstantTimeCompare([]byte(e.Encode(rawPassword)), []byte(encodedPassword)) == 1
 }
 
 // StandardPasswordEncoder 标准密码编码器
@@ -70,7 +72,7 @@ func (e *StandardPasswordEncoder) Encode(rawPassword string) string {
 
 // Matches 比较编码后的密码
 func (e *StandardPasswordEncoder) Matches(rawPassword, encodedPassword string) bool {
-	return e.Encode(rawPassword) == encodedPassword
+	return subtle.ConstantTimeCompare([]byte(e.Encode(rawPassword)), []byte(encodedPassword)) == 1
 }
 
 // DelegatingPasswordEncoder 委托密码编码器
@@ -86,9 +88,17 @@ type DelegatingPasswordEncoder struct {
 // idForEncode: 默认使用的编码器ID
 // passwordEncoders: 可用的编码器映射
 func NewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[string]PasswordEncoder) *DelegatingPasswordEncoder {
+	// 在构造时检查编码器是否存在，避免运行时panic
+	if _, exists := passwordEncoders[idForEncode]; !exists {
+		panic(fmt.Sprintf("encoder not found for id: %s", idForEncode))
+	}
+	encoders := make(map[string]PasswordEncoder, len(passwordEncoders))
+	for k, v := range passwordEncoders {
+		encoders[k] = v
+	}
 	return &DelegatingPasswordEncoder{
 		idForEncode:      idForEncode,
-		passwordEncoders: passwordEncoders,
+		passwordEncoders: encoders,
 	}
 }
 
@@ -96,7 +106,8 @@ func NewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[strin
 func (e *DelegatingPasswordEncoder) Encode(rawPassword string) string {
 	encoder, exists := e.passwordEncoders[e.idForEncode]
 	if !exists {
-		panic(fmt.Sprintf("encoder not found for id: %s", e.idForEncode))
+		// 理论上不应该发生（构造时已检查），防御性处理
+		return ""
 	}
 	encoded := encoder.Encode(rawPassword)
 	return fmt.Sprintf("{%s}%s", e.idForEncode, encoded)

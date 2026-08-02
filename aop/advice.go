@@ -162,10 +162,7 @@ func (a *afterReturningAdvice) Order() int {
 }
 
 func (a *afterReturningAdvice) Execute(ctx context.Context, joinPoint JoinPoint) (any, error) {
-	result, err := joinPoint.Proceed()
-	if err != nil {
-		return nil, err
-	}
+	result := joinPoint.GetResult()
 	if a.fn != nil {
 		return a.fn(ctx, joinPoint, result)
 	}
@@ -206,11 +203,11 @@ func (a *afterThrowingAdvice) Order() int {
 }
 
 func (a *afterThrowingAdvice) Execute(ctx context.Context, joinPoint JoinPoint) (any, error) {
-	result, err := joinPoint.Proceed()
+	err := joinPoint.GetError()
 	if err != nil && a.fn != nil {
 		return a.fn(ctx, joinPoint, err)
 	}
-	return result, err
+	return nil, err
 }
 
 // 向后兼容的函数式 API
@@ -240,10 +237,19 @@ func After(fn func(JoinPoint)) Advice {
 // Around 创建环绕通知（便捷函数）。
 func Around(fn func(JoinPoint, func() any) any) Advice {
 	return NewAroundAdvice(func(ctx context.Context, jp JoinPoint, proceed func() (any, error)) (any, error) {
-		return fn(jp, func() any {
-			result, _ := proceed()
-			return result
-		}), nil
+		var proceedErr error
+		result := fn(jp, func() any {
+			r, err := proceed()
+			if err != nil {
+				proceedErr = err
+			}
+			return r
+		})
+		// 透传 proceed() 产生的错误，使 AfterThrowing 与调用方能够感知
+		if proceedErr != nil {
+			return result, proceedErr
+		}
+		return result, nil
 	}, 0)
 }
 

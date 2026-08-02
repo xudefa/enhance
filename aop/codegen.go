@@ -10,7 +10,7 @@ import (
 //
 // 管理代码生成的代理对象，提供查找和获取功能
 type GeneratedProxyRegistry struct {
-	proxies sync.Map
+	proxies sync.Map // beanID -> proxyType
 }
 
 // NewGeneratedProxyRegistry 创建代码生成代理注册表
@@ -42,7 +42,9 @@ func (r *GeneratedProxyRegistry) Has(beanID string) bool {
 func (r *GeneratedProxyRegistry) List() []string {
 	var ids []string
 	r.proxies.Range(func(key, _ any) bool {
-		ids = append(ids, key.(string))
+		if s, ok := key.(string); ok {
+			ids = append(ids, s)
+		}
 		return true
 	})
 	return ids
@@ -95,11 +97,15 @@ func (f *GeneratedProxyFactory) Create(beanID string, target any) (any, error) {
 		return nil, fmt.Errorf("no generated proxy found for bean: %s", beanID)
 	}
 
+	if proxyType.Kind() != reflect.Pointer && proxyType.Kind() != reflect.Interface {
+		return nil, fmt.Errorf("proxy type for bean %s is not a pointer or interface: %v", beanID, proxyType.Kind())
+	}
+
 	proxyValue := reflect.New(proxyType.Elem())
 	proxy := proxyValue.Interface()
 
 	// 设置目标对象
-	targetField := proxyValue.Elem().FieldByName("target")
+	targetField := proxyValue.Elem().FieldByName("Target")
 	if targetField.IsValid() && targetField.CanSet() {
 		targetField.Set(reflect.ValueOf(target))
 	}

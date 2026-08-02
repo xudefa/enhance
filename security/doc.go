@@ -45,8 +45,8 @@
 //	    Logout("/logout").
 //	    Csrf().
 //	    AuthorizeRequests(func(authz security.AuthorizeRequests) {
-//	        authz.AntMatchers("/api/**", "ROLE_API")
-//	        authz.AnyAuthenticated()
+//	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
+//	        authz.AnyRequest().Authenticated()
 //	    })
 //
 // 认证用户：
@@ -173,6 +173,8 @@ type SecurityRequest interface {
 	GetURI() string
 	// GetHeader 获取请求头。
 	GetHeader(key string) string
+	// RemoteAddress 获取直连对端的地址，格式为 "host:port"。
+	RemoteAddress() string
 	// SetAttribute 设置请求属性。
 	SetAttribute(key string, value any)
 	// GetAttribute 获取请求属性。
@@ -215,8 +217,8 @@ type GrantedAuthority interface {
 //	    Logout("/logout").
 //	    Csrf().
 //	    AuthorizeRequests(func(authz security.AuthorizeRequests) {
-//	        authz.AntMatchers("/api/**", "ROLE_API")
-//	        authz.AnyAuthenticated()
+//	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
+//	        authz.AnyRequest().Authenticated()
 //	    })
 type HttpSecurity interface {
 	// AuthenticationManager 设置认证管理器。
@@ -230,7 +232,7 @@ type HttpSecurity interface {
 	// SecurityMetadataSource 设置安全元数据源。
 	SecurityMetadataSource(source SecurityMetadataSource) HttpSecurity
 	// AuthorizeRequests 配置授权规则。
-	AuthorizeRequests(authorizer AuthorizeRequests) HttpSecurity
+	AuthorizeRequests(config func(authorizer AuthorizeRequests)) HttpSecurity
 	// AddFilter 添加过滤器。
 	AddFilter(filter SecurityFilter) HttpSecurity
 	// AddFilterBefore 在指定过滤器之前添加过滤器。
@@ -325,6 +327,8 @@ type RateLimitStrategy interface {
 type CsrfTokenRepository interface {
 	// GenerateToken 生成新的 CSRF 令牌。
 	GenerateToken(ctx context.Context, request SecurityRequest) (*CsrfToken, error)
+	// LoadToken 加载当前会话已存在的 CSRF 令牌，会话中不存在时返回 nil。
+	LoadToken(ctx context.Context, request SecurityRequest) (*CsrfToken, error)
 	// ValidateToken 验证 CSRF 令牌。
 	ValidateToken(ctx context.Context, request SecurityRequest, token string) bool
 	// SaveToken 保存 CSRF 令牌到响应。

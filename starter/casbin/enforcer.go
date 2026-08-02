@@ -27,20 +27,20 @@ type DefaultCasbinEnforcer struct {
 }
 
 // NewCasbinEnforcer 创建 Casbin 执行器。
-func NewCasbinEnforcer(logger log.Logger, modelPath, policyPath string) *DefaultCasbinEnforcer {
+func NewCasbinEnforcer(ctx context.Context, logger log.Logger, modelPath, policyPath string) (*DefaultCasbinEnforcer, error) {
 	// 初始化 Casbin 执行器
 	enforcer, err := casbin.NewEnforcer(modelPath, policyPath)
 	if err != nil {
-		logger.Error(context.Background(), "创建 Casbin 执行器失败", log.KeyValue{Key: "error", Value: err.Error()})
-		panic(fmt.Sprintf("创建 Casbin 执行器失败: %v", err))
+		logger.Error(ctx, "创建 Casbin 执行器失败", log.KeyValue{Key: "error", Value: err.Error()})
+		return nil, fmt.Errorf("创建 Casbin 执行器失败: %w", err)
 	}
-	logger.Info(context.Background(), "Casbin 执行器初始化成功", log.KeyValue{Key: "model", Value: modelPath})
-	logger.Info(context.Background(), "Casbin 策略路径", log.KeyValue{Key: "policy", Value: policyPath})
+	logger.Info(ctx, "Casbin 执行器初始化成功", log.KeyValue{Key: "model", Value: modelPath})
+	logger.Info(ctx, "Casbin 策略路径", log.KeyValue{Key: "policy", Value: policyPath})
 
 	return &DefaultCasbinEnforcer{
 		enforcer: enforcer,
 		logger:   logger,
-	}
+	}, nil
 }
 
 // Enforce 检查请求是否允许。

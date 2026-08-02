@@ -99,12 +99,6 @@ func (m *WatchManager) Close() {
 	}
 	m.closed = true
 
-	for name, ch := range m.sources {
-		if ch != nil {
-			close(ch)
-		}
-		delete(m.sources, name)
-	}
 	m.sources = nil
 	m.callbacks = nil
 }

@@ -32,9 +32,9 @@ func main() {
 	lruCache := cache.NewLRUCache(100) // 最大 100 个条目
 
 	// 设置缓存
-	lruCache.Set(ctx, "user:1", &User{ID: 1, Name: "张三", Email: "zhangsan@example.com"}, 0)
-	lruCache.Set(ctx, "user:2", &User{ID: 2, Name: "李四", Email: "lisi@example.com"}, 0)
-	lruCache.Set(ctx, "user:3", &User{ID: 3, Name: "王五", Email: "wangwu@example.com"}, 0)
+	_ = lruCache.Set(ctx, "user:1", &User{ID: 1, Name: "张三", Email: "zhangsan@example.com"}, 0)
+	_ = lruCache.Set(ctx, "user:2", &User{ID: 2, Name: "李四", Email: "lisi@example.com"}, 0)
+	_ = lruCache.Set(ctx, "user:3", &User{ID: 3, Name: "王五", Email: "wangwu@example.com"}, 0)
 
 	// 获取缓存
 	if val, err := lruCache.Get(ctx, "user:1"); err == nil {
@@ -50,7 +50,7 @@ func main() {
 	shardedCache := cache.NewShardedLRUCache(1000, 16) // 1000 条目，16 个分片
 
 	// 设置带过期的缓存
-	shardedCache.Set(ctx, "session:abc123", map[string]any{
+	_ = shardedCache.Set(ctx, "session:abc123", map[string]any{
 		"user_id": 1,
 		"role":    "admin",
 	}, time.Minute)

@@ -1,8 +1,6 @@
 // Package audit 提供审计日志功能，用于 enhance 框架。
 package audit
 
-import "time"
-
 // auditInterceptorImpl AuditInterceptor 接口的默认实现。
 type auditInterceptorImpl struct {
 	auditor    Auditor
@@ -26,21 +24,17 @@ func NewAuditInterceptor(auditor Auditor) AuditInterceptor {
 }
 
 func (i *auditInterceptorImpl) Intercept(methodName string, args []any, result any, err error) {
-	startTime := time.Now()
-
 	event := Event{
-		Actor:     i.actorFunc(),
-		Action:    EventAccess,
-		Resource:  methodName,
-		Severity:  SeverityInfo,
-		Source:    i.sourceFunc(),
-		Timestamp: startTime,
+		Actor:    i.actorFunc(),
+		Action:   EventAccess,
+		Resource: methodName,
+		Severity: SeverityInfo,
+		Source:   i.sourceFunc(),
 		Details: map[string]any{
 			"args": args,
 		},
+		Duration: 0,
 	}
-
-	event.Duration = time.Since(startTime)
 
 	if err != nil {
 		event.Severity = SeverityError

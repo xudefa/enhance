@@ -3,6 +3,7 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -42,29 +43,32 @@ func (c *KafkaAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Kafka 配置失败: %w", err)
+		return fmt.Errorf("failed to load Kafka config: %w", err)
 	}
 
 	if len(cfg.Brokers) == 0 {
-		return fmt.Errorf("Kafka brokers 不能为空")
+		return errors.New("kafka brokers must not be empty")
 	}
 
-	connCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	connCtx, cancel := context.WithTimeout(ctx.Context(), 5*time.Second)
 	defer cancel()
 
 	conn, err := kafka.DialLeader(connCtx, "tcp", cfg.Brokers[0], cfg.Topic, 0)
 	if err != nil {
-		return fmt.Errorf("Kafka 连接失败: %w", err)
+		return fmt.Errorf("failed to connect to Kafka: %w", err)
 	}
-	conn.Close()
+	err = conn.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close Kafka connection: %w", err)
+	}
 
 	c.queue = NewKafkaQueue(cfg.Brokers, cfg.Topic, cfg.GroupID)
 
 	if err := ctx.Container().RegisterInstance(c.queue, reflect.TypeFor[*KafkaQueue]()); err != nil {
-		return fmt.Errorf("注册 Kafka Queue 失败: %w", err)
+		return fmt.Errorf("failed to register Kafka Queue: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Kafka 连接成功",
+	c.logger.Info(ctx.Context(), "Kafka connected successfully",
 		log.KeyValue{Key: "brokers", Value: cfg.Brokers},
 		log.KeyValue{Key: "topic", Value: cfg.Topic},
 	)
@@ -134,13 +138,13 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, handler func([]byte) error) 
 			cancel()
 
 			if err != nil {
-				if err == context.DeadlineExceeded || err == context.Canceled {
+				if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 					continue
 				}
-				return fmt.Errorf("读取消息失败: %w", err)
+				return fmt.Errorf("failed to read message: %w", err)
 			}
 			if err := handler(m.Value); err != nil {
-				return fmt.Errorf("处理消息失败: %w", err)
+				return fmt.Errorf("failed to process message: %w", err)
 			}
 		}
 	}
@@ -156,7 +160,7 @@ func (q *KafkaQueue) Close() error {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("关闭 Kafka 连接失败: %v", errs)
+		return fmt.Errorf("failed to close Kafka connection: %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -182,7 +186,7 @@ func (c *KafkaAutoConfiguration) loadConfig(env *environment.Environment) (*Kafk
 	}
 
 	if err := env.BindPrefix("kafka", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Kafka 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Kafka config: %w", err)
 	}
 
 	return cfg, nil

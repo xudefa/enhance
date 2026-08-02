@@ -33,6 +33,7 @@ func NewResponseTimeWeighted(decay ...float64) *ResponseTimeWeighted {
 
 // Next 选择响应时间最短的后端
 func (rtw *ResponseTimeWeighted) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}
@@ -48,7 +49,10 @@ func (rtw *ResponseTimeWeighted) Next(backends []*ServiceInstance) (*ServiceInst
 	for _, b := range backends {
 		avgTime := 1.0
 		if value, ok := rtw.avgResponseTimes.Load(b.URL); ok {
-			avgTime = value.(*backendResponseTime).avgTime
+			v, _ := value.(*backendResponseTime)
+			if v != nil {
+				avgTime = v.avgTime
+			}
 			if avgTime <= 0 {
 				avgTime = 1
 			}
@@ -78,41 +82,54 @@ func (rtw *ResponseTimeWeighted) Next(backends []*ServiceInstance) (*ServiceInst
 
 // RecordResponseTime 记录后端响应时间
 func (rtw *ResponseTimeWeighted) RecordResponseTime(backendURL string, responseTimeMs float64) {
+	const maxRetries = 100
+
 	// 尝试更新已存在的记录
-	for {
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		if value, ok := rtw.avgResponseTimes.Load(backendURL); ok {
-			old := value.(*backendResponseTime)
-			newAvg := rtw.decay*old.avgTime + (1-rtw.decay)*responseTimeMs
-			newRecord := &backendResponseTime{
-				avgTime:     newAvg,
-				lastUpdated: time.Now(),
+			old, _ := value.(*backendResponseTime)
+			if old != nil {
+				newAvg := rtw.decay*old.avgTime + (1-rtw.decay)*responseTimeMs
+				newRecord := &backendResponseTime{
+					avgTime:     newAvg,
+					lastUpdated: time.Now(),
+				}
+				if rtw.avgResponseTimes.CompareAndSwap(backendURL, old, newRecord) {
+					return
+				}
+				// CAS 失败，重试
+				continue
 			}
-			if rtw.avgResponseTimes.CompareAndSwap(backendURL, old, newRecord) {
-				return
-			}
-			// CAS 失败，重试
-			continue
 		}
 
-		// 键不存在，尝试创建
+		// 键不存在或值为 nil，尝试创建
 		newRecord := &backendResponseTime{
 			avgTime:     responseTimeMs,
 			lastUpdated: time.Now(),
 		}
 		// 使用 LoadOrStore 避免竞态
-		_, swapped := rtw.avgResponseTimes.LoadOrStore(backendURL, newRecord)
-		if swapped {
-			return // 成功插入
+		existing, loaded := rtw.avgResponseTimes.LoadOrStore(backendURL, newRecord)
+		if !loaded {
+			return
 		}
-		// 另一个 goroutine 已经插入，现在尝试更新它
-		// 继续循环进入上面的更新分支
+		// 另一个 goroutine 已存储，CAS 更新
+		_ = existing
 	}
+
+	// 重试次数耗尽，直接保存当前记录以保证收敛
+	rtw.avgResponseTimes.Store(backendURL, &backendResponseTime{
+		avgTime:     responseTimeMs,
+		lastUpdated: time.Now(),
+	})
 }
 
 // GetAvgResponseTime 获取后端平均响应时间
 func (rtw *ResponseTimeWeighted) GetAvgResponseTime(backendURL string) (float64, bool) {
 	if value, ok := rtw.avgResponseTimes.Load(backendURL); ok {
-		return value.(*backendResponseTime).avgTime, true
+		v, _ := value.(*backendResponseTime)
+		if v != nil {
+			return v.avgTime, true
+		}
 	}
 	return 0, false
 }

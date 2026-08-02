@@ -2,7 +2,9 @@
 package aop
 
 import (
+	"context"
 	"reflect"
+	"slices"
 )
 
 // Target 获取目标对象
@@ -38,9 +40,27 @@ func (m *MethodInvocation) ProceedWithArgs(args []any) (any, error) {
 	return m.callMethod(args...), nil
 }
 
+func (m *MethodInvocation) GetResult() any     { return m.result }
+func (m *MethodInvocation) GetError() error    { return m.lastErr }
+func (m *MethodInvocation) SetResult(v any)    { m.result = v }
+func (m *MethodInvocation) SetError(err error) { m.lastErr = err }
+
+// Context 获取上下文
+func (m *MethodInvocation) Context() context.Context {
+	if m.Ctx != nil {
+		return m.Ctx
+	}
+	return context.Background()
+}
+
 // Arguments 实现 Invocation.Arguments
 func (m *MethodInvocation) Arguments() []any {
 	return m.Params
+}
+
+// SetArgs 设置参数，供通知链 ProceedWithArgs 使用。
+func (m *MethodInvocation) SetArgs(args []any) {
+	m.Params = args
 }
 
 // JoinPoint 实现 Invocation.JoinPoint
@@ -110,11 +130,13 @@ func ExecuteChain(jp *MethodInvocation, aspects []*AspectMeta) any {
 		return nil
 	}
 
-	SortAspectsByOrder(aspects)
+	// 复制切面列表后再排序，避免修改调用方共享切片导致的数据竞争与顺序污染
+	sorted := slices.Clone(aspects)
+	SortAspectsByOrder(sorted)
 
 	targetFunc := func(args ...any) any {
 		return jp.callMethod(args...)
 	}
 
-	return getDefaultExecutor().Execute(jp, aspects, targetFunc)
+	return getDefaultExecutor().Execute(jp, sorted, targetFunc)
 }

@@ -80,6 +80,9 @@ func (b *breakerImpl) Allow() error {
 			if State(b.state.Load()) == StateOpen && time.Since(lastChange) > b.waitDuration {
 				b.state.Store(int32(StateHalfOpen))
 				b.halfOpenRequests.Store(0)
+				b.successes.Store(0)
+				b.errors.Store(0)
+				b.requests.Store(0)
 				b.lastStateChange.Store(time.Now().UnixNano())
 			}
 			b.mu.Unlock()
@@ -98,28 +101,30 @@ func (b *breakerImpl) Allow() error {
 }
 
 func (b *breakerImpl) RecordSuccess() {
-	b.successes.Add(1)
-	b.requests.Add(1)
-
 	state := State(b.state.Load())
 	switch state {
 	case StateHalfOpen:
-		successes := b.successes.Load()
-		if successes >= int64(b.maxRequests) {
-			b.mu.Lock()
-			// 双重检查
-			if State(b.state.Load()) == StateHalfOpen {
+		b.successes.Add(1)
+		b.requests.Add(1)
+		b.mu.Lock()
+		if State(b.state.Load()) == StateHalfOpen {
+			// 释放半开试探请求的许可证，避免并发试探数累积
+			b.halfOpenRequests.Add(-1)
+			if b.successes.Load() >= int64(b.maxRequests) {
 				b.transitionToClosed()
 			}
-			b.mu.Unlock()
 		}
+		b.mu.Unlock()
 	case StateClosed:
+		b.successes.Add(1)
+		b.requests.Add(1)
 		// 成功请求不需要检查阈值，但需要定期重置计数器防止误判
 		// 使用更大的窗口避免高流量场景下频繁重置
-		if b.requests.Load() >= 1000 {
+		const resetWindow = 1000
+		if b.requests.Load() >= resetWindow {
 			b.mu.Lock()
 			// 双重检查：确保仍然是 Closed 状态且计数器达到阈值
-			if State(b.state.Load()) == StateClosed && b.requests.Load() >= 1000 {
+			if State(b.state.Load()) == StateClosed && b.requests.Load() >= resetWindow {
 				b.resetCounters()
 			}
 			b.mu.Unlock()
@@ -128,12 +133,14 @@ func (b *breakerImpl) RecordSuccess() {
 }
 
 func (b *breakerImpl) RecordFailure() {
-	b.errors.Add(1)
-	b.requests.Add(1)
-
 	state := State(b.state.Load())
+	// 仅在 CLOSED / HALF_OPEN 状态统计失败，避免 OPEN 状态的计数
+	// 在恢复后污染统计，导致错误率失真。
 	switch state {
 	case StateClosed:
+		b.errors.Add(1)
+		b.requests.Add(1)
+
 		total := b.requests.Load()
 		if total >= 10 {
 			errorRate := float64(b.errors.Load()) / float64(total)
@@ -147,9 +154,12 @@ func (b *breakerImpl) RecordFailure() {
 			}
 		}
 	case StateHalfOpen:
+		b.errors.Add(1)
+		b.requests.Add(1)
 		// 半开状态下任何失败都立即熔断
 		b.mu.Lock()
 		if State(b.state.Load()) == StateHalfOpen {
+			b.halfOpenRequests.Add(-1)
 			b.transitionToOpen()
 		}
 		b.mu.Unlock()
@@ -160,16 +170,22 @@ func (b *breakerImpl) RecordFailure() {
 func (b *breakerImpl) transitionToClosed() {
 	b.state.Store(int32(StateClosed))
 	b.resetCounters()
+	b.halfOpenRequests.Store(0)
 	b.lastStateChange.Store(time.Now().UnixNano())
 }
 
 // transitionToOpen 转换到打开状态（调用方必须持有锁）
 func (b *breakerImpl) transitionToOpen() {
 	b.state.Store(int32(StateOpen))
+	b.halfOpenRequests.Store(0)
 	b.lastStateChange.Store(time.Now().UnixNano())
 }
 
-// resetCounters 重置计数器（调用方必须持有锁）
+// resetCounters 重置计数器（调用方必须持有锁）。
+//
+// 注意：由于 errors/requests 使用 atomic 操作在锁外递增，
+// 重置可能丢失锁获取与重置之间由其他 goroutine 递增的少量计数。
+// 这是可接受的，因为重置仅用于防止计数器溢出，不影响熔断器正确性。
 func (b *breakerImpl) resetCounters() {
 	b.errors.Store(0)
 	b.successes.Store(0)

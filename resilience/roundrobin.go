@@ -4,6 +4,17 @@ import (
 	"sync"
 )
 
+// nonNilBackends 过滤掉 nil 的后端，避免空指针解引用。
+func nonNilBackends(backends []*ServiceInstance) []*ServiceInstance {
+	nonNil := make([]*ServiceInstance, 0, len(backends))
+	for _, b := range backends {
+		if b != nil {
+			nonNil = append(nonNil, b)
+		}
+	}
+	return nonNil
+}
+
 // RoundRobin 轮询负载均衡器
 type RoundRobin struct {
 	mu      sync.Mutex
@@ -17,6 +28,7 @@ func NewRoundRobin() *RoundRobin {
 
 // Next 选择下一个后端
 func (rr *RoundRobin) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}
@@ -42,6 +54,7 @@ func NewWeightedRoundRobin() *WeightedRoundRobin {
 
 // Next 根据权重选择后端
 func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}
@@ -51,10 +64,14 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 
 	totalWeight := 0
 	for _, b := range backends {
-		totalWeight += b.Weight
+		w := b.Weight
+		if w <= 0 {
+			w = 1
+		}
+		totalWeight += w
 	}
 
-	if totalWeight == 0 {
+	if totalWeight <= 0 {
 		return backends[0], nil
 	}
 
@@ -63,7 +80,11 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 
 	accumulated := int64(0)
 	for _, b := range backends {
-		accumulated += int64(b.Weight)
+		w := int64(b.Weight)
+		if w <= 0 {
+			w = 1
+		}
+		accumulated += w
 		if current < accumulated {
 			return b, nil
 		}

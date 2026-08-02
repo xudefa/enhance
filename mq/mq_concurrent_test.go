@@ -122,9 +122,11 @@ func TestInMemoryQueue_ConcurrentAckNack(t *testing.T) {
 
 	wg.Wait()
 
-	// 应该只被确认一次
-	if !receivedMsg.IsAcknowledged() {
-		t.Error("message should be acknowledged")
+	// 并发 Ack 和 Nack 中只有一个应该成功（原子 CAS 保证）
+	// 消息状态应该是已确认(1)或已拒绝(2)
+	status := receivedMsg.acknowledged.Load()
+	if status != 1 && status != 2 {
+		t.Errorf("message should be acknowledged (1) or nacked (2), got %d", status)
 	}
 }
 

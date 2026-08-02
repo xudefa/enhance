@@ -28,7 +28,7 @@
 //	    Host string `config:"server.host" description:"服务地址"`
 //	}
 //
-//	metadata, _ := metadata.GenerateFromStruct(&ServerConfig{})
+//	metadata := metadata.GenerateFromStruct(&ServerConfig{})
 //	jsonStr, _ := metadata.ToJSON()
 //
 // 使用注解解析器：

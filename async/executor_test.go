@@ -3,13 +3,14 @@ package async
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestAsyncExecutor_SubmitAndGet(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	future := executor.Submit(func() (any, error) {
@@ -29,7 +30,7 @@ func TestAsyncExecutor_SubmitAndGet(t *testing.T) {
 
 func TestAsyncExecutor_SubmitWithError(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	expectedErr := errors.New("task failed")
@@ -38,14 +39,14 @@ func TestAsyncExecutor_SubmitWithError(t *testing.T) {
 	})
 
 	_, err := future.Get()
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("expected error %v, got %v", expectedErr, err)
 	}
 }
 
 func TestAsyncExecutor_SubmitVoid(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	called := false
@@ -66,7 +67,7 @@ func TestAsyncExecutor_SubmitVoid(t *testing.T) {
 
 func TestFuture_GetWithTimeout(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	future := executor.Submit(func() (any, error) {
@@ -79,14 +80,14 @@ func TestFuture_GetWithTimeout(t *testing.T) {
 		t.Fatal("expected timeout error")
 	}
 
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected DeadlineExceeded, got %v", err)
 	}
 }
 
 func TestFuture_GetWithContext(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	future := executor.Submit(func() (any, error) {
@@ -105,7 +106,7 @@ func TestFuture_GetWithContext(t *testing.T) {
 
 func TestFuture_IsDone(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	defer executor.Shutdown()
 
 	future := executor.Submit(func() (any, error) {
@@ -126,7 +127,7 @@ func TestFuture_IsDone(t *testing.T) {
 
 func TestAsyncExecutor_Start(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 
 	// 默认就是 running=true（懒启动模式，允许提交）
 	if !executor.IsRunning() {
@@ -144,7 +145,7 @@ func TestAsyncExecutor_Start(t *testing.T) {
 
 func TestAsyncExecutor_Shutdown(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	executor.Start()
 
 	for range 5 {
@@ -163,7 +164,7 @@ func TestAsyncExecutor_Shutdown(t *testing.T) {
 
 func TestAsyncExecutor_ShutdownWithTimeout(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 	executor.Start()
 
 	for range 3 {
@@ -181,7 +182,7 @@ func TestAsyncExecutor_ShutdownWithTimeout(t *testing.T) {
 
 func TestAsyncExecutor_GetQueueSize(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(1, 10)
+	executor := NewAsyncExecutor(context.Background(), 1, 10)
 	defer executor.Shutdown()
 
 	for range 5 {
@@ -199,7 +200,7 @@ func TestAsyncExecutor_GetQueueSize(t *testing.T) {
 
 func TestAsyncExecutor_ShutdownIdempotent(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(2, 10)
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
 
 	executor.Shutdown()
 	executor.Shutdown()
@@ -208,7 +209,7 @@ func TestAsyncExecutor_ShutdownIdempotent(t *testing.T) {
 
 func TestAsyncExecutor_ConcurrentSubmit(t *testing.T) {
 	t.Parallel()
-	executor := NewAsyncExecutor(4, 100)
+	executor := NewAsyncExecutor(context.Background(), 4, 100)
 	defer executor.Shutdown()
 
 	done := make(chan bool, 10)
@@ -234,7 +235,7 @@ func TestAsyncExecutor_ConcurrentSubmit(t *testing.T) {
 func TestAsyncExecutor_SubmitAfterShutdown(t *testing.T) {
 	t.Parallel()
 	t.Run("Shutdown 后 Submit 应返回错误而非 panic", func(t *testing.T) {
-		executor := NewAsyncExecutor(2, 10)
+		executor := NewAsyncExecutor(context.Background(), 2, 10)
 		executor.Start()
 
 		// 先提交一个正常任务
@@ -265,7 +266,7 @@ func TestAsyncExecutor_SubmitAfterShutdown(t *testing.T) {
 	})
 
 	t.Run("ShutdownWithTimeout 后 Submit 应返回错误", func(t *testing.T) {
-		executor := NewAsyncExecutor(2, 10)
+		executor := NewAsyncExecutor(context.Background(), 2, 10)
 		executor.Start()
 
 		// 提交一个慢任务
@@ -289,7 +290,7 @@ func TestAsyncExecutor_SubmitAfterShutdown(t *testing.T) {
 	})
 
 	t.Run("Shutdown 后 SubmitVoid 应返回错误", func(t *testing.T) {
-		executor := NewAsyncExecutor(2, 10)
+		executor := NewAsyncExecutor(context.Background(), 2, 10)
 		executor.Start()
 		executor.Shutdown()
 
@@ -303,4 +304,39 @@ func TestAsyncExecutor_SubmitAfterShutdown(t *testing.T) {
 			t.Error("expected error after shutdown")
 		}
 	})
+}
+
+func TestAsyncExecutor_PanicRecovery(t *testing.T) {
+	t.Parallel()
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
+	executor.Start()
+	defer executor.Shutdown()
+
+	// 提交一个会 panic 的任务
+	future := executor.Submit(func() (any, error) {
+		panic("test panic")
+	})
+
+	result, err := future.Get()
+	if err == nil {
+		t.Fatal("expected error from panicking task")
+	}
+	if result != nil {
+		t.Errorf("expected nil result, got %v", result)
+	}
+	if !strings.Contains(err.Error(), "panic") {
+		t.Errorf("expected panic error, got: %v", err)
+	}
+
+	// 验证执行器在 panic 后仍能正常工作
+	future2 := executor.Submit(func() (any, error) {
+		return "recovered", nil
+	})
+	result2, err2 := future2.Get()
+	if err2 != nil {
+		t.Fatalf("expected no error, got: %v", err2)
+	}
+	if result2 != "recovered" {
+		t.Errorf("expected 'recovered', got %v", result2)
+	}
 }

@@ -1,0 +1,10 @@
+{
+  "elasticsearch": {
+    "enabled": true,
+    "addresses": ["http://localhost:9200"],
+    "username": "",
+    "password": "",
+    "max_idle_conns": 10,
+    "timeout": 10
+  }
+}

@@ -13,6 +13,9 @@ import (
 // RegisterController 注册控制器
 func (b *DocumentBuilder) RegisterController(controller any) *DocumentBuilder {
 	t := reflect.TypeOf(controller)
+	if t == nil {
+		return b
+	}
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -176,22 +179,6 @@ func (b *DocumentBuilder) extractOperation(method reflect.Method, tagName string
 		Responses:   make(map[string]ResponseObject),
 	}
 
-	// 检查方法标签
-	if tag, ok := reflect.StructTag("").Lookup("operation"); ok {
-		parts := strings.Split(tag, ",")
-		for _, part := range parts {
-			if strings.HasPrefix(part, "summary=") {
-				operation.Summary = strings.TrimPrefix(part, "summary=")
-			} else if strings.HasPrefix(part, "description=") {
-				operation.Description = strings.TrimPrefix(part, "description=")
-			} else if strings.HasPrefix(part, "operationId=") {
-				operation.OperationID = strings.TrimPrefix(part, "operationId=")
-			} else if part == "deprecated" {
-				operation.Deprecated = true
-			}
-		}
-	}
-
 	// 添加默认响应
 	operation.Responses["200"] = ResponseObject{
 		Description: "Successful operation",
@@ -202,11 +189,6 @@ func (b *DocumentBuilder) extractOperation(method reflect.Method, tagName string
 
 // extractPath 提取路径
 func (b *DocumentBuilder) extractPath(method reflect.Method, basePath string) string {
-	// 检查方法标签
-	if tag, ok := reflect.StructTag("").Lookup("path"); ok {
-		return basePath + tag
-	}
-
 	// 从方法名推断
 	name := method.Name
 	name = strings.TrimPrefix(name, "Get")
@@ -247,6 +229,10 @@ func (b *DocumentBuilder) generateSchema(t reflect.Type) SchemaObject {
 		t = t.Elem()
 	}
 
+	if t.Kind() != reflect.Struct {
+		return SchemaObject{Type: "object"}
+	}
+
 	schema := SchemaObject{
 		Type:       "object",
 		Properties: make(map[string]SchemaObject),
@@ -264,14 +250,14 @@ func (b *DocumentBuilder) generateSchema(t reflect.Type) SchemaObject {
 		if jsonTag := field.Tag.Get("json"); jsonTag != "" {
 			parts := strings.Split(jsonTag, ",")
 			name := parts[0]
-			if name != "-" {
-				schema.Properties[name] = fieldSchema
-				if contains(parts, "omitempty") {
-					continue
-				}
-				schema.Required = append(schema.Required, name)
+			if name == "-" {
 				continue
 			}
+			schema.Properties[name] = fieldSchema
+			if !contains(parts, "omitempty") {
+				schema.Required = append(schema.Required, name)
+			}
+			continue
 		}
 		schema.Properties[field.Name] = fieldSchema
 		schema.Required = append(schema.Required, field.Name)

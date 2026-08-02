@@ -38,6 +38,7 @@ type FailureAnalyzerRegistry struct {
 //
 // 通过传入的分析函数创建分析器，适用于简单的错误分析场景。
 type SimpleFailureAnalyzer struct {
+	checkFn   func(err error) bool
 	analyzeFn func(err error) *FailureReport
 }
 
@@ -49,8 +50,20 @@ func NewSimpleFailureAnalyzer(analyzeFn func(err error) *FailureReport) *SimpleF
 	return &SimpleFailureAnalyzer{analyzeFn: analyzeFn}
 }
 
+// NewSimpleFailureAnalyzerWithCheck 创建带独立检查函数的简单失败分析器
+//
+// 参数：
+//   - checkFn: 轻量级检查函数，判断是否能分析该错误
+//   - analyzeFn: 分析函数，接收错误返回失败报告
+func NewSimpleFailureAnalyzerWithCheck(checkFn func(err error) bool, analyzeFn func(err error) *FailureReport) *SimpleFailureAnalyzer {
+	return &SimpleFailureAnalyzer{checkFn: checkFn, analyzeFn: analyzeFn}
+}
+
 // CanAnalyze 检查分析函数是否能处理该错误
 func (s *SimpleFailureAnalyzer) CanAnalyze(err error) bool {
+	if s.checkFn != nil {
+		return s.checkFn(err)
+	}
 	return s.analyzeFn(err) != nil
 }
 

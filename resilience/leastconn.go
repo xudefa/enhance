@@ -12,6 +12,7 @@ func NewLeastConnections() *LeastConnections {
 
 // Next 选择连接数最少的后端
 func (lc *LeastConnections) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}

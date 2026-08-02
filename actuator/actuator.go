@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/xudefa/enhance/actuator/health"
@@ -56,10 +57,21 @@ func (a *Actuator) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h := a.healthAggregator.Aggregate(r.Context())
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(h); err != nil {
+
+	data, err := json.Marshal(h)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+
+	statusCode := http.StatusOK
+	if h.Status != health.StatusUp {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_, _ = w.Write(data)
 }
 
 // MetricsHandler 指标 HTTP 处理器
@@ -72,6 +84,7 @@ func (a *Actuator) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(m); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -82,6 +95,10 @@ func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	env := a.appContext.Environment()
+	if env == nil {
+		http.Error(w, "no environment", http.StatusInternalServerError)
+		return
+	}
 	sources := env.GetPropertySources()
 
 	type propertyItem struct {
@@ -125,6 +142,7 @@ func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -153,6 +171,7 @@ func (a *Actuator) BeansHandler(w http.ResponseWriter, r *http.Request) {
 		"beans": beans,
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -217,6 +236,10 @@ func (a *Actuator) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	env := a.appContext.Environment()
+	if env == nil {
+		http.Error(w, "no environment", http.StatusInternalServerError)
+		return
+	}
 
 	info := map[string]any{
 		"app": map[string]any{
@@ -231,6 +254,7 @@ func (a *Actuator) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -241,26 +265,56 @@ func (a *Actuator) PrometheusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics := a.metricsRegistry.Collect()
+	collected := a.metricsRegistry.Collect()
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 
-	for _, metric := range metrics {
-		if len(metric.Tags) > 0 {
-			tags := make([]string, 0, len(metric.Tags))
-			for k, v := range metric.Tags {
-				tags = append(tags, fmt.Sprintf(`%s="%s"`, k, v))
-			}
-			tagStr := strings.Join(tags, ",")
-			if _, err := fmt.Fprintf(w, "%s{%s} %v\n", metric.Name, tagStr, metric.Value); err != nil {
-				return
-			}
-			continue
+	if err := writePrometheus(w, collected); err != nil {
+		return
+	}
+}
+
+// writePrometheus 以 Prometheus 文本格式输出指标。
+//
+// 每个指标族只输出一次 TYPE 行，标签按键排序并对值做 Prometheus 转义。
+func writePrometheus(w io.Writer, collected []metrics.Metric) error {
+	type family struct {
+		typ    string
+		sample string
+	}
+
+	families := make(map[string]*family)
+	names := make([]string, 0, len(collected))
+	for _, m := range collected {
+		f, ok := families[m.Name]
+		if !ok {
+			f = &family{typ: m.Type}
+			families[m.Name] = f
+			names = append(names, m.Name)
 		}
-		if _, err := fmt.Fprintf(w, "%s %v\n", metric.Name, metric.Value); err != nil {
-			return
+		f.sample += formatPrometheusSample(m)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		f := families[name]
+		if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", name, f.typ); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, f.sample); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// formatPrometheusSample 格式化单条指标样本行，标签值经过 Prometheus 转义。
+func formatPrometheusSample(m metrics.Metric) string {
+	labels := metrics.FormatLabels(m.Tags)
+	if labels == "" {
+		return fmt.Sprintf("%s %g\n", m.Name, m.Value)
+	}
+	return fmt.Sprintf("%s%s %g\n", m.Name, labels, m.Value)
 }
 
 // NewDatabaseHealthIndicator 创建数据库健康指示器

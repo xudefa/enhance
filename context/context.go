@@ -112,15 +112,15 @@ func (c *DefaultApplicationContext) Invoke(fn any) error {
 		return errors.New("Invoke: fn must be a function")
 	}
 
-	numIn := rv.Type().NumIn()
+	fnType := rv.Type()
+	numIn := fnType.NumIn()
 	if numIn == 0 {
-		rv.Call(nil)
-		return nil
+		return extractInvokeError(rv.Call(nil), fnType)
 	}
 
 	args := make([]reflect.Value, numIn)
 	for i := 0; i < numIn; i++ {
-		paramType := rv.Type().In(i)
+		paramType := fnType.In(i)
 		instances, err := c.container.Get(paramType)
 		if err != nil || len(instances) == 0 {
 			return fmt.Errorf("Invoke: cannot resolve parameter %d of type %s", i+1, paramType)
@@ -128,8 +128,42 @@ func (c *DefaultApplicationContext) Invoke(fn any) error {
 		args[i] = reflect.ValueOf(instances[0])
 	}
 
-	rv.Call(args)
-	return nil
+	return extractInvokeError(rv.Call(args), fnType)
+}
+
+// extractInvokeError 从函数调用结果中提取错误，正确处理 typed-nil error。
+func extractInvokeError(results []reflect.Value, fnType reflect.Type) error {
+	if fnType.NumOut() == 0 {
+		return nil
+	}
+	lastOut := fnType.Out(fnType.NumOut() - 1)
+	if !lastOut.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		return nil
+	}
+	errVal := results[len(results)-1]
+	if isNilValue(errVal) {
+		return nil
+	}
+	err, ok := errVal.Interface().(error)
+	if !ok {
+		return nil
+	}
+	return err
+}
+
+// isNilValue 判断 reflect.Value 是否为 nil，支持 interface 包裹的 typed-nil。
+func isNilValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return true
+		}
+		return isNilValue(v.Elem())
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 // Start 启动应用：PhaseInit → PhaseRunning

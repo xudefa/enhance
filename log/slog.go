@@ -54,7 +54,7 @@ func WithOutputPath(path string) Option {
 		}
 		l.output = f
 		if l.file != nil && l.file != os.Stdout {
-			l.file.Close()
+			_ = l.file.Close()
 		}
 		l.file = f
 	}
@@ -214,12 +214,14 @@ func (l *SlogLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 		attrs = append(attrs, kv.Key, kv.Value)
 	}
 	return &SlogLogger{
-		logger:     l.logger.With(attrs...),
-		level:      l.level,
-		format:     l.format,
-		timeFormat: l.timeFormat,
-		addSource:  l.addSource,
-		output:     l.output,
+		logger:      l.logger.With(attrs...),
+		level:       l.level,
+		format:      l.format,
+		timeFormat:  l.timeFormat,
+		addSource:   l.addSource,
+		output:      l.output,
+		file:        l.file,
+		development: l.development,
 	}
 }
 

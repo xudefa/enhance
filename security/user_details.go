@@ -46,7 +46,9 @@ func (u *InMemoryUserDetails) Password() string {
 
 // Authorities 返回授权列表
 func (u *InMemoryUserDetails) Authorities() []string {
-	return u.authorities
+	result := make([]string, len(u.authorities))
+	copy(result, u.authorities)
+	return result
 }
 
 // Enabled 返回是否启用

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xudefa/enhance/actuator"
@@ -37,15 +39,23 @@ type GinAutoConfiguration struct {
 	server     *http.Server
 	config     *GinConfig
 	tracer     *tracing.Tracer
-	configured bool // 标记是否已配置，防止重复配置
+	mu         sync.Mutex      // 保护 Configure 的并发访问
+	configured bool            // 标记是否已配置，防止同一应用上下文重复配置
+	ctx        context.Context // 应用上下文
 }
 
 // Configure 配置 Gin Web 服务器。
 func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
-	// 防止重复配置
-	if c.configured {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.ctx == ctx.Context() {
 		return nil
 	}
+	// 新应用上下文（应用重启）时重新配置，更新 ctx/server 等状态
+	c.configured = false
+
 	container := ctx.Container()
 	env := ctx.Environment()
 
@@ -57,7 +67,7 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Gin 配置失败: %w", err)
+		return fmt.Errorf("failed to load Gin config: %w", err)
 	}
 
 	c.config = cfg
@@ -73,7 +83,7 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 尝试从容器获取已存在的 Engine 实例，如果不存在则创建默认的
 	if engine, err := core.GetByName[*gin.Engine](container, ""); err == nil {
 		c.engine = engine
-		c.logger.Info(context.Background(), "使用容器中已存在的 Gin Engine 实例")
+		c.logger.Info(ctx.Context(), "using existing Gin Engine instance from container")
 	} else {
 		c.engine = gin.New()
 		if cfg.EnableRecover {
@@ -88,7 +98,7 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.engine.Use(TracingMiddleware(tracer))
-		c.logger.Info(context.Background(), "Gin Tracing 中间件已启用")
+		c.logger.Info(ctx.Context(), "Gin tracing middleware enabled")
 	}
 
 	c.server = &http.Server{
@@ -103,51 +113,55 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*GinConfig]()); err != nil {
-		return fmt.Errorf("注册 Gin Config 失败: %w", err)
+		return fmt.Errorf("failed to register Gin Config: %w", err)
 	}
 
 	// 如果 Engine 已存在，跳过注册
 	if !engineAlreadyRegistered {
 		if err := container.RegisterInstance(c.engine, reflect.TypeFor[*gin.Engine]()); err != nil {
-			return fmt.Errorf("注册 Gin Engine 失败: %w", err)
+			return fmt.Errorf("failed to register Gin Engine: %w", err)
 		}
 	}
 
 	if err := container.RegisterInstance(c.server, reflect.TypeFor[*http.Server]()); err != nil {
-		return fmt.Errorf("注册 HTTP Server 失败: %w", err)
+		return fmt.Errorf("failed to register HTTP Server: %w", err)
 	}
 
 	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点到 Gin
 	endpointRegistry := NewGinEndpointRegistry(c.engine)
 	if err := container.RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-		c.logger.Warn(context.Background(), "注册 HttpEndpointRegistry 失败,Actuator 端点将无法自动挂载",
+		c.logger.Warn(ctx.Context(), "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
 
-	c.logger.Info(context.Background(), "Gin Web 服务器已配置",
+	c.logger.Info(ctx.Context(), "Gin Web server configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "mode", Value: cfg.Mode},
 	)
 
 	c.configured = true
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
 	return nil
 }
 
 // Start 启动 Gin Web 服务器。
 func (c *GinAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.server == nil {
-		return fmt.Errorf("Gin HTTP Server 未初始化")
+		return fmt.Errorf("Gin HTTP Server not initialized")
 	}
-	c.logger.Info(context.Background(), "Gin Web 服务器启动中",
+	c.logger.Info(ctx.Context(), "Gin Web server starting",
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
 
 	// 在后台启动服务器，避免阻塞
 	go func() {
 		if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(context.Background(), "Gin Web 服务器错误",
+			c.logger.Error(c.ctx, "Gin Web server error",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -161,7 +175,9 @@ func (c *GinAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.server == nil {
 		return nil
 	}
-	return c.server.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
+	defer cancel()
+	return c.server.Shutdown(shutdownCtx)
 }
 
 // Name 返回启动器名称。
@@ -191,26 +207,39 @@ func GetServer(container core.Container) (*http.Server, error) {
 
 // GinConfig Gin Web 服务器配置。
 type GinConfig struct {
-	Enabled       bool   `json:"enabled" value:"${gin.enabled:false}"`
-	Host          string `json:"host" value:"${gin.host:0.0.0.0}"`
-	Port          int    `json:"port" value:"${gin.port:8080}"`
-	Mode          string `json:"mode" value:"${gin.mode:debug}"`
-	EnableRecover bool   `json:"enable_recover" value:"${gin.enable_recover:true}"`
-	EnableLogger  bool   `json:"enable_logger" value:"${gin.enable_logger:true}"`
+	Enabled       bool   `json:"enabled" mapstructure:"enabled"`
+	Host          string `json:"host" mapstructure:"host"`
+	Port          int    `json:"port" mapstructure:"port"`
+	Mode          string `json:"mode" mapstructure:"mode"`
+	EnableRecover bool   `json:"enable_recover" mapstructure:"enable_recover"`
+	EnableLogger  bool   `json:"enable_logger" mapstructure:"enable_logger"`
 }
 
 // 配置常量。
 const (
 	GinEnabled    = "gin.enabled"
 	ConditionTrue = "true"
+
+	// 默认值
+	DefaultGinHost          = "0.0.0.0"
+	DefaultGinPort          = 8080
+	DefaultGinMode          = "debug"
+	DefaultGinEnableRecover = true
+	DefaultGinEnableLogger  = true
 )
 
 // loadConfig 从 Environment 加载 Gin 配置。
 func (c *GinAutoConfiguration) loadConfig(env *environment.Environment) (*GinConfig, error) {
-	cfg := &GinConfig{}
+	cfg := &GinConfig{
+		Host:          DefaultGinHost,
+		Port:          DefaultGinPort,
+		Mode:          DefaultGinMode,
+		EnableRecover: DefaultGinEnableRecover,
+		EnableLogger:  DefaultGinEnableLogger,
+	}
 
-	if err := env.BindProperties(cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Gin 配置失败: %w", err)
+	if err := env.BindPrefix("gin", cfg); err != nil {
+		return nil, fmt.Errorf("failed to bind Gin config: %w", err)
 	}
 
 	return cfg, nil

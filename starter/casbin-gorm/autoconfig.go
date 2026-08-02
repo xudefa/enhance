@@ -13,6 +13,7 @@ import (
 	gormadapter "github.com/casbin/gorm-adapter/v3"
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/condition"
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/log"
 	"gorm.io/gorm"
@@ -25,28 +26,28 @@ func init() {
 			condition.OnProperty(security.CasbinEnabled, security.ConditionTrue),
 			condition.OnProperty(security.CasbinPolicyType, DefaultCasbinGormPolicyType),
 		),
-		boot.WithOrder(int(boot.OrderPriorityAuthorizationGorm)), // 授权层-GORM，在 Casbin 基础配置之前执行
+		boot.WithOrder(int(boot.OrderPriorityAuthorizationGorm)), // Authorization layer-GORM, executes before Casbin base config
 	)
 }
 
-// CasbinGormAutoConfiguration Casbin GORM 自动配置类。
+// CasbinGormAutoConfiguration Casbin GORM auto-configuration.
 //
-// 当配置文件中启用 Casbin 且策略类型为 gorm 时自动生效。
-// 负责创建基于 GORM 的 Casbin 适配器，并将其集成到 CasbinEnforcer 中。
+// Activates when Casbin is enabled in config and policy type is gorm.
+// Creates a GORM-based Casbin adapter and integrates it into CasbinEnforcer.
 //
-// 执行顺序：Order = -1300（OrderPriorityAuthorizationGorm），确保在 Casbin 基础配置（-1200）之前执行。
+// Execution order: Order = -1300 (OrderPriorityAuthorizationGorm), executes before Casbin base config (-1200).
 //
-// 依赖关系：
-//  1. 依赖 GORM 自动配置（-2000），需要数据库连接
-//  2. 在 Casbin 基础配置（-1200）之前执行，提供 GORM 版本的 CasbinEnforcer
-//  3. Casbin 基础配置会检测容器中是否已有 CasbinEnforcer，如果有则直接使用
+// Dependencies:
+//  1. Depends on GORM auto-configuration (-2000), requires database connection
+//  2. Executes before Casbin base configuration (-1200), provides GORM-based CasbinEnforcer
+//  3. Casbin base configuration checks if CasbinEnforcer already exists in container
 type CasbinGormAutoConfiguration struct {
 	logger log.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-// CasbinGormConfig Casbin GORM 配置。
+// CasbinGormConfig Casbin GORM config.
 type CasbinGormConfig struct {
 	Enabled          bool   `json:"enabled" mapstructure:"enabled"`
 	ModelType        string `json:"model-type" mapstructure:"model-type"`
@@ -60,14 +61,14 @@ type CasbinGormConfig struct {
 	AutoLoadInterval int    `json:"auto-load-interval" mapstructure:"auto-load-interval"`
 }
 
-// Configure 配置 Casbin GORM 集成。
+// Configure configures Casbin GORM integration.
 //
-// 该方法在自动配置阶段调用，负责：
-//  1. 从容器获取 *gorm.DB 实例
-//  2. 创建 Casbin GORM 适配器
-//  3. 创建 Casbin Enforcer（使用 GORM 适配器）
-//  4. 注册到 IoC 容器
-//  5. 如果启用自动加载，启动定时刷新策略
+// Called during the auto-configuration phase, responsible for:
+//  1. Getting *gorm.DB instance from container
+//  2. Creating Casbin GORM adapter
+//  3. Creating Casbin Enforcer (using GORM adapter)
+//  4. Registering with IoC container
+//  5. Starting auto-reload timer if enabled
 func (c *CasbinGormAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	container := ctx.Container()
 
@@ -77,25 +78,25 @@ func (c *CasbinGormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 		c.logger = log.Build()
 	}
 
-	c.logger.Info(context.Background(), "开始配置 Casbin GORM 集成...")
+	c.logger.Info(ctx.Context(), "configuring Casbin GORM integration...")
 
-	cfg, err := c.loadConfig(ctx)
+	cfg, err := c.loadConfig(ctx.Environment())
 	if err != nil {
-		return fmt.Errorf("加载 Casbin GORM 配置失败: %w", err)
+		return fmt.Errorf("failed to load Casbin GORM config: %w", err)
 	}
 
 	if err := c.validateConfig(cfg); err != nil {
-		return fmt.Errorf("Casbin GORM 配置验证失败: %w", err)
+		return fmt.Errorf("Casbin GORM config validation failed: %w", err)
 	}
 
 	dbBeans, err := container.Get(reflect.TypeFor[*gorm.DB]())
 	if err != nil || len(dbBeans) == 0 {
-		return fmt.Errorf("未找到 *gorm.DB 实例，请确保已启用 GORM 模块")
+		return fmt.Errorf("no *gorm.DB instance found, please ensure GORM module is enabled")
 	}
 
-	db := dbBeans[0].(*gorm.DB)
+	db, _ := dbBeans[0].(*gorm.DB)
 
-	adapter, err := c.createAdapter(db, cfg)
+	adapter, err := c.createAdapter(ctx.Context(), db, cfg)
 	if err != nil {
 		return err
 	}
@@ -113,22 +114,22 @@ func (c *CasbinGormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 	}
 
 	if err := container.RegisterInstance(gormEnforcer, reflect.TypeFor[security.CasbinEnforcer]()); err != nil {
-		return fmt.Errorf("注册 CasbinEnforcer 失败: %w", err)
+		return fmt.Errorf("failed to register CasbinEnforcer: %w", err)
 	}
-	c.logger.Info(context.Background(), "CasbinEnforcer (GORM) 已注册")
+	c.logger.Info(ctx.Context(), "CasbinEnforcer (GORM) registered")
 
 	voter := security.NewCasbinVoter(gormEnforcer)
 	if err := container.RegisterInstance(voter, reflect.TypeFor[security.CasbinVoter]()); err != nil {
-		return fmt.Errorf("注册 CasbinVoter 失败: %w", err)
+		return fmt.Errorf("failed to register CasbinVoter: %w", err)
 	}
-	c.logger.Info(context.Background(), "CasbinVoter 已注册")
+	c.logger.Info(ctx.Context(), "CasbinVoter registered")
 
 	if cfg.AutoLoad {
-		c.ctx, c.cancel = context.WithCancel(context.Background())
+		c.ctx = ctx.Context()
 		c.startAutoReload(gormEnforcer, cfg)
 	}
 
-	c.logger.Info(context.Background(), "Casbin GORM 集成配置完成",
+	c.logger.Info(ctx.Context(), "Casbin GORM integration configured",
 		log.KeyValue{Key: "table-name", Value: cfg.TableName},
 		log.KeyValue{Key: "auto-create-table", Value: cfg.AutoCreateTable},
 	)
@@ -136,42 +137,42 @@ func (c *CasbinGormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 	return nil
 }
 
-// validateConfig 验证 Casbin GORM 配置。
+// validateConfig validates Casbin GORM config.
 func (c *CasbinGormAutoConfiguration) validateConfig(cfg *CasbinGormConfig) error {
 	switch cfg.ModelType {
 	case "file":
 		if cfg.ModelPath == "" {
-			return fmt.Errorf("model-type 为 file 时，model-path 不能为空")
+			return fmt.Errorf("model-path must not be empty when model-type is file")
 		}
 	case "string":
 		if cfg.ModelText == "" {
-			return fmt.Errorf("model-type 为 string 时，model-text 不能为空")
+			return fmt.Errorf("model-text must not be empty when model-type is string")
 		}
 	default:
-		return fmt.Errorf("不支持的 model-type: %s，支持的值: file, string", cfg.ModelType)
+		return fmt.Errorf("unsupported model-type: %s, supported values: file, string", cfg.ModelType)
 	}
 
 	if cfg.TableName == "" {
-		return fmt.Errorf("table-name 不能为空")
+		return fmt.Errorf("table-name must not be empty")
 	}
 
 	return nil
 }
 
-// createAdapter 创建 Casbin GORM 适配器。
-func (c *CasbinGormAutoConfiguration) createAdapter(db *gorm.DB, cfg *CasbinGormConfig) (*gormadapter.Adapter, error) {
+// createAdapter creates Casbin GORM adapter.
+func (c *CasbinGormAutoConfiguration) createAdapter(gctx context.Context, db *gorm.DB, cfg *CasbinGormConfig) (*gormadapter.Adapter, error) {
 	adapter, err := gormadapter.NewAdapterByDBUseTableName(db, cfg.DatabasePrefix, cfg.TableName)
 	if err != nil {
-		return nil, fmt.Errorf("创建 Casbin GORM 适配器失败: %w", err)
+		return nil, fmt.Errorf("failed to create Casbin GORM adapter: %w", err)
 	}
 
 	if cfg.AutoCreateTable {
 		if err := c.autoMigrateTable(db, cfg.TableName); err != nil {
-			c.logger.Warn(context.Background(), "Casbin GORM 自动迁移失败",
+			c.logger.Warn(gctx, "Casbin GORM auto-migration failed",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		} else {
-			c.logger.Info(context.Background(), "Casbin GORM 表自动迁移成功",
+			c.logger.Info(gctx, "Casbin GORM table auto-migrated successfully",
 				log.KeyValue{Key: "table-name", Value: cfg.TableName},
 			)
 		}
@@ -180,7 +181,7 @@ func (c *CasbinGormAutoConfiguration) createAdapter(db *gorm.DB, cfg *CasbinGorm
 	return adapter, nil
 }
 
-// autoMigrateTable 手动创建 Casbin 策略表。
+// autoMigrateTable manually creates Casbin policy table.
 func (c *CasbinGormAutoConfiguration) autoMigrateTable(db *gorm.DB, tableName string) error {
 	type CasbinRule struct {
 		ID    uint   `gorm:"primaryKey;autoIncrement"`
@@ -196,52 +197,53 @@ func (c *CasbinGormAutoConfiguration) autoMigrateTable(db *gorm.DB, tableName st
 	return db.Table(tableName).AutoMigrate(&CasbinRule{})
 }
 
-// createEnforcer 创建 Casbin Enforcer。
+// createEnforcer creates Casbin Enforcer.
 func (c *CasbinGormAutoConfiguration) createEnforcer(adapter *gormadapter.Adapter, cfg *CasbinGormConfig) (*casbin.Enforcer, error) {
 	if cfg.ModelType == "string" && cfg.ModelText != "" {
 		m, err := model.NewModelFromString(cfg.ModelText)
 		if err != nil {
-			return nil, fmt.Errorf("创建 Casbin 模型失败: %w", err)
+			return nil, fmt.Errorf("failed to create Casbin model: %w", err)
 		}
 		enforcer, err := casbin.NewEnforcer(m, adapter)
 		if err != nil {
-			return nil, fmt.Errorf("创建 Casbin Enforcer 失败: %w", err)
+			return nil, fmt.Errorf("failed to create Casbin Enforcer: %w", err)
 		}
 		return enforcer, nil
 	}
 
 	enforcer, err := casbin.NewEnforcer(cfg.ModelPath, adapter)
 	if err != nil {
-		return nil, fmt.Errorf("创建 Casbin Enforcer 失败: %w", err)
+		return nil, fmt.Errorf("failed to create Casbin Enforcer: %w", err)
 	}
 
 	return enforcer, nil
 }
 
-// startAutoReload 启动自动重新加载策略。
+// startAutoReload starts automatic policy reload.
 func (c *CasbinGormAutoConfiguration) startAutoReload(enforcer *GormCasbinEnforcer, cfg *CasbinGormConfig) {
 	interval := cfg.AutoLoadInterval
 	if interval <= 0 {
 		interval = security.DefaultCasbinAutoLoadInterval
 	}
 
-	c.logger.Info(context.Background(), "启动 Casbin GORM 策略自动刷新",
-		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%d分钟", interval)},
+	c.logger.Info(c.ctx, "starting Casbin GORM policy auto-reload",
+		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%dmin", interval)},
 	)
 
 	go func() {
+		defer recoverLog("casbin-gorm policy auto-reload", c.ctx, c.logger)
 		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				if err := enforcer.LoadPolicy(context.Background()); err != nil {
-					c.logger.Warn(context.Background(), "自动刷新 Casbin GORM 策略失败",
+				if err := enforcer.LoadPolicy(c.ctx); err != nil {
+					c.logger.Warn(c.ctx, "Casbin GORM policy auto-reload failed",
 						log.KeyValue{Key: "error", Value: err.Error()},
 					)
 				} else {
-					c.logger.Info(context.Background(), "Casbin GORM 策略已自动刷新")
+					c.logger.Info(c.ctx, "Casbin GORM policy auto-reloaded")
 				}
 			case <-c.ctx.Done():
 				return
@@ -250,17 +252,24 @@ func (c *CasbinGormAutoConfiguration) startAutoReload(enforcer *GormCasbinEnforc
 	}()
 }
 
-// Close 停止自动刷新定时器，释放 goroutine 资源。
+// Close stops auto-reload timer and releases goroutine resources.
 func (c *CasbinGormAutoConfiguration) Close() {
 	if c.cancel != nil {
 		c.cancel()
 	}
 }
 
-// loadConfig 从 ApplicationContext 加载 Casbin GORM 配置。
-func (c *CasbinGormAutoConfiguration) loadConfig(ctx boot.ApplicationContext) (*CasbinGormConfig, error) {
-	env := ctx.Environment()
+// recoverLog recovers from panic and logs the error.
+func recoverLog(component string, ctx context.Context, logger log.Logger) {
+	if r := recover(); r != nil {
+		logger.Error(ctx, fmt.Sprintf("%s panic recovered", component),
+			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+		)
+	}
+}
 
+// loadConfig loads Casbin GORM config from Environment.
+func (c *CasbinGormAutoConfiguration) loadConfig(env *environment.Environment) (*CasbinGormConfig, error) {
 	cfg := &CasbinGormConfig{
 		ModelType:        security.DefaultCasbinModelType,
 		ModelPath:        security.DefaultCasbinModelPath,
@@ -273,7 +282,7 @@ func (c *CasbinGormAutoConfiguration) loadConfig(ctx boot.ApplicationContext) (*
 	}
 
 	if err := env.BindPrefix("security.casbin", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Casbin GORM 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Casbin GORM config: %w", err)
 	}
 
 	return cfg, nil

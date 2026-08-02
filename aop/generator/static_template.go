@@ -46,7 +46,7 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 {{- if .BeforeAdvices}}
 	// Before 通知
 {{- range .BeforeAdvices}}
-	p.{{.AdviceField}}(p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
+	p.{{.AdviceField}}[0](p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
 {{- end}}
 {{- end}}
 {{- if .HasReturnValue}}
@@ -54,7 +54,7 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 	result := p.target.{{.Name}}({{.ArgsList}})
 	// AfterReturning advices
 {{- range .AfterReturningAdvices}}
-	p.{{.AdviceField}}(result)
+	p.{{.AdviceField}}[0](result)
 {{- end}}
 	return result
 	{{- else}}
@@ -65,7 +65,7 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 {{- if .AfterAdvices}}
 	// After 通知
 {{- range .AfterAdvices}}
-	p.{{.AdviceField}}()
+	p.{{.AdviceField}}[0]()
 {{- end}}
 {{- end}}
 	return
@@ -118,7 +118,7 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 {{- if .HasAspects}}
 {{- if .BeforeAdvices}}
 {{- range .BeforeAdvices}}
-	p.{{.AdviceField}}(p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
+	p.{{.AdviceField}}[0](p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
 {{- end}}
 {{- end}}
 {{- if .HasReturnValue}}

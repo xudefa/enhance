@@ -1,0 +1,7 @@
+{
+  "ratelimiter": {
+    "enabled": true,
+    "default_rate": 10,
+    "default_burst": 20
+  }
+}

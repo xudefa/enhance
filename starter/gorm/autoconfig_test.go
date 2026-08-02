@@ -90,6 +90,7 @@ func TestGormConfig_DefaultValues(t *testing.T) {
 
 func TestGormConfig_BuildDSN(t *testing.T) {
 	cfg := &GormConfig{
+		Driver:   "mysql",
 		Host:     "localhost",
 		Port:     3306,
 		Username: "root",

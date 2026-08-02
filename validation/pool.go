@@ -17,7 +17,8 @@ var regexCache sync.Map // map[string]*regexp.Regexp
 // 如果编译失败，返回 nil 而非 panic。
 func compileRegex(pattern string) *regexp.Regexp {
 	if cached, ok := regexCache.Load(pattern); ok {
-		return cached.(*regexp.Regexp)
+		re, _ := cached.(*regexp.Regexp)
+		return re
 	}
 
 	// 使用 regexp.Compile 安全编译，无效模式返回 nil
@@ -27,7 +28,8 @@ func compileRegex(pattern string) *regexp.Regexp {
 	}
 
 	actual, _ := regexCache.LoadOrStore(pattern, re)
-	return actual.(*regexp.Regexp)
+	re2, _ := actual.(*regexp.Regexp)
+	return re2
 }
 
 // validationErrorsPool 复用 ValidationError 切片
@@ -42,7 +44,7 @@ var validationErrorsPool = sync.Pool{
 
 // acquireValidationErrors 从池中获取 ValidationError 切片
 func acquireValidationErrors() *[]ValidationError {
-	p := validationErrorsPool.Get().(*[]ValidationError)
+	p, _ := validationErrorsPool.Get().(*[]ValidationError)
 	*p = (*p)[:0]
 	return p
 }

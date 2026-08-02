@@ -79,6 +79,30 @@ func (m *mockLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 	return m
 }
 
+func TestAppendContextKeys_DoesNotAliasCallerSlice(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithTraceID(context.Background(), "trace-123")
+
+	// 调用方的 slice 预留了额外容量，appendContextKeys 可能原地写入
+	base := make([]KeyValue, 1, 4)
+	base[0] = KeyValue{Key: "a", Value: "1"}
+
+	cl := NewContextLogger(&mockLogger{})
+	cl.Info(ctx, "msg", base...)
+
+	// 模拟调用方在日志之后复用底层数组继续追加
+	_ = append(base, KeyValue{Key: "b", Value: "2"})
+
+	mock := cl.logger.(*mockLogger)
+	if len(mock.lastKeys) < 2 {
+		t.Fatalf("expected trace_id key to be appended, got %d keys", len(mock.lastKeys))
+	}
+	if mock.lastKeys[1].Key != "trace_id" || mock.lastKeys[1].Value != "trace-123" {
+		t.Errorf("trace_id key corrupted by caller's slice reuse: got %+v", mock.lastKeys[1])
+	}
+}
+
 func TestLoggerOption(t *testing.T) {
 	t.Parallel()
 	mock := &mockLogger{}

@@ -48,7 +48,15 @@ func (e *bootError) Cause() error {
 // Error 实现 error 接口。
 func (e *bootError) Error() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "[%s] boot failed during %s: %v", e.code, e.phase, e.original)
+
+	switch {
+	case e.message != "":
+		fmt.Fprintf(&sb, "[%s] boot failed during %s: %s", e.code, e.phase, e.message)
+	case e.original != nil:
+		fmt.Fprintf(&sb, "[%s] boot failed during %s: %v", e.code, e.phase, e.original)
+	default:
+		fmt.Fprintf(&sb, "[%s] boot failed during %s", e.code, e.phase)
+	}
 
 	if e.analyzed != "" {
 		fmt.Fprintf(&sb, "\n\nAnalysis: %s", e.analyzed)
@@ -103,9 +111,13 @@ func (e *bootError) Suggestions() []string {
 //
 //	return boot.NewBootErr(boot.ErrCodeConfigLoad, "初始化", err)
 func NewBootErr(code, phase string, err error) BootError {
+	message := ""
+	if err != nil {
+		message = err.Error()
+	}
 	return &bootError{
 		code:     code,
-		message:  err.Error(),
+		message:  message,
 		phase:    phase,
 		original: err,
 	}
@@ -119,25 +131,14 @@ func NewBootErr(code, phase string, err error) BootError {
 //   - format: 格式化消息模板
 //   - args: 格式化参数
 //
-// 可选地传入一个底层错误作为最后参数，支持 errors.Is/As 错误链追踪：
+// 示例：
 //
 //	return boot.NewBootErrf(boot.ErrCodeAutoConfig, "初始化", "自动配置 %T 失败: %v", config, rootErr)
 func NewBootErrf(code, phase, format string, args ...any) BootError {
-	// 支持可选的底层错误参数：如果最后一个参数是 error，则作为 Cause
-	var original error
-	if len(args) > 0 {
-		if err, ok := args[len(args)-1].(error); ok {
-			original = err
-			args = args[:len(args)-1]
-		}
-	}
-
 	return &bootError{
 		code:     code,
 		message:  fmt.Sprintf(format, args...),
 		phase:    phase,
-		original: original,
+		original: nil,
 	}
 }
-
-

@@ -218,6 +218,7 @@ func TestCORSCustomConfig(t *testing.T) {
 	mw := CORS(config)
 
 	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Origin", "https://example.com")
 	rec := httptest.NewRecorder()
 
 	ctx := newMockContext(req, rec)
@@ -246,8 +247,8 @@ func TestDefaultCORSConfig(t *testing.T) {
 		t.Error("expected allow headers to be set")
 	}
 
-	if !config.AllowCredentials {
-		t.Error("expected allow credentials to be true")
+	if config.AllowCredentials {
+		t.Error("expected allow credentials to be false when AllowOrigins contains \"*\"")
 	}
 
 	if config.MaxAge == 0 {
@@ -376,6 +377,10 @@ func (m *mockContext) Context() context.Context {
 
 func (m *mockContext) SetContext(ctx context.Context) {
 	m.req = m.req.WithContext(ctx)
+}
+
+func (m *mockContext) Request() *http.Request {
+	return m.req
 }
 
 func BenchmarkRequestID(b *testing.B) {

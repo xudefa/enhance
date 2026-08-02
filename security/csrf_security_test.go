@@ -10,7 +10,10 @@ func TestGenerateSecureToken_CryptographicSecurity(t *testing.T) {
 	// 测试 1: 生成的 token 应该具有足够的熵，不会重复
 	tokens := make(map[string]bool)
 	for i := 0; i < 1000; i++ {
-		token := generateSecureToken(32)
+		token, err := generateSecureToken(32)
+		if err != nil {
+			t.Fatalf("failed to generate token: %v", err)
+		}
 		if tokens[token] {
 			t.Fatal("duplicate token detected - token generation is not secure")
 		}
@@ -22,8 +25,14 @@ func TestGenerateSecureToken_CryptographicSecurity(t *testing.T) {
 func TestGenerateSecureToken_Unpredictability(t *testing.T) {
 	t.Parallel()
 	// 测试 2: 连续生成的 token 不应该有可预测的模式
-	token1 := generateSecureToken(32)
-	token2 := generateSecureToken(32)
+	token1, err := generateSecureToken(32)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+	token2, err := generateSecureToken(32)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
 	if token1 == token2 {
 		t.Fatal("consecutive tokens should be different")
 	}
@@ -31,7 +40,11 @@ func TestGenerateSecureToken_Unpredictability(t *testing.T) {
 	// 测试多个 token 之间的差异性
 	tokens := make([]string, 100)
 	for i := 0; i < 100; i++ {
-		tokens[i] = generateSecureToken(32)
+		token, err := generateSecureToken(32)
+		if err != nil {
+			t.Fatalf("failed to generate token: %v", err)
+		}
+		tokens[i] = token
 	}
 
 	// 验证所有 token 都是唯一的
@@ -59,7 +72,10 @@ func TestGenerateSecureToken_Length(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		token := generateSecureToken(tt.inputLength)
+		token, err := generateSecureToken(tt.inputLength)
+		if err != nil {
+			t.Fatalf("failed to generate token: %v", err)
+		}
 		if len(token) < tt.minOutputLen {
 			t.Errorf("token too short for input %d: got %d, want >= %d",
 				tt.inputLength, len(token), tt.minOutputLen)

@@ -28,7 +28,6 @@
 package swagger
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
@@ -74,13 +73,13 @@ func (c *SwaggerAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 	// 加载配置
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Swagger 配置失败: %w", err)
+		return fmt.Errorf("failed to load Swagger config: %w", err)
 	}
 
 	c.config = cfg
 
 	// 记录配置信息
-	c.logger.Info(context.Background(), "Swagger API 文档已配置",
+	c.logger.Info(ctx.Context(), "Swagger API documentation configured",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "url", Value: cfg.URL},
@@ -132,7 +131,7 @@ func (c *SwaggerAutoConfiguration) loadConfig(env *environment.Environment) (*Sw
 	}
 
 	if err := env.BindPrefix("swagger", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Swagger 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Swagger config: %w", err)
 	}
 
 	return cfg, nil

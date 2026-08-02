@@ -1,8 +1,7 @@
-// Package nacos 提供 Nacos 配置中心自动配置。
+// Package nacos provides Nacos configuration center auto-configuration.
 package nacos
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -27,13 +26,13 @@ func init() {
 	)
 }
 
-// NacosAutoConfiguration Nacos 配置中心自动配置类。
+// NacosAutoConfiguration Nacos configuration center auto-configuration.
 type NacosAutoConfiguration struct {
 	logger       log.Logger
 	configClient config_client.IConfigClient
 }
 
-// Configure 配置 Nacos 配置中心客户端。
+// Configure configures Nacos configuration center client.
 func (c *NacosAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	env := ctx.Environment()
 
@@ -45,12 +44,7 @@ func (c *NacosAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Nacos 配置失败: %w", err)
-	}
-
-	if !cfg.Enabled {
-		c.logger.Info(context.Background(), "Nacos 配置中心未启用，跳过配置")
-		return nil
+		return fmt.Errorf("failed to load Nacos config: %w", err)
 	}
 
 	sc := []constant.ServerConfig{
@@ -75,16 +69,16 @@ func (c *NacosAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("创建 Nacos 配置客户端失败: %w", err)
+		return fmt.Errorf("failed to create Nacos config client: %w", err)
 	}
 
 	c.configClient = configClient
 
 	if err := ctx.Container().RegisterInstance(configClient, reflect.TypeFor[config_client.IConfigClient]()); err != nil {
-		return fmt.Errorf("注册 Nacos ConfigClient 失败: %w", err)
+		return fmt.Errorf("failed to register Nacos ConfigClient: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Nacos 配置中心客户端已配置",
+	c.logger.Info(ctx.Context(), "Nacos configuration center client configured",
 		log.KeyValue{Key: "server_addr", Value: cfg.ServerAddr},
 		log.KeyValue{Key: "namespace", Value: cfg.NamespaceID},
 	)
@@ -99,7 +93,7 @@ func (c *NacosAutoConfiguration) GetConfig(dataID, group string) (string, error)
 		Group:  group,
 	})
 	if err != nil {
-		return "", fmt.Errorf("获取 Nacos 配置失败: %w", err)
+		return "", fmt.Errorf("failed to get Nacos config: %w", err)
 	}
 	return content, nil
 }
@@ -124,7 +118,7 @@ func (c *NacosAutoConfiguration) PublishConfig(dataID, group, content string) (b
 	})
 }
 
-// NacosConfig Nacos 配置中心配置。
+// NacosConfig Nacos configuration center config.
 type NacosConfig struct {
 	Enabled     bool   `json:"enabled" mapstructure:"enabled"`
 	ServerAddr  string `json:"server_addr" mapstructure:"server_addr"`
@@ -139,7 +133,7 @@ type NacosConfig struct {
 	LogLevel    string `json:"log_level" mapstructure:"log_level"`
 }
 
-// 配置常量。
+// Configuration constants.
 const (
 	NacosEnabled       = "nacos.enabled"
 	DefaultNacosAddr   = "127.0.0.1"
@@ -150,7 +144,7 @@ const (
 	ConditionTrue      = "true"
 )
 
-// loadConfig 从 Environment 加载 Nacos 配置。
+// loadConfig loads Nacos config from Environment.
 func (c *NacosAutoConfiguration) loadConfig(env *environment.Environment) (*NacosConfig, error) {
 	cfg := &NacosConfig{
 		ServerAddr:  DefaultNacosAddr,
@@ -161,7 +155,7 @@ func (c *NacosAutoConfiguration) loadConfig(env *environment.Environment) (*Naco
 	}
 
 	if err := env.BindPrefix("nacos", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Nacos 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Nacos config: %w", err)
 	}
 
 	return cfg, nil

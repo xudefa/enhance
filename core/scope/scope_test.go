@@ -59,7 +59,7 @@ func TestSingletonScopeRemove(t *testing.T) {
 
 	factory := func(c ...any) (any, error) { return "instance", nil }
 
-	s.Get("bean1", factory)
+	_, _ = s.Get("bean1", factory)
 	s.Remove("bean1")
 
 	// After remove, should create new instance
@@ -75,8 +75,8 @@ func TestSingletonScopeClear(t *testing.T) {
 
 	factory := func(c ...any) (any, error) { return "instance", nil }
 
-	s.Get("bean1", factory)
-	s.Get("bean2", factory)
+	_, _ = s.Get("bean1", factory)
+	_, _ = s.Get("bean2", factory)
 	s.Clear()
 
 	// After clear, should create new instances

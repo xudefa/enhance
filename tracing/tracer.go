@@ -61,6 +61,8 @@ func WithParent(parent *Span) SpanOption {
 	return func(s *Span) {
 		s.ParentSpanID = parent.SpanID
 		s.spanContext.ParentSpanID = parent.SpanID
+		s.TraceID = parent.TraceID
+		s.spanContext.TraceID = parent.TraceID
 	}
 }
 
@@ -70,6 +72,9 @@ func WithParent(parent *Span) SpanOption {
 func WithContext(ctx SpanContext) SpanOption {
 	return func(s *Span) {
 		s.spanContext = ctx
+		s.TraceID = ctx.TraceID
+		s.ParentSpanID = ctx.SpanID
+		s.contextSet = true
 	}
 }
 
@@ -108,7 +113,12 @@ func NewTracer(opts ...TracerOption) *Tracer {
 // 根据采样器决定是否创建真实 Span，未采样时返回空 Span。
 // 支持通过 SpanOption 设置父 Span、标签等。
 func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
-	if !t.sampler.ShouldSample() {
+	t.mu.RLock()
+	sampler := t.sampler
+	serviceName := t.serviceName
+	t.mu.RUnlock()
+
+	if !sampler.ShouldSample() {
 		return &Span{
 			Name:  name,
 			Ended: true,
@@ -124,7 +134,7 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		Events:    make([]SpanEvent, 0),
 	}
 
-	span.Tags["service.name"] = t.serviceName
+	span.Tags["service.name"] = serviceName
 
 	for _, opt := range opts {
 		opt(span)
@@ -136,23 +146,16 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		span.TraceID = extractedTraceID
 	}
 
+	sampled := true
+	if span.contextSet {
+		sampled = span.spanContext.Sampled
+	}
+
 	span.spanContext = SpanContext{
 		TraceID:      span.TraceID,
 		SpanID:       span.SpanID,
 		ParentSpanID: span.ParentSpanID,
-		Sampled:      true,
-	}
-
-	if span.ParentSpanID != "" {
-		t.mu.RLock()
-		for _, s := range t.spans {
-			if s.SpanID == span.ParentSpanID {
-				span.TraceID = s.TraceID
-				span.spanContext.TraceID = s.TraceID
-				break
-			}
-		}
-		t.mu.RUnlock()
+		Sampled:      sampled,
 	}
 
 	t.mu.Lock()
@@ -202,8 +205,8 @@ func (t *Tracer) Extract(headers map[string]string) SpanContext {
 //
 // 返回的切片是内部切片的副本，修改不会影响 Tracer 内部状态。
 func (t *Tracer) GetSpans() []*Span {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	spans := make([]*Span, len(t.spans))
 	copy(spans, t.spans)
@@ -241,7 +244,17 @@ func (t *Tracer) GetSpanCount() int64 {
 func (t *Tracer) GetActiveSpanCount() int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return len(t.spans)
+
+	count := 0
+	for _, s := range t.spans {
+		s.mu.Lock()
+		ended := s.Ended
+		s.mu.Unlock()
+		if !ended {
+			count++
+		}
+	}
+	return count
 }
 
 // Clear 清除所有 Span。
@@ -258,8 +271,8 @@ func (t *Tracer) Clear() {
 // 如果 crypto/rand 失败，回退到时间戳方案。
 func generateID() string {
 	b := make([]byte, 8)
-	_, err := rand.Read(b)
-	if err != nil {
+	n, err := rand.Read(b)
+	if err != nil || n != len(b) {
 		return fmt.Sprintf("%016x", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
@@ -311,8 +324,14 @@ type ConsoleExporter struct{}
 // ExportSpans 实现 Exporter 接口，将 Span 打印到控制台。
 func (e *ConsoleExporter) ExportSpans(spans []*Span) error {
 	for _, span := range spans {
+		span.mu.Lock()
+		tags := make(map[string]string, len(span.Tags))
+		for k, v := range span.Tags {
+			tags[k] = v
+		}
+		span.mu.Unlock()
 		fmt.Printf("[TRACE] %s | %s | %s | %v | tags=%v\n",
-			span.TraceID, span.SpanID, span.Name, span.Duration(), span.Tags)
+			span.TraceID, span.SpanID, span.Name, span.Duration(), tags)
 	}
 	return nil
 }

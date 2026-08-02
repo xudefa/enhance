@@ -2,8 +2,12 @@ package event
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // AsyncPublisher 异步事件发布器
@@ -29,7 +33,10 @@ type AsyncPublisher struct {
 	bus         AsyncPublisherBus
 	worker      chan func()
 	done        chan struct{}
+	closed      atomic.Bool
 	wg          sync.WaitGroup
+	taskWg      sync.WaitGroup
+	closeMu     sync.Mutex
 	errHandler  func(error, ApplicationEvent)
 	workerCount int // 工作协程数量
 	queueSize   int // 工作队列缓冲大小
@@ -117,11 +124,23 @@ func NewAsyncPublisher(bus AsyncPublisherBus, opts ...AsyncPublisherOption) *Asy
 // run 工作协程主循环
 func (p *AsyncPublisher) run() {
 	defer p.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "panic in async publisher worker: %v\n", r)
+		}
+	}()
 	for {
 		select {
-		case fn := <-p.worker:
+		case fn, ok := <-p.worker:
+			if !ok {
+				return
+			}
 			fn()
 		case <-p.done:
+			// 排空 channel 中剩余的任务
+			for task := range p.worker {
+				task()
+			}
 			return
 		}
 	}
@@ -136,6 +155,13 @@ func (p *AsyncPublisher) run() {
 //   - ctx: 上下文，用于超时控制
 //   - event: 要发布的事件
 func (p *AsyncPublisher) Publish(ctx context.Context, event ApplicationEvent) {
+	if p.closed.Load() {
+		if p.errHandler != nil {
+			p.errHandler(fmt.Errorf("event: publisher is closed"), event)
+		}
+		return
+	}
+
 	// 先检查上下文是否已经完成
 	select {
 	case <-ctx.Done():
@@ -146,19 +172,55 @@ func (p *AsyncPublisher) Publish(ctx context.Context, event ApplicationEvent) {
 	default:
 	}
 
-	// 在发送前增加 wg 计数，避免 Close() 在 wg.Add 和 select 之间调用导致 goroutine 泄漏
+	p.closeMu.Lock()
+	if p.closed.Load() {
+		p.closeMu.Unlock()
+		if p.errHandler != nil {
+			p.errHandler(fmt.Errorf("event: publisher is closed"), event)
+		}
+		return
+	}
 	p.wg.Add(1)
+	p.taskWg.Add(1)
+	p.closeMu.Unlock()
+
 	select {
 	case p.worker <- func() {
 		defer p.wg.Done()
+		defer p.taskWg.Done()
 		p.publishEvent(event)
 	}:
 	case <-ctx.Done():
-		// 等待期间上下文取消，取消本次发布
 		p.wg.Done()
+		p.taskWg.Done()
 		if p.errHandler != nil {
 			p.errHandler(ctx.Err(), event)
 		}
+	default:
+		if p.errHandler != nil {
+			p.errHandler(fmt.Errorf("event: async worker queue full"), event)
+		}
+		go func() {
+			defer p.wg.Done()
+			defer p.taskWg.Done()
+			done := make(chan struct{}, 1)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("fallback event handler panic", "event", event.Type(), "recover", r)
+					}
+					close(done)
+				}()
+				p.bus.Publish(event)
+			}()
+			timer := time.NewTimer(30 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-done:
+			case <-timer.C:
+				slog.Error("fallback event publish timeout", "event", event.Type())
+			}
+		}()
 	}
 }
 
@@ -166,8 +228,14 @@ func (p *AsyncPublisher) Publish(ctx context.Context, event ApplicationEvent) {
 func (p *AsyncPublisher) publishEvent(event ApplicationEvent) {
 	defer func() {
 		if r := recover(); r != nil {
+			var err error
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = fmt.Errorf("event handler panic: %v", r)
+			}
 			if p.errHandler != nil {
-				p.errHandler(nil, event)
+				p.errHandler(err, event)
 			}
 			slog.Error("event handler panic", "event", event.Type(), "recover", r)
 		}
@@ -177,9 +245,19 @@ func (p *AsyncPublisher) publishEvent(event ApplicationEvent) {
 
 // Close 关闭异步发布器
 //
-// 等待所有待处理的事件处理完成后返回。
+// 先通知工作协程停止接收新任务，等待所有正在执行的任务完成，
+// 再关闭工作通道让排空循环退出，最后等待所有工作协程退出。
 func (p *AsyncPublisher) Close() {
+	p.closeMu.Lock()
+	if p.closed.Load() {
+		p.closeMu.Unlock()
+		return
+	}
+	p.closed.Store(true)
 	close(p.done)
-	// 等待工作协程退出
+	p.closeMu.Unlock()
+
+	p.taskWg.Wait()
+	close(p.worker)
 	p.wg.Wait()
 }

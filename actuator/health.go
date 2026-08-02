@@ -96,9 +96,6 @@ func (m *MemoryHealthIndicator) Health(ctx context.Context) health.Health {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	// 使用堆内存使用情况作为参考
-	heapPercent := float64(memStats.Alloc) / float64(memStats.Sys)
-
 	h := health.Health{
 		Details:   make(map[string]any),
 		Timestamp: time.Now(),
@@ -109,6 +106,15 @@ func (m *MemoryHealthIndicator) Health(ctx context.Context) health.Health {
 	h.Details["heap_alloc"] = memStats.HeapAlloc
 	h.Details["heap_sys"] = memStats.HeapSys
 	h.Details["heap_objects"] = memStats.HeapObjects
+
+	// 防止除零错误
+	if memStats.Sys == 0 {
+		h.Details["heap_percent"] = "0.00%"
+		h.Status = health.StatusUp
+		return h
+	}
+
+	heapPercent := float64(memStats.Alloc) / float64(memStats.Sys)
 	h.Details["heap_percent"] = fmt.Sprintf("%.2f%%", heapPercent*100)
 
 	if heapPercent > m.threshold {

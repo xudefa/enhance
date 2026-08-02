@@ -87,7 +87,7 @@ func TestDefaultBannerType(t *testing.T) {
 func TestNewBannerReturnsInterface(t *testing.T) {
 	t.Parallel()
 
-	var b banner.Banner = NewBanner(
+	b := NewBanner(
 		banner.WithLines([]string{"Line"}),
 	)
 

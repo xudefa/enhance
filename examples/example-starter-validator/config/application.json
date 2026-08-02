@@ -1,0 +1,6 @@
+{
+  "validator": {
+    "enabled": true,
+    "enable_custom_validators": true
+  }
+}

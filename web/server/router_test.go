@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,8 +12,174 @@ import (
 func TestNewRouter(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
-	if router == nil || router.mux == nil || router.handlers == nil {
-		t.Fatalf("NewRouter() failed: router=%v, mux=%v, handlers=%v", router != nil, router != nil, router != nil)
+	if router == nil || router.handlers == nil {
+		t.Fatalf("NewRouter() failed: router=%v, handlers=%v", router != nil, router != nil)
+	}
+}
+
+func TestRouter_HEAD_FallsBackToGET(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	router.GET("/hello", func(ctx mvc.Context) {
+		ctx.String(http.StatusOK, "hello")
+	})
+
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	resp, err := http.Head(ts.URL + "/hello")
+	if err != nil {
+		t.Fatalf("HEAD request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("HEAD status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) != 0 {
+		t.Errorf("HEAD response body should be empty, got %q", body)
+	}
+}
+
+func TestRouter_HEAD_FallsBackToGET_ParamRoute(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	router.GET("/users/{id}", func(ctx mvc.Context) {
+		ctx.String(http.StatusOK, ctx.PathParam("id"))
+	})
+
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	resp, err := http.Head(ts.URL + "/users/42")
+	if err != nil {
+		t.Fatalf("HEAD request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("HEAD status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestRouter_HEAD_ExplicitRouteTakesPrecedence(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	router.GET("/x", func(ctx mvc.Context) {
+		ctx.String(http.StatusOK, "get")
+	})
+	router.handle(http.MethodHead, "/x", func(ctx mvc.Context) {
+		ctx.SetStatusCode(http.StatusNoContent)
+	})
+
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	resp, err := http.Head(ts.URL + "/x")
+	if err != nil {
+		t.Fatalf("HEAD request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("HEAD status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
+func TestRouter_GroupPrefix_RespectsSegmentBoundary(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	handlerCalled := false
+
+	api := router.Group("/api").(*DefaultRouter)
+	sibling := router.Group("/apix")
+	sibling.GET("/", func(ctx mvc.Context) {
+		handlerCalled = true
+	})
+
+	// /apix/ must NOT be claimed by the /api group (shared handlers map collision)
+	req := httptest.NewRequest(http.MethodGet, "/apix/", nil)
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("GET /apix/ status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+	if handlerCalled {
+		t.Error("handler must not be called for a path outside the /api boundary")
+	}
+}
+
+func TestRouter_GroupPrefix_SegmentBoundaryMatch(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	handlerCalled := false
+
+	api := router.Group("/api").(*DefaultRouter)
+	api.GET("/x", func(ctx mvc.Context) {
+		handlerCalled = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/x", nil)
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, req)
+
+	if !handlerCalled {
+		t.Error("handler should be called for /api/x")
+	}
+	if w.Code != http.StatusOK {
+		t.Errorf("GET /api/x status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestRouter_DuplicateRegistration_Rejected(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	firstCalled := false
+	secondCalled := false
+
+	router.GET("/dup", func(ctx mvc.Context) {
+		firstCalled = true
+	})
+	router.GET("/dup", func(ctx mvc.Context) {
+		secondCalled = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/dup", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if !firstCalled {
+		t.Error("first handler should be used")
+	}
+	if secondCalled {
+		t.Error("second (duplicate) handler must not override the first")
+	}
+}
+
+func TestRouter_DuplicateParamRegistration_Rejected(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	firstCalled := false
+	secondCalled := false
+
+	router.GET("/items/{id}", func(ctx mvc.Context) {
+		firstCalled = true
+	})
+	router.GET("/items/{id}", func(ctx mvc.Context) {
+		secondCalled = true
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/items/1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if !firstCalled {
+		t.Error("first handler should be used")
+	}
+	if secondCalled {
+		t.Error("second (duplicate) handler must not override the first")
 	}
 }
 
@@ -241,6 +408,34 @@ func TestRouter_MiddlewareChain(t *testing.T) {
 	}
 }
 
+func TestRouter_ParamRouteMiddleware(t *testing.T) {
+	t.Parallel()
+	router := NewRouter()
+	middlewareCalled := false
+	var capturedID string
+
+	router.Use(func(ctx mvc.Context) {
+		middlewareCalled = true
+		ctx.Next()
+	})
+
+	router.GET("/users/{id}", func(ctx mvc.Context) {
+		capturedID = ctx.PathParam("id")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if !middlewareCalled {
+		t.Error("Middleware was not called for parameterized route")
+	}
+	if capturedID != "123" {
+		t.Errorf("PathParam = %q, want %q", capturedID, "123")
+	}
+}
+
 func TestRouter_PathParams(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
@@ -358,15 +553,12 @@ func TestRouter_GroupMiddleware(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	w := httptest.NewRecorder()
 
-	// 调用根路由器的 ServeHTTP 时，只应用根中间件
-	// Group's middlewares are not merged back to parent
 	router.ServeHTTP(w, req)
 
-	// 当前行为：只调用根中间件 + 处理器
-	// 根路由器处理请求时，组中间件不被应用
-	expected := []string{"root", "handler"}
+	// 组中间件在 handle 时绑定到路由，应随处理链执行
+	expected := []string{"root", "api", "handler"}
 	if len(executionOrder) != len(expected) {
-		t.Fatalf("executionOrder length = %d, want %d (current limitation: group middlewares not merged)", len(executionOrder), len(expected))
+		t.Fatalf("executionOrder length = %d, want %d", len(executionOrder), len(expected))
 	}
 	for i, v := range expected {
 		if executionOrder[i] != v {

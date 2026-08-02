@@ -56,6 +56,7 @@ type Conflict struct {
 	Reason   string // 冲突原因
 }
 
+// String 返回冲突的可读描述信息。
 func (c Conflict) String() string {
 	return fmt.Sprintf("冲突: %s <-> %s (%s)", c.StarterA, c.StarterB, c.Reason)
 }
@@ -149,7 +150,7 @@ func detectCycles(starters []StarterModule) [][]string {
 					}
 				}
 				if cycleStart >= 0 {
-					cycle := append(path[cycleStart:], neighbor)
+					cycle := append(append([]string{}, path[cycleStart:]...), neighbor)
 					cycles = append(cycles, cycle)
 				}
 			}

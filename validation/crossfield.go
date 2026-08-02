@@ -7,6 +7,14 @@ import (
 	"strings"
 )
 
+// interfaceOrNil 安全地获取 reflect.Value 的接口值，避免因未导出字段导致 panic。
+func interfaceOrNil(v reflect.Value) any {
+	if v.CanInterface() {
+		return v.Interface()
+	}
+	return nil
+}
+
 // validateCrossField 验证跨字段规则
 func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName string, obj any) error {
 	// 解析规则：fieldmatch=OtherField, fieldne=OtherField, fieldgt=OtherField, etc.
@@ -15,7 +23,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		return ValidationError{
 			Field:   fieldName,
 			Message: "跨字段验证规则格式错误",
-			Value:   field.Interface(),
+			Value:   interfaceOrNil(field),
 		}
 	}
 
@@ -27,7 +35,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		return ValidationError{
 			Field:   fieldName,
 			Message: "跨字段验证规则格式错误",
-			Value:   field.Interface(),
+			Value:   interfaceOrNil(field),
 		}
 	}
 
@@ -46,7 +54,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		return ValidationError{
 			Field:   fieldName,
 			Message: fmt.Sprintf("字段 %s 不存在", otherFieldName),
-			Value:   field.Interface(),
+			Value:   interfaceOrNil(field),
 		}
 	}
 
@@ -55,6 +63,13 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		objVal = objVal.Elem()
 	}
 	otherValue := objVal.FieldByName(otherFieldName)
+	if !otherValue.IsValid() {
+		return ValidationError{
+			Field:   fieldName,
+			Message: fmt.Sprintf("字段 %s 的值无效", otherFieldName),
+			Value:   interfaceOrNil(field),
+		}
+	}
 
 	switch validationType {
 	case "eq":
@@ -62,7 +77,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须与 %s 相等", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	case "ne":
@@ -70,7 +85,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须与 %s 不相等", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	case "gt":
@@ -78,7 +93,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须大于 %s", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	case "gte":
@@ -86,7 +101,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须大于或等于 %s", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	case "lt":
@@ -94,7 +109,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须小于 %s", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	case "lte":
@@ -102,7 +117,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 			return ValidationError{
 				Field:   fieldName,
 				Message: fmt.Sprintf("字段必须小于或等于 %s", otherFieldName),
-				Value:   field.Interface(),
+				Value:   interfaceOrNil(field),
 			}
 		}
 	}
@@ -273,7 +288,7 @@ func (v *TagValidator) getFieldValue(obj any, fieldName string) any {
 		return nil
 	}
 
-	return field.Interface()
+	return interfaceOrNil(field)
 }
 
 // fieldsEqual 比较两个字段是否相等

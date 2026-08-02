@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/xudefa/enhance/log"
@@ -33,9 +34,9 @@ func (c *NetClient) buildURL(path string, query map[string][]string) string {
 				if !first {
 					sb.WriteString("&")
 				}
-				sb.WriteString(k)
+				sb.WriteString(url.QueryEscape(k))
 				sb.WriteString("=")
-				sb.WriteString(val)
+				sb.WriteString(url.QueryEscape(val))
 				first = false
 			}
 		}
@@ -66,9 +67,9 @@ func (c *NetClient) buildRequest(ctx context.Context, method, path string, body 
 					if !first {
 						sb.WriteString("&")
 					}
-					sb.WriteString(k)
+					sb.WriteString(url.QueryEscape(k))
 					sb.WriteString("=")
-					sb.WriteString(val)
+					sb.WriteString(url.QueryEscape(val))
 					first = false
 				}
 			}
@@ -183,19 +184,24 @@ func (c *NetClient) Do(ctx context.Context, request any) (*HTTPResponse, error) 
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxResponseBodySize+1))
 	if err != nil {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.mu.RLock()
-			if len(c.middleware) > 0 {
-				c.logger.Error(ctx, "close response body failed",
-					log.KeyValue{Key: "close_error", Value: closeErr.Error()},
-					log.KeyValue{Key: "read_error", Value: err.Error()},
-				)
-			}
-			c.mu.RUnlock()
+			c.logger.Error(ctx, "close response body failed",
+				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
+				log.KeyValue{Key: "read_error", Value: err.Error()},
+			)
 		}
 		return nil, fmt.Errorf("read response failed: %w", err)
+	}
+
+	if len(body) > DefaultMaxResponseBodySize {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Error(ctx, "close response body failed",
+				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
+			)
+		}
+		return nil, fmt.Errorf("response body too large: max %d bytes", DefaultMaxResponseBodySize)
 	}
 
 	if err := resp.Body.Close(); err != nil {

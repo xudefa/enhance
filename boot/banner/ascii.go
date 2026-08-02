@@ -81,7 +81,7 @@ func (b *ASCIIArtBanner) render(version string) string {
 	}
 
 	if version != "" {
-		sb.WriteString(fmt.Sprintf(":: Application :: v%s", version))
+		fmt.Fprintf(&sb, ":: Application :: v%s", version)
 	}
 
 	return sb.String()

@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/xudefa/enhance/log"
@@ -34,8 +35,20 @@ type httpSecurity struct {
 
 	httpBasicEnabled bool
 	realmName        string
+
+	authorizeRules []authorizeRule
 }
 
+// authorizeRule 授权规则，Build 时应用到元数据源。
+type authorizeRule struct {
+	patterns []string
+	attrs    []string
+}
+
+// NewHttpSecurity 创建 HTTP 安全配置构建器。
+//
+// 返回:
+//   - HttpSecurity: 安全配置构建器实例，支持链式调用配置安全策略
 func NewHttpSecurity() HttpSecurity {
 	return &httpSecurity{
 		filters:             make([]SecurityFilter, 0),
@@ -43,43 +56,54 @@ func NewHttpSecurity() HttpSecurity {
 	}
 }
 
+// AuthenticationManager 设置认证管理器并返回 HttpSecurity 构建器。
 func (h *httpSecurity) AuthenticationManager(authManager AuthenticationManager) HttpSecurity {
 	h.authenticationManager = authManager
 	return h
 }
 
+// UserDetailsService 设置用户详情服务并返回 HttpSecurity 构建器。
 func (h *httpSecurity) UserDetailsService(userDetailsService UserDetailsService) HttpSecurity {
 	h.userDetailsService = userDetailsService
 	return h
 }
 
+// PasswordEncoder 设置密码编码器并返回 HttpSecurity 构建器。
 func (h *httpSecurity) PasswordEncoder(encoder PasswordEncoder) HttpSecurity {
 	h.passwordEncoder = encoder
 	return h
 }
 
+// AccessDecisionManager 设置访问决策管理器并返回 HttpSecurity 构建器。
 func (h *httpSecurity) AccessDecisionManager(manager AccessDecisionManager) HttpSecurity {
 	h.accessDecisionManager = manager
 	return h
 }
 
+// SecurityMetadataSource 设置安全元数据源并返回 HttpSecurity 构建器。
 func (h *httpSecurity) SecurityMetadataSource(source SecurityMetadataSource) HttpSecurity {
 	h.securityMetadataSource = source
 	return h
 }
 
-func (h *httpSecurity) AuthorizeRequests(authorizer AuthorizeRequests) HttpSecurity {
-	if httpSecurityAuthorizer, ok := authorizer.(*httpSecurityAuthorizer); ok {
-		httpSecurityAuthorizer.httpSecurity = h
-	}
+// AuthorizeRequests 设置授权请求配置器并返回 HttpSecurity 构建器。
+func (h *httpSecurity) AuthorizeRequests(config func(authorizer AuthorizeRequests)) HttpSecurity {
+	authorizer := &httpSecurityAuthorizer{httpSecurity: h}
+	config(authorizer)
 	return h
 }
 
+// AddFilter 添加安全过滤器到过滤器链。
 func (h *httpSecurity) AddFilter(filter SecurityFilter) HttpSecurity {
 	h.filters = append(h.filters, filter)
 	return h
 }
 
+// AddFilterBefore 在指定过滤器之前添加新的安全过滤器。
+//
+// 参数:
+//   - filter: 待添加的过滤器
+//   - beforeFilter: 目标前置过滤器
 func (h *httpSecurity) AddFilterBefore(filter SecurityFilter, beforeFilter SecurityFilter) HttpSecurity {
 	newFilters := make([]SecurityFilter, 0, len(h.filters)+1)
 	inserted := false
@@ -97,6 +121,11 @@ func (h *httpSecurity) AddFilterBefore(filter SecurityFilter, beforeFilter Secur
 	return h
 }
 
+// AddFilterAfter 在指定过滤器之后添加新的安全过滤器。
+//
+// 参数:
+//   - filter: 待添加的过滤器
+//   - afterFilter: 目标后置过滤器
 func (h *httpSecurity) AddFilterAfter(filter SecurityFilter, afterFilter SecurityFilter) HttpSecurity {
 	newFilters := make([]SecurityFilter, 0, len(h.filters)+1)
 	inserted := false
@@ -114,21 +143,33 @@ func (h *httpSecurity) AddFilterAfter(filter SecurityFilter, afterFilter Securit
 	return h
 }
 
+// Anonymous 启用匿名认证过滤器。
 func (h *httpSecurity) Anonymous() HttpSecurity {
 	h.anonymousFilter = NewAnonymousAuthenticationFilter()
 	return h
 }
 
+// ExceptionHandling 设置异常处理，包括访问拒绝处理器和认证入口点。
+//
+// 参数:
+//   - handler: 访问拒绝处理器
+//   - entryPoint: 认证入口点
 func (h *httpSecurity) ExceptionHandling(handler AccessDeniedHandler, entryPoint AuthenticationEntryPoint) HttpSecurity {
 	h.exceptionTranslationFilter = NewExceptionTranslationFilter(handler, entryPoint)
 	return h
 }
 
+// Csrf 启用 CSRF 保护过滤器。
 func (h *httpSecurity) Csrf() HttpSecurity {
 	h.csrfEnabled = true
 	return h
 }
 
+// Logout 配置登出功能，可指定登出 URL 和可选的登出成功处理器。
+//
+// 参数:
+//   - logoutUrl: 登出请求的 URL
+//   - successHandler: 可选的登出成功处理器
 func (h *httpSecurity) Logout(logoutUrl string, successHandler ...LogoutSuccessHandler) HttpSecurity {
 	h.logoutUrl = "/logout"
 	if logoutUrl != "" {
@@ -144,6 +185,11 @@ func (h *httpSecurity) Logout(logoutUrl string, successHandler ...LogoutSuccessH
 	return h
 }
 
+// FormLogin 配置表单登录功能，可指定登录处理 URL 和可选的默认成功 URL。
+//
+// 参数:
+//   - loginProcessingUrl: 处理登录请求的 URL
+//   - defaultSuccessUrl: 可选的登录成功跳转地址
 func (h *httpSecurity) FormLogin(loginProcessingUrl string, defaultSuccessUrl ...string) HttpSecurity {
 	h.formLoginEnabled = true
 	h.loginProcessingUrl = "/login"
@@ -158,6 +204,7 @@ func (h *httpSecurity) FormLogin(loginProcessingUrl string, defaultSuccessUrl ..
 	return h
 }
 
+// HttpBasic 启用 HTTP Basic 认证。
 func (h *httpSecurity) HttpBasic() HttpSecurity {
 	h.httpBasicEnabled = true
 	h.realmName = "Secured Area"
@@ -174,6 +221,14 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 		h.securityMetadataSource = NewExpressionBasedFilterInvocationSecurityMetadataSource()
 	}
 
+	if source, ok := h.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource); ok {
+		for _, rule := range h.authorizeRules {
+			for _, pattern := range rule.patterns {
+				source.AddMapping(pattern, rule.attrs)
+			}
+		}
+	}
+
 	if h.accessDecisionManager == nil {
 		webExpressionVoter := NewWebExpressionVoter()
 		authenticatedVoter := NewAuthenticatedVoter()
@@ -181,7 +236,7 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 		h.accessDecisionManager = NewAffirmativeBased(webExpressionVoter, authenticatedVoter, roleVoter)
 	}
 
-	h.securityContextHolderFilter = NewSecurityContextHolderFilter(GetSecurityContext())
+	h.securityContextHolderFilter = NewSecurityContextHolderFilter()
 
 	if h.anonymousFilter == nil {
 		h.anonymousFilter = NewAnonymousAuthenticationFilter()
@@ -239,6 +294,9 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	allFilters := make([]SecurityFilter, 0, len(defaultFilters)+len(h.filters))
 	allFilters = append(allFilters, defaultFilters...)
 	allFilters = append(allFilters, h.filters...)
+	sort.SliceStable(allFilters, func(i, j int) bool {
+		return allFilters[i].Order() < allFilters[j].Order()
+	})
 
 	proxy := NewFilterChainProxy(allFilters, &DefaultSecurityFilterChain{})
 	return &securityFilterChainAdapter{proxy: proxy}, nil
@@ -247,14 +305,17 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 // DefaultSecurityFilterChain 默认安全过滤器链
 type DefaultSecurityFilterChain struct{}
 
+// DoFilter 实现 filter.SecurityFilterChain 接口，默认空操作。
 func (c *DefaultSecurityFilterChain) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
 	return nil
 }
 
+// Matches 实现 filter.SecurityFilterChain 接口，默认匹配所有请求。
 func (c *DefaultSecurityFilterChain) Matches(request interface{}) bool {
 	return true
 }
 
+// GetFilters 返回该过滤器链中的所有安全过滤器（默认返回空）。
 func (c *DefaultSecurityFilterChain) GetFilters() []SecurityFilter {
 	return nil
 }
@@ -264,6 +325,7 @@ type httpSecurityAuthorizer struct {
 	httpSecurity *httpSecurity
 }
 
+// AntMatchers 配置匹配指定 URL 模式的授权规则。
 func (a *httpSecurityAuthorizer) AntMatchers(patterns ...string) ExpressionInterceptUrlRegistry {
 	return &expressionInterceptUrlRegistry{
 		httpSecurity: a.httpSecurity,
@@ -271,6 +333,7 @@ func (a *httpSecurityAuthorizer) AntMatchers(patterns ...string) ExpressionInter
 	}
 }
 
+// AnyRequest 配置匹配所有请求的授权规则。
 func (a *httpSecurityAuthorizer) AnyRequest() ExpressionInterceptUrlRegistry {
 	return &expressionInterceptUrlRegistry{
 		httpSecurity: a.httpSecurity,
@@ -284,103 +347,83 @@ type expressionInterceptUrlRegistry struct {
 	patterns     []string
 }
 
+// addRule 记录授权规则，Build 时统一应用到元数据源。
+func (r *expressionInterceptUrlRegistry) addRule(attrs []string) HttpSecurity {
+	if len(r.patterns) == 0 || len(attrs) == 0 {
+		return r.httpSecurity
+	}
+	r.httpSecurity.authorizeRules = append(r.httpSecurity.authorizeRules, authorizeRule{
+		patterns: r.patterns,
+		attrs:    attrs,
+	})
+	return r.httpSecurity
+}
+
+// PermitAll 配置匹配的 URL 模式允许所有访问。
 func (r *expressionInterceptUrlRegistry) PermitAll() HttpSecurity {
-	for _, pattern := range r.patterns {
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{"permitAll"},
-		)
-	}
-	return r.httpSecurity
+	return r.addRule([]string{"permitAll"})
 }
 
+// Authenticated 配置匹配的 URL 模式需要已认证的用户才能访问。
 func (r *expressionInterceptUrlRegistry) Authenticated() HttpSecurity {
-	for _, pattern := range r.patterns {
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{"authenticated"},
-		)
-	}
-	return r.httpSecurity
+	return r.addRule([]string{"authenticated"})
 }
 
+// HasRole 配置匹配的 URL 模式需要指定的角色才能访问。
 func (r *expressionInterceptUrlRegistry) HasRole(role string) HttpSecurity {
-	for _, pattern := range r.patterns {
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{fmt.Sprintf("hasRole('%s')", role)},
-		)
-	}
-	return r.httpSecurity
+	return r.addRule([]string{fmt.Sprintf("hasRole('%s')", role)})
 }
 
+// HasAnyRole 配置匹配的 URL 模式需要任意一个指定角色即可访问。
 func (r *expressionInterceptUrlRegistry) HasAnyRole(roles ...string) HttpSecurity {
-	for _, pattern := range r.patterns {
-		var sb strings.Builder
-		for i, role := range roles {
-			if i > 0 {
-				sb.WriteString("','")
-			}
-			sb.WriteString(role)
+	var sb strings.Builder
+	for i, role := range roles {
+		if i > 0 {
+			sb.WriteString("','")
 		}
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{fmt.Sprintf("hasAnyRole('%s')", sb.String())},
-		)
+		sb.WriteString(role)
 	}
-	return r.httpSecurity
+	return r.addRule([]string{fmt.Sprintf("hasAnyRole('%s')", sb.String())})
 }
 
+// HasAuthority 配置匹配的 URL 模式需要指定的权限才能访问。
 func (r *expressionInterceptUrlRegistry) HasAuthority(authority string) HttpSecurity {
-	for _, pattern := range r.patterns {
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{fmt.Sprintf("hasAuthority('%s')", authority)},
-		)
-	}
-	return r.httpSecurity
+	return r.addRule([]string{fmt.Sprintf("hasAuthority('%s')", authority)})
 }
 
+// HasAnyAuthority 配置匹配的 URL 模式需要任意一个指定权限即可访问。
 func (r *expressionInterceptUrlRegistry) HasAnyAuthority(authorities ...string) HttpSecurity {
-	for _, pattern := range r.patterns {
-		var sb strings.Builder
-		for i, auth := range authorities {
-			if i > 0 {
-				sb.WriteString("','")
-			}
-			sb.WriteString(auth)
+	var sb strings.Builder
+	for i, auth := range authorities {
+		if i > 0 {
+			sb.WriteString("','")
 		}
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{fmt.Sprintf("hasAnyAuthority('%s')", sb.String())},
-		)
+		sb.WriteString(auth)
 	}
-	return r.httpSecurity
+	return r.addRule([]string{fmt.Sprintf("hasAnyAuthority('%s')", sb.String())})
 }
 
+// DenyAll 配置匹配的 URL 模式拒绝所有访问。
 func (r *expressionInterceptUrlRegistry) DenyAll() HttpSecurity {
-	for _, pattern := range r.patterns {
-		r.httpSecurity.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource).AddMapping(
-			pattern,
-			[]string{"denyAll"},
-		)
-	}
-	return r.httpSecurity
+	return r.addRule([]string{"denyAll"})
 }
 
 // WebSecurity Web安全配置入口
 type WebSecurity struct{}
 
+// NewWebSecurity 创建 Web 安全配置入口实例。
 func NewWebSecurity() *WebSecurity {
 	return &WebSecurity{}
 }
 
+// HttpSecurity 创建一个新的 HttpSecurity 构建器实例。
 func (w *WebSecurity) HttpSecurity() *httpSecurity {
 	return &httpSecurity{
 		filters: make([]SecurityFilter, 0),
 	}
 }
 
+// Build 构建安全过滤器链（WebSecurity 的 Build 方法仅用作占位）。
 func (w *WebSecurity) Build() (SecurityFilterChain, error) {
 	return nil, fmt.Errorf("use HttpSecurity().Build() instead")
 }

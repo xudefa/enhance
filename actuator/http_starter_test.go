@@ -1,8 +1,10 @@
 package actuator
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/xudefa/enhance/config/environment"
@@ -50,6 +52,46 @@ func TestHttpEndpointRegistryAdapter(t *testing.T) {
 
 	if registry.HasEndpoint("/actuator/nonexistent") {
 		t.Error("Expected endpoint to not be registered")
+	}
+}
+
+func TestHttpEndpointRegistryAdapter_Concurrent(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	registry := NewHttpEndpointRegistryAdapter(&StdHttpHandlerRegistry{Mux: mux})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+
+	const workers = 32
+	const pathsPerWorker = 100
+
+	var wg sync.WaitGroup
+	wg.Add(workers * 2)
+
+	for i := 0; i < workers; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < pathsPerWorker; j++ {
+				path := fmt.Sprintf("/actuator/worker-%d/%d", id, j)
+				registry.RegisterEndpoint(http.MethodGet, path, handler)
+			}
+		}(i)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < pathsPerWorker; j++ {
+				path := fmt.Sprintf("/actuator/worker-%d/%d", id, j)
+				_ = registry.HasEndpoint(path)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i := 0; i < workers; i++ {
+		path := fmt.Sprintf("/actuator/worker-%d/%d", i, 0)
+		if !registry.HasEndpoint(path) {
+			t.Errorf("expected endpoint %s to be registered", path)
+		}
 	}
 }
 

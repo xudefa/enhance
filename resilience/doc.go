@@ -51,6 +51,7 @@ package resilience
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -206,14 +207,14 @@ type Balancer interface {
 	Next(backends []*ServiceInstance) (*ServiceInstance, error)
 }
 
-// Breaker errors.
+// 熔断器错误。
 var (
 	// ErrCircuitOpen 熔断器处于打开状态。
-	ErrCircuitOpen error
+	ErrCircuitOpen = errors.New("circuit breaker is open")
 	// ErrCircuitHalfOpen 熔断器处于半开状态且已达到最大请求数。
-	ErrCircuitHalfOpen error
+	ErrCircuitHalfOpen = errors.New("circuit breaker is half-open")
 	// ErrNoInstances 没有可用实例。
-	ErrNoInstances error
+	ErrNoInstances = errors.New("no instances available")
 	// ErrNoBackends 没有可用后端服务。
-	ErrNoBackends error
+	ErrNoBackends = errors.New("no backends available")
 )

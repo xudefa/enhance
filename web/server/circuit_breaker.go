@@ -22,7 +22,10 @@ func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBrea
 }
 
 // NewCircuitBreakerClient 创建带断路器的 HTTP 客户端。
-func NewCircuitBreakerClient(client *NetClient, opts ...CircuitBreakerOption) *CircuitBreakerClient {
+//
+// 接受任意 HTTPClient（如 *NetClient 或 *RetryableClient），
+// 支持断路器与重试组合使用。
+func NewCircuitBreakerClient(client HTTPClient, opts ...CircuitBreakerOption) *CircuitBreakerClient {
 	cfg := CircuitBreakerConfig{
 		maxFailures:  5,
 		resetTimeout: 30 * time.Second,
@@ -61,6 +64,8 @@ func WithFallback(fn func(ctx context.Context) (*HTTPResponse, error)) CircuitBr
 
 // AllowRequest 判断是否允许请求。
 func (cb *CircuitBreaker) AllowRequest() bool {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	switch cb.state {
 	case CircuitClosed:
 		return true
@@ -78,12 +83,16 @@ func (cb *CircuitBreaker) AllowRequest() bool {
 
 // RecordSuccess 记录成功。
 func (cb *CircuitBreaker) RecordSuccess() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	cb.failures = 0
 	cb.state = CircuitClosed
 }
 
 // RecordFailure 记录失败。
 func (cb *CircuitBreaker) RecordFailure() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	cb.failures++
 	cb.lastFailure = time.Now()
 
@@ -94,6 +103,8 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 // GetState 获取当前状态。
 func (cb *CircuitBreaker) GetState() CircuitState {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	return cb.state
 }
 

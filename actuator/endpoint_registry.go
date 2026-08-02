@@ -3,6 +3,7 @@ package actuator
 import (
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // HttpEndpointRegistry HTTP 端点注册表接口
@@ -72,6 +73,7 @@ type HttpHandlerRegistry interface {
 // 快速获得 HttpEndpointRegistry 的完整功能。
 type HttpEndpointRegistryAdapter struct {
 	registry  HttpHandlerRegistry
+	mu        sync.RWMutex
 	endpoints map[string]bool
 }
 
@@ -96,7 +98,9 @@ func (a *HttpEndpointRegistryAdapter) RegisterEndpoint(method, path string, hand
 		a.registry.Handle(path, handler)
 	}
 
+	a.mu.Lock()
 	a.endpoints[path] = true
+	a.mu.Unlock()
 }
 
 // RegisterEndpoints 批量注册端点
@@ -108,7 +112,9 @@ func (a *HttpEndpointRegistryAdapter) RegisterEndpoints(endpoints []EndpointConf
 
 // HasEndpoint 检查是否已注册指定路径的端点
 func (a *HttpEndpointRegistryAdapter) HasEndpoint(path string) bool {
+	a.mu.RLock()
 	_, exists := a.endpoints[path]
+	a.mu.RUnlock()
 	return exists
 }
 

@@ -77,17 +77,14 @@ func (b *HTTPClientBuilder) Build() (HTTPClient, error) {
 	}
 
 	if b.retryConfig != nil {
-		retryableClient := NewRetryableClient(client,
+		retryOpts := []RetryOption{
 			WithMaxAttempts(b.retryConfig.maxAttempts),
 			WithRetryStrategy(b.retryConfig.strategy),
-		)
-		if b.retryConfig.onRetry != nil {
-			retryableClient = NewRetryableClient(client,
-				WithMaxAttempts(b.retryConfig.maxAttempts),
-				WithRetryStrategy(b.retryConfig.strategy),
-				WithOnRetry(b.retryConfig.onRetry),
-			)
 		}
+		if b.retryConfig.onRetry != nil {
+			retryOpts = append(retryOpts, WithOnRetry(b.retryConfig.onRetry))
+		}
+		retryableClient := NewRetryableClient(client, retryOpts...)
 		return retryableClient, nil
 	}
 

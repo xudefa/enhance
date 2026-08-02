@@ -18,6 +18,7 @@ type mockWriter struct{}
 func (m *mockWriter) SetStatusCode(code int)      {}
 func (m *mockWriter) SetHeader(key, value string) {}
 func (m *mockWriter) Write(data []byte) error     { return nil }
+func (m *mockWriter) Context() context.Context    { return context.Background() }
 
 func TestLogger_Interface(t *testing.T) {
 	t.Parallel()

@@ -44,7 +44,7 @@ func (c *ZerologAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Zerolog 配置失败: %w", err)
+		return fmt.Errorf("failed to load Zerolog config: %w", err)
 	}
 
 	zerologLogger := c.buildZerolog(cfg)
@@ -52,11 +52,11 @@ func (c *ZerologAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 	// 注册 Zerolog 适配器到 IoC 容器（标记为 Primary，确保其他组件优先获取到 zerolog）
 	// 使用 Register 泛型函数确保 ConcreteType 是 log.Logger 接口类型，而不是 *ZerologLogger 具体类型
 	if err := ctx.Container().RegisterInstance(zerologLogger, reflect.TypeOf(zerologLogger)); err != nil {
-		return fmt.Errorf("注册 Zerolog Logger 失败: %w", err)
+		return fmt.Errorf("failed to register Zerolog Logger: %w", err)
 	}
 
 	// 注册后使用刚创建的 zerolog 实例打印日志
-	zerologLogger.Info(context.Background(), "Zerolog 日志器已注册",
+	zerologLogger.Info(ctx.Context(), "Zerolog logger registered",
 		log.KeyValue{Key: LogFieldLevel, Value: cfg.Level},
 		log.KeyValue{Key: LogFieldFormat, Value: cfg.Format},
 		log.KeyValue{Key: LogFieldOutput, Value: cfg.OutputPath},
@@ -86,7 +86,7 @@ func (c *ZerologAutoConfiguration) loadConfig(env *environment.Environment) (*Ze
 	}
 
 	if err := env.BindPrefix("log.zerolog", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Zerolog 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Zerolog config: %w", err)
 	}
 
 	return cfg, nil
@@ -96,12 +96,14 @@ func (c *ZerologAutoConfiguration) loadConfig(env *environment.Environment) (*Ze
 func (c *ZerologAutoConfiguration) buildZerolog(cfg *ZerologConfig) log.Logger {
 	// 设置输出
 	var output io.Writer = os.Stdout
+	var file *os.File
 	if cfg.OutputPath != "" {
 		f, err := os.OpenFile(cfg.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			fmt.Printf("[Zerolog] 警告: 打开日志文件失败，使用 stdout: path=%s, error=%v\n", cfg.OutputPath, err)
+			fmt.Printf("[Zerolog] warning: failed to open log file, using stdout: path=%s, error=%v\n", cfg.OutputPath, err)
 		} else {
 			output = f
+			file = f
 		}
 	}
 
@@ -139,6 +141,7 @@ func (c *ZerologAutoConfiguration) buildZerolog(cfg *ZerologConfig) log.Logger {
 		format:    cfg.Format,
 		addSource: cfg.AddSource,
 		output:    output,
+		file:      file,
 	}
 }
 
@@ -149,6 +152,7 @@ type ZerologLogger struct {
 	format    string
 	addSource bool
 	output    io.Writer
+	file      *os.File
 }
 
 // Debug 记录调试日志。
@@ -193,6 +197,14 @@ func (l *ZerologLogger) Sync() error {
 	return nil
 }
 
+// Close 关闭日志文件。
+func (l *ZerologLogger) Close() error {
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
+}
+
 // With 返回带有额外字段的日志记录器。
 func (l *ZerologLogger) With(ctx context.Context, keys ...log.KeyValue) log.Logger {
 	contextLogger := l.logger.With()
@@ -205,6 +217,7 @@ func (l *ZerologLogger) With(ctx context.Context, keys ...log.KeyValue) log.Logg
 		format:    l.format,
 		addSource: l.addSource,
 		output:    l.output,
+		file:      l.file,
 	}
 }
 

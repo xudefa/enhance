@@ -120,8 +120,8 @@ type Container interface { ... }
 type DefaultContainer struct { ... }
 type BeanDefinition = map[string]any
 
-// 6. 构造函数
-func New(opts ...Option) Container { ... }
+// 6. 构造函数（返回接口类型）
+func NewContainer() Container { ... }
 
 // 7. 公共方法（按字母或逻辑分组）
 func (c *DefaultContainer) Get(name string) (any, error) { ... }
@@ -142,7 +142,37 @@ func validateName(name string) error { ... }
 | 单个函数 | ≤ 50 行 | 超过时提取子函数 |
 | 单个类型方法 | ≤ 200 行 | 超过时考虑拆分类型 |
 
-### 3.3 导入规范
+### 3.3 doc.go 文件规范
+
+> **核心规则**：`doc.go` 是包的"门面文件"，只包含接口定义、类型定义和包文档，不包含任何实现逻辑。
+
+#### 内容清单
+
+**必须包含**：
+- 包级 godoc 注释
+- 所有对外暴露的接口定义
+- 公共结构体定义（不含方法实现）
+- 类型别名、枚举常量、错误变量
+
+**禁止包含**：
+- ❌ 任何函数实现（构造函数除外）
+- ❌ 接口方法的具体实现
+- ❌ 业务逻辑代码
+
+#### 文件拆分规则
+
+```
+cache/
+├── doc.go          # 接口定义 + 公共类型（≤ 500 行）
+├── lru.go          # LRUCache 实现
+├── builder.go      # Builder 实现
+└── cache_test.go   # 测试文件
+```
+
+- `doc.go` ≤ 500 行：所有类型定义放在 `doc.go`
+- `doc.go` > 500 行：创建 `types.go` 文件分担部分类型定义
+
+### 3.4 导入规范
 
 ```go
 import (
@@ -182,19 +212,24 @@ import (
 ### 4.2 包注释
 
 ```go
-// Package core 提供了一个轻量级的依赖注入（DI）容器实现，灵感来自 Spring Framework 的 IoC 容器。
+// Package core 提供了一个类型安全的依赖注入（DI）容器实现，灵感来自 Spring Framework 的 IoC 容器。
 //
 // # 核心功能
 //
-//   - Bean 注册：支持通过实例、工厂函数或类型注册 Bean
-//   - 依赖注入：支持字段注入（通过 inject 标签）和构造函数注入
+//   - 编译期类型安全：通过泛型函数 Register[T]/Get[T] 在编译期检查 Bean 类型
+//   - 零反射注册：用户 API 层完全避免反射，仅在容器内部使用 reflect.Type 存储类型信息
+//   - 函数式依赖：通过工厂函数显式声明依赖关系
 //   - 作用域管理：支持单例（Singleton）和原型（Prototype）作用域
 //
 // # 快速开始
 //
-//	c := core.New()
-//	c.Register(reflect.TypeOf(&MyService{}), core.Bean(&MyService{}))
-//	svc := core.MustGetBean[*MyService](c)
+//	container := core.NewContainer()
+//	core.Register[*UserService](container,
+//	    core.WithFactory[*UserService](func(c ...any) (any, error) {
+//	        return &UserService{}, nil
+//	    }),
+//	)
+//	svc := core.MustGet[*UserService](container, "")
 //
 // # 设计原则
 //
@@ -670,10 +705,25 @@ result, err := service.DoSomething(ctx)
 | 原则 | 说明 | 示例 |
 |------|------|------|
 | 接口隔离 | 小接口优于大接口 | `io.Reader`, `io.Writer` |
-| 接受接口，返回具体 | 参数用接口，返回值用具体类型 | `func Process(r io.Reader) (*Result, error)` |
+| 通过组合形成大接口 | 小接口组合形成大接口 | `Container` 嵌入 `BeanGet` + `BeanRegister` |
 | 避免预先定义 | 需要时再定义接口 | 不要一开始就定义大接口 |
+| 构造函数返回接口 | 隐藏实现细节 | `func NewContainer() Container` |
 
-### 10.2 接口示例
+### 10.2 实现隐藏规范
+
+```go
+// ✅ 正确：构造函数返回接口类型
+func NewContainer() Container {
+    return &defaultContainer{...}
+}
+
+// ❌ 错误：构造函数返回具体结构体指针
+func NewContainer() *defaultContainer {
+    return &defaultContainer{...}
+}
+```
+
+### 10.3 接口示例
 
 ```go
 // ✅ 正确：小接口
@@ -749,46 +799,42 @@ type Container[T any, U comparable, V ~int] struct {
 ### 12.1 表驱动测试
 
 ```go
-func TestCalculateDiscount(t *testing.T) {
+func TestContainer_Get_NotFound(t *testing.T) {
     t.Parallel()
     
-    tests := []struct {
-        name        string
-        basePrice   float64
-        quantity    int
-        tiers       []DiscountTier
-        expected    float64
-        expectError bool
-    }{
-        {
-            name:      "normal calculation",
-            basePrice: 100.0,
-            quantity:  10,
-            expected:  95.0,
-        },
-        {
-            name:        "negative price returns error",
-            basePrice:   -1.0,
-            quantity:    10,
-            expectError: true,
-        },
+    container := core.NewContainer()
+    
+    _, err := core.GetByName[*UserService](container, "nonexistent")
+    
+    if err == nil {
+        t.Error("Expected error for nonexistent bean")
     }
+    if err != core.ErrBeanNotFound {
+        t.Errorf("Expected ErrBeanNotFound, got %v", err)
+    }
+}
 
-    for _, tt := range tests {
-        tt := tt
-        t.Run(tt.name, func(t *testing.T) {
-            t.Parallel()
-            
-            result, err := CalculateDiscount(tt.basePrice, tt.quantity, tt.tiers)
-
-            if tt.expectError {
-                assert.Error(t, err)
-                return
-            }
-
-            assert.NoError(t, err)
-            assert.Equal(t, tt.expected, result)
-        })
+func TestContainer_Register_WithFactory(t *testing.T) {
+    t.Parallel()
+    
+    container := core.NewContainer()
+    
+    err := core.Register[*UserService](container,
+        core.WithName[*UserService]("testService"),
+        core.WithFactory[*UserService](func(c ...any) (any, error) {
+            return &UserService{Name: "test"}, nil
+        }),
+    )
+    if err != nil {
+        t.Fatalf("Register failed: %v", err)
+    }
+    
+    svc, err := core.GetByName[*UserService](container, "testService")
+    if err != nil {
+        t.Fatalf("GetByName failed: %v", err)
+    }
+    if svc.Name != "test" {
+        t.Errorf("Expected name 'test', got %q", svc.Name)
     }
 }
 ```
@@ -883,20 +929,31 @@ func getCachedType(t reflect.Type) reflect.Type {
 
 ```go
 func BenchmarkContainer_Register(b *testing.B) {
-    c := core.New()
+    c := core.NewContainer()
     b.ResetTimer() // 重置计时器，排除初始化时间
     for i := 0; i < b.N; i++ {
-        c.Register(fmt.Sprintf("bean-%d", i), core.Bean(&MockService{}))
+        name := fmt.Sprintf("bean-%d", i)
+        _ = core.Register[*MockService](c,
+            core.WithName[*MockService](name),
+            core.WithFactory[*MockService](func(c ...any) (any, error) {
+                return &MockService{}, nil
+            }),
+        )
     }
 }
 
 func BenchmarkContainer_Get(b *testing.B) {
-    c := core.New()
-    c.Register("test", core.Bean(&MockService{}))
+    c := core.NewContainer()
+    _ = core.Register[*MockService](c,
+        core.WithName[*MockService]("test"),
+        core.WithFactory[*MockService](func(c ...any) (any, error) {
+            return &MockService{}, nil
+        }),
+    )
     
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
-        _, _ = c.Get("test")
+        _, _ = core.GetByName[*MockService](c, "test")
     }
 }
 

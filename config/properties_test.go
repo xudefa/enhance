@@ -184,6 +184,60 @@ func TestBindProperties_WithPrefix(t *testing.T) {
 	}
 }
 
+func TestBindProperties_IntOverflow(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityNormal, map[string]any{
+		"server.small": 300,
+	}))
+
+	type TestConfig struct {
+		Small int8 `enhance:"server.small"`
+	}
+
+	cfg := &TestConfig{}
+	err := BindProperties(cfg, env)
+	if err == nil {
+		t.Fatal("expected error for int8 overflow (300)")
+	}
+}
+
+func TestBindProperties_UintNegative(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityNormal, map[string]any{
+		"server.count": -1.0,
+	}))
+
+	type TestConfig struct {
+		Count uint `enhance:"server.count"`
+	}
+
+	cfg := &TestConfig{}
+	err := BindProperties(cfg, env)
+	if err == nil {
+		t.Fatal("expected error for negative float64 bound to uint")
+	}
+}
+
+func TestBindProperties_UintOverflow(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityNormal, map[string]any{
+		"server.count": 70000.0,
+	}))
+
+	type TestConfig struct {
+		Count uint16 `enhance:"server.count"`
+	}
+
+	cfg := &TestConfig{}
+	err := BindProperties(cfg, env)
+	if err == nil {
+		t.Fatal("expected error for uint16 overflow (70000)")
+	}
+}
+
 func TestBindProperties_InvalidTarget(t *testing.T) {
 	t.Parallel()
 	env := environment.NewEnvironment()

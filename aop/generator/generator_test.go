@@ -601,3 +601,106 @@ type UserService interface {
 		fmt.Println(output)
 	}
 }
+
+// TestGenerator_StaticMode_ImportsAop 验证 static 模式生成的代码包含 aop 导入。
+func TestGenerator_StaticMode_ImportsAop(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	serviceFile := filepath.Join(tmpDir, "service.go")
+	contentStr := `package service
+
+// @Aspect(order=1)
+type LoggingAspect struct {}
+
+// @Before("UserService.GetUser")
+func (a *LoggingAspect) LogBefore(jp aop.JoinPoint) {}
+
+// @AopProxy
+type UserService struct {}
+
+func (s *UserService) GetUser(id int) (*User, error) {
+	return nil, nil
+}
+`
+
+	if err := os.WriteFile(serviceFile, []byte(contentStr), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	gen, err := NewGenerator()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := gen.Generate(tmpDir, "static"); err != nil {
+		t.Fatal(err)
+	}
+
+	contentBytes, err := os.ReadFile(filepath.Join(tmpDir, "service_proxy.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(contentBytes), `"github.com/xudefa/enhance/aop"`) {
+		t.Error("static mode generated code must import the aop package")
+	}
+}
+
+// TestGenerator_InterfaceProxy_AllModes 验证接口代理在三种模式下生成可编译代码。
+//
+// 回归保护：接口代理不能生成 `*Interface`（指向接口的指针）或 `&Interface{}` 字面量。
+func TestGenerator_InterfaceProxy_AllModes(t *testing.T) {
+	t.Parallel()
+
+	contentStr := `package service
+
+// @Aspect(order=1)
+type LoggingAspect struct {}
+
+// @Before("UserService.GetUser")
+func (a *LoggingAspect) LogBefore(jp aop.JoinPoint) {}
+
+// @ProxyInterface
+type UserService interface {
+	GetUser(id int) (*User, error)
+}
+
+type User struct { Name string }
+`
+
+	for _, mode := range []string{"simple", "aop", "static"} {
+		mode := mode
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			serviceFile := filepath.Join(dir, "service.go")
+			if err := os.WriteFile(serviceFile, []byte(contentStr), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			gen, err := NewGenerator()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := gen.Generate(dir, mode); err != nil {
+				t.Fatalf("Generate(%s) error = %v", mode, err)
+			}
+
+			contentBytes, err := os.ReadFile(filepath.Join(dir, "service_proxy.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			output := string(contentBytes)
+
+			if strings.Contains(output, "Target *UserService") {
+				t.Error("interface proxy must not declare a pointer-to-interface field")
+			}
+			if strings.Contains(output, "&UserService{}") {
+				t.Error("interface proxy must not create an interface composite literal")
+			}
+		})
+	}
+}

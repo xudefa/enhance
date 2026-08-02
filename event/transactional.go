@@ -64,7 +64,7 @@ func (e *TransactionalEvent) Event() ApplicationEvent {
 // 线程安全，支持并发注册事件。
 // 使用分段锁设计，减少高并发场景下的锁竞争。
 type TransactionContext struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	committed     bool
 	rolledBack    bool
 	afterCommit   []ApplicationEvent // 提交后发布的事件
@@ -117,9 +117,9 @@ func (tc *TransactionContext) Commit(bus *EventBus) {
 	// 快照事件列表，释放锁后再发布
 	beforeCommit := tc.beforeCommit
 	afterCommit := tc.afterCommit
-	tc.beforeCommit = nil
-	tc.afterCommit = nil
-	tc.afterRollback = nil
+	tc.beforeCommit = make([]ApplicationEvent, 0)
+	tc.afterCommit = make([]ApplicationEvent, 0)
+	tc.afterRollback = make([]ApplicationEvent, 0)
 	tc.mu.Unlock()
 
 	// 发布 BeforeCommit 事件（在锁外执行）
@@ -146,9 +146,9 @@ func (tc *TransactionContext) Rollback(bus *EventBus) {
 
 	// 快照事件列表，释放锁后再发布
 	afterRollback := tc.afterRollback
-	tc.beforeCommit = nil
-	tc.afterCommit = nil
-	tc.afterRollback = nil
+	tc.beforeCommit = make([]ApplicationEvent, 0)
+	tc.afterCommit = make([]ApplicationEvent, 0)
+	tc.afterRollback = make([]ApplicationEvent, 0)
 	tc.mu.Unlock()
 
 	// 发布 AfterRollback 事件（在锁外执行）
@@ -159,15 +159,15 @@ func (tc *TransactionContext) Rollback(bus *EventBus) {
 
 // IsCommitted 返回事务是否已提交
 func (tc *TransactionContext) IsCommitted() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
 	return tc.committed
 }
 
 // IsRolledBack 返回事务是否已回滚
 func (tc *TransactionContext) IsRolledBack() bool {
-	tc.mu.Lock()
-	defer tc.mu.Unlock()
+	tc.mu.RLock()
+	defer tc.mu.RUnlock()
 	return tc.rolledBack
 }
 

@@ -3,8 +3,11 @@ package email
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"mime/multipart"
 	"net/smtp"
+	"net/textproto"
 	"os"
 	"strings"
 )
@@ -15,7 +18,6 @@ type smtpSender struct {
 	port     int
 	username string
 	password string
-	auth     smtp.Auth
 }
 
 // WithHost 设置 SMTP 主机地址。
@@ -42,7 +44,6 @@ func WithAuth(username, password string) SenderOption {
 		if impl, ok := s.(*smtpSender); ok {
 			impl.username = username
 			impl.password = password
-			impl.auth = smtp.PlainAuth("", username, password, impl.host)
 		}
 	}
 }
@@ -52,12 +53,13 @@ func WithPasswordFromEnv() SenderOption {
 	return func(s Sender) {
 		if impl, ok := s.(*smtpSender); ok {
 			impl.password = os.Getenv(EnvPasswordKey)
-			impl.auth = smtp.PlainAuth("", impl.username, impl.password, impl.host)
 		}
 	}
 }
 
 // NewSender 创建邮件发送器。
+// 注意：密码在构造时从环境变量读取一次并缓存，后续环境变量变更不会自动更新。
+// 如需动态读取密码，请使用 WithPasswordFromEnv 选项或 WithAuth 选项。
 func NewSender(opts ...SenderOption) Sender {
 	s := &smtpSender{
 		host:     DefaultSMTPHost,
@@ -71,28 +73,47 @@ func NewSender(opts ...SenderOption) Sender {
 		opt(s)
 	}
 
-	if s.password != "" && s.auth == nil {
-		s.auth = smtp.PlainAuth("", s.username, s.password, s.host)
-	}
-
 	return s
+}
+
+// buildAuth 构建 SMTP 认证信息。
+//
+// 延迟到发送时构建，确保使用最终的 host 值，避免选项应用顺序导致的认证配置不一致。
+func (s *smtpSender) buildAuth() smtp.Auth {
+	if s.username == "" || s.password == "" {
+		return nil
+	}
+	return smtp.PlainAuth("", s.username, s.password, s.host)
 }
 
 // Send 发送邮件。
 func (s *smtpSender) Send(ctx context.Context, msg *Message) error {
+	if msg == nil {
+		return fmt.Errorf("message is nil")
+	}
 	if s.host == "" {
 		return fmt.Errorf("SMTP host not configured")
 	}
 
-	if msg.From == "" {
-		msg.From = s.username
+	from := msg.From
+	if from == "" {
+		from = s.username
+	}
+	if from == "" {
+		return fmt.Errorf("sender address is required: set Message.From or configure a default sender")
 	}
 
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 
-	body := s.buildMessage(msg)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 
-	err := smtp.SendMail(addr, s.auth, msg.From, msg.To, []byte(body))
+	body := s.buildMessage(msg, from)
+
+	err := smtp.SendMail(addr, s.buildAuth(), from, msg.To, []byte(body))
 	if err != nil {
 		return fmt.Errorf("failed to send email: %w", err)
 	}
@@ -105,17 +126,18 @@ func (s *smtpSender) Close() error {
 	return nil
 }
 
-func (s *smtpSender) buildMessage(msg *Message) string {
+func (s *smtpSender) buildMessage(msg *Message, from string) string {
 	headers := make(map[string]string)
 
-	if msg.From != "" {
-		headers["From"] = msg.From
+	if from != "" {
+		headers["From"] = from
 	}
 	if len(msg.To) > 0 {
 		headers["To"] = joinAddresses(msg.To)
 	}
 	if msg.Subject != "" {
-		headers["Subject"] = msg.Subject
+		subject := strings.NewReplacer("\r", "", "\n", "").Replace(msg.Subject)
+		headers["Subject"] = subject
 	}
 	headers["MIME-Version"] = "1.0"
 
@@ -123,22 +145,78 @@ func (s *smtpSender) buildMessage(msg *Message) string {
 		headers[k] = v
 	}
 
+	if len(msg.Attachments) > 0 {
+		return s.buildMultipartMessage(msg, headers)
+	}
+
+	if msg.HTML != "" {
+		headers["Content-Type"] = "text/html; charset=UTF-8"
+	} else {
+		headers["Content-Type"] = "text/plain; charset=UTF-8"
+	}
+
 	var builder strings.Builder
 	for k, v := range headers {
 		fmt.Fprintf(&builder, "%s: %s\r\n", k, v)
 	}
-
 	builder.WriteString("\r\n")
 
 	if msg.HTML != "" {
-		builder.WriteString("Content-Type: text/html; charset=UTF-8\r\n\r\n")
 		builder.WriteString(msg.HTML)
-		return builder.String()
+	} else {
+		builder.WriteString(msg.Body)
 	}
-	builder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-	builder.WriteString(msg.Body)
 
 	return builder.String()
+}
+
+func (s *smtpSender) buildMultipartMessage(msg *Message, headers map[string]string) string {
+	var headersBuf strings.Builder
+	var bodyBuf strings.Builder
+
+	mp := multipart.NewWriter(&bodyBuf)
+
+	contentType := "text/plain; charset=UTF-8"
+	if msg.HTML != "" {
+		contentType = "text/html; charset=UTF-8"
+	}
+
+	headers["Content-Type"] = fmt.Sprintf(`multipart/mixed; boundary="%s"`, mp.Boundary())
+
+	for k, v := range headers {
+		fmt.Fprintf(&headersBuf, "%s: %s\r\n", k, v)
+	}
+	headersBuf.WriteString("\r\n")
+
+	bodyContent := msg.Body
+	if msg.HTML != "" {
+		bodyContent = msg.HTML
+	}
+	part, err := mp.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {contentType},
+		"Content-Transfer-Encoding": {"7bit"},
+	})
+	if err == nil {
+		_, _ = part.Write([]byte(bodyContent))
+	}
+
+	for _, a := range msg.Attachments {
+		encoded := base64.StdEncoding.EncodeToString(a.Data)
+		part, err := mp.CreatePart(textproto.MIMEHeader{
+			"Content-Type":              {a.ContentType},
+			"Content-Disposition":       {fmt.Sprintf(`attachment; filename="%s"`, a.Filename)},
+			"Content-Transfer-Encoding": {"base64"},
+		})
+		if err != nil {
+			continue
+		}
+		_, _ = part.Write([]byte(encoded))
+	}
+
+	_ = mp.Close()
+
+	headersBuf.WriteString(bodyBuf.String())
+	return headersBuf.String()
 }
 
 func joinAddresses(addresses []string) string {

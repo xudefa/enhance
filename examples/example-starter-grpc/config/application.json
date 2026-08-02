@@ -1,0 +1,9 @@
+{
+  "grpc": {
+    "enabled": true,
+    "port": 9090,
+    "enable_reflection": true,
+    "max_recv_msg_size": 4194304,
+    "max_send_msg_size": 4194304
+  }
+}

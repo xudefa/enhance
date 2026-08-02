@@ -1,0 +1,15 @@
+{
+  "rabbitmq": {
+    "enabled": true,
+    "host": "localhost",
+    "port": 5672,
+    "username": "guest",
+    "password": "guest",
+    "vhost": "/",
+    "queue_name": "enhance-queue",
+    "exchange": "",
+    "routing_key": "enhance-key",
+    "durable": true,
+    "auto_delete": false
+  }
+}

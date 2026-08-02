@@ -24,6 +24,7 @@ type JdkDynamicProxy struct {
 	target      any
 	handler     InvocationHandler
 	iface       reflect.Type
+	advisors    []aop.Advisor
 	methodCache map[string]reflect.Method
 	cacheMu     sync.RWMutex
 }
@@ -44,7 +45,7 @@ type JdkDynamicProxy struct {
 //	proxy := proxy.NewJdkDynamicProxy(svc, reflect.TypeOf((*TestService)(nil)).Elem(), handler)
 //
 // panic: 如果 target 或 iface 为 nil
-func NewJdkDynamicProxy(target any, iface reflect.Type, handler InvocationHandler) *JdkDynamicProxy {
+func NewJdkDynamicProxy(target any, iface reflect.Type, handler InvocationHandler, advisors ...aop.Advisor) *JdkDynamicProxy {
 	if target == nil {
 		panic("proxy: target cannot be nil")
 	}
@@ -63,6 +64,7 @@ func NewJdkDynamicProxy(target any, iface reflect.Type, handler InvocationHandle
 		target:      target,
 		handler:     handler,
 		iface:       iface,
+		advisors:    advisors,
 		methodCache: make(map[string]reflect.Method),
 	}
 }
@@ -165,6 +167,15 @@ func (p *JdkDynamicProxy) InvokeMethod(name string, args []any) (any, error) {
 	case 0:
 		return nil, nil
 	case 1:
+		// 单个 error 返回值必须作为错误返回，而非普通结果
+		if results[0].Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			if results[0].IsValid() && (!isNilable(results[0]) || !results[0].IsNil()) {
+				if err, ok := results[0].Interface().(error); ok {
+					return nil, err
+				}
+			}
+			return nil, nil
+		}
 		if isNilable(results[0]) && results[0].IsNil() {
 			return nil, nil
 		}
@@ -173,12 +184,26 @@ func (p *JdkDynamicProxy) InvokeMethod(name string, args []any) (any, error) {
 		if len(results) == 2 && results[1].Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 			var errVal error
 			if results[1].IsValid() && (!isNilable(results[1]) || !results[1].IsNil()) {
-				errVal = results[1].Interface().(error)
+				errVal, _ = results[1].Interface().(error)
 			}
 			if isNilable(results[0]) && results[0].IsNil() {
 				return nil, errVal
 			}
 			return results[0].Interface(), errVal
+		}
+		// 多个返回值且末尾为 error 时，拆分结果与错误
+		if results[len(results)-1].Type().Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			var errVal error
+			if results[len(results)-1].IsValid() && (!isNilable(results[len(results)-1]) || !results[len(results)-1].IsNil()) {
+				errVal, _ = results[len(results)-1].Interface().(error)
+			}
+			ret := make([]any, len(results)-1)
+			for i, r := range results[:len(results)-1] {
+				if r.IsValid() && (!isNilable(r) || !r.IsNil()) {
+					ret[i] = r.Interface()
+				}
+			}
+			return ret, errVal
 		}
 		ret := make([]any, len(results))
 		for i, r := range results {
@@ -213,7 +238,7 @@ func (p *JdkDynamicProxy) Target() any {
 }
 
 // AdvisedAdvisors 获取已应用的通知器列表。
-// 实现 Proxy 接口。JdkDynamicProxy 不直接管理 advisors，返回空切片。
+// 实现 Proxy 接口。
 func (p *JdkDynamicProxy) AdvisedAdvisors() []aop.Advisor {
-	return nil
+	return p.advisors
 }

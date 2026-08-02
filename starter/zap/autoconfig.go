@@ -35,13 +35,13 @@ func (c *ZapAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Zap 配置失败: %w", err)
+		return fmt.Errorf("failed to load Zap config: %w", err)
 	}
 
 	logger := c.buildZap(cfg)
 
 	if err := ctx.Container().RegisterInstance(logger, reflect.TypeFor[log.Logger]()); err != nil {
-		return fmt.Errorf("注册 Zap Logger 失败: %w", err)
+		return fmt.Errorf("failed to register Zap Logger: %w", err)
 	}
 
 	return nil
@@ -143,7 +143,7 @@ func (c *ZapAutoConfiguration) loadConfig(env *environment.Environment) (*ZapCon
 	}
 
 	if err := env.BindPrefix("log.zap", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Zap 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Zap config: %w", err)
 	}
 
 	return cfg, nil

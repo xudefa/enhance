@@ -1,0 +1,9 @@
+{
+  "cobra": {
+    "enabled": true,
+    "use": "myapp",
+    "short": "A sample CLI application",
+    "long": "A sample CLI application built with enhance framework and cobra starter",
+    "version": "1.0.0"
+  }
+}

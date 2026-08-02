@@ -2,7 +2,6 @@
 package fiber
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -57,7 +56,7 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Fiber 配置失败: %w", err)
+		return fmt.Errorf("failed to load Fiber config: %w", err)
 	}
 
 	c.config = cfg
@@ -65,7 +64,7 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 尝试从容器获取已存在的 Fiber App 实例，如果不存在则创建默认的
 	if app, err := core.GetByName[*fiber.App](container, ""); err == nil {
 		c.app = app
-		c.logger.Info(context.Background(), "使用容器中已存在的 Fiber App 实例")
+		c.logger.Info(ctx.Context(), "using existing Fiber App instance from container")
 	} else {
 		c.app = fiber.New(fiber.Config{
 			Prefork:       cfg.Prefork,
@@ -85,7 +84,7 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.app.Use(TracingMiddleware(tracer))
-		c.logger.Info(context.Background(), "Fiber Tracing 中间件已启用")
+		c.logger.Info(ctx.Context(), "Fiber tracing middleware enabled")
 	}
 
 	// 检查 App 是否已注册（由外部传入）
@@ -95,25 +94,25 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*FiberConfig]()); err != nil {
-		return fmt.Errorf("注册 Fiber Config 失败: %w", err)
+		return fmt.Errorf("failed to register Fiber Config: %w", err)
 	}
 
 	// 如果 App 已存在，跳过注册
 	if !appAlreadyRegistered {
 		if err := container.RegisterInstance(c.app, reflect.TypeFor[*fiber.App]()); err != nil {
-			return fmt.Errorf("注册 Fiber App 失败: %w", err)
+			return fmt.Errorf("failed to register Fiber App: %w", err)
 		}
 	}
 
 	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点到 Fiber
 	endpointRegistry := NewFiberEndpointRegistry(c.app)
 	if err := container.RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-		c.logger.Warn(context.Background(), "注册 HttpEndpointRegistry 失败,Actuator 端点将无法自动挂载",
+		c.logger.Warn(ctx.Context(), "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
 
-	c.logger.Info(context.Background(), "Fiber Web 服务器已配置",
+	c.logger.Info(ctx.Context(), "Fiber Web server configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "host", Value: cfg.Host},
 	)
@@ -125,17 +124,17 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 // Start 启动 Fiber Web 服务器。
 func (c *FiberAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.app == nil || c.config == nil {
-		return fmt.Errorf("Fiber Web Server 未初始化")
+		return fmt.Errorf("Fiber Web Server not initialized")
 	}
 	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
-	c.logger.Info(context.Background(), "Fiber Web 服务器启动中",
+	c.logger.Info(ctx.Context(), "Fiber Web server starting",
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
 	// 在后台启动服务器，避免阻塞
 	go func() {
 		if err := c.app.Listen(addr); err != nil {
-			c.logger.Error(context.Background(), "Fiber Web 服务器错误",
+			c.logger.Error(ctx.Context(), "Fiber Web server error",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -174,19 +173,19 @@ func GetApp(container core.Container) (*fiber.App, error) {
 
 // FiberConfig Fiber Web 服务器配置。
 type FiberConfig struct {
-	Enabled       bool   `json:"enabled" value:"${fiber.enabled:false}"`
-	Host          string `json:"host" value:"${fiber.host:0.0.0.0}"`
-	Port          int    `json:"port" value:"${fiber.port:3000}"`
-	Prefork       bool   `json:"prefork" value:"${fiber.prefork:false}"`
-	BodyLimit     int    `json:"body-limit" value:"${fiber.body-limit:4194304}"`
-	Concurrency   int    `json:"concurrency" value:"${fiber.concurrency:262144}"`
-	ReadTimeout   int    `json:"read-timeout" value:"${fiber.read-timeout:0}"`
-	WriteTimeout  int    `json:"write-timeout" value:"${fiber.write-timeout:0}"`
-	IdleTimeout   int    `json:"idle-timeout" value:"${fiber.idle-timeout:0}"`
-	ServerHeader  string `json:"server-header" value:"${fiber.server-header:}"`
-	AppName       string `json:"app-name" value:"${fiber.app-name:}"`
-	CaseSensitive bool   `json:"case-sensitive" value:"${fiber.case-sensitive:false}"`
-	StrictRouting bool   `json:"strict-routing" value:"${fiber.strict-routing:false}"`
+	Enabled       bool   `json:"enabled" mapstructure:"enabled"`
+	Host          string `json:"host" mapstructure:"host"`
+	Port          int    `json:"port" mapstructure:"port"`
+	Prefork       bool   `json:"prefork" mapstructure:"prefork"`
+	BodyLimit     int    `json:"body-limit" mapstructure:"body-limit"`
+	Concurrency   int    `json:"concurrency" mapstructure:"concurrency"`
+	ReadTimeout   int    `json:"read-timeout" mapstructure:"read-timeout"`
+	WriteTimeout  int    `json:"write-timeout" mapstructure:"write-timeout"`
+	IdleTimeout   int    `json:"idle-timeout" mapstructure:"idle-timeout"`
+	ServerHeader  string `json:"server-header" mapstructure:"server-header"`
+	AppName       string `json:"app-name" mapstructure:"app-name"`
+	CaseSensitive bool   `json:"case-sensitive" mapstructure:"case-sensitive"`
+	StrictRouting bool   `json:"strict-routing" mapstructure:"strict-routing"`
 }
 
 // 配置常量。
@@ -199,8 +198,8 @@ const (
 func (c *FiberAutoConfiguration) loadConfig(env *environment.Environment) (*FiberConfig, error) {
 	cfg := &FiberConfig{}
 
-	if err := env.BindProperties(cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Fiber 配置失败: %w", err)
+	if err := env.BindPrefix("fiber", cfg); err != nil {
+		return nil, fmt.Errorf("failed to bind Fiber config: %w", err)
 	}
 
 	return cfg, nil

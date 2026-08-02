@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"sort"
@@ -18,6 +19,7 @@ type Environment struct {
 	sources         []PropertySource          // 配置源列表，按优先级升序排列
 	activeProfiles  []string                  // 当前激活的 Profile 列表
 	configListeners []func(ConfigChangeEvent) // 配置变更监听器
+	wg              sync.WaitGroup            // 跟踪异步通知 goroutine
 }
 
 // NewEnvironment 创建环境配置管理器
@@ -66,15 +68,16 @@ func (e *Environment) AddPropertySource(source PropertySource) {
 
 // AddPropertySourceFirst 添加最高优先级的配置源.
 //
-// 新添加的配置源会插入到配置源列表头部,成为最高优先级的来源.
+// 新添加的配置源会插入到配置源列表末尾，成为最高优先级的来源，
+// 覆盖已有的命令行参数、环境变量等配置源。
 //
 // 参数:
 //   - source: 配置源实例
 func (e *Environment) AddPropertySourceFirst(source PropertySource) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.sources = append([]PropertySource{source}, e.sources...)
-	e.sortSourcesIfNeeded()
+	e.sortSources()
+	e.sources = append(e.sources, source)
 }
 
 // GetPropertySources 获取所有配置源列表.
@@ -165,7 +168,7 @@ func (e *Environment) RemoveProfile(profile string) {
 }
 
 func (e *Environment) sortSources() {
-	sort.Slice(e.sources, func(i, j int) bool {
+	sort.SliceStable(e.sources, func(i, j int) bool {
 		return e.sources[i].Priority() < e.sources[j].Priority()
 	})
 }
@@ -189,7 +192,7 @@ func (e *Environment) sortSourcesIfNeeded() {
 	}
 
 	if !alreadySorted {
-		sort.Slice(e.sources, func(i, j int) bool {
+		sort.SliceStable(e.sources, func(i, j int) bool {
 			return e.sources[i].Priority() < e.sources[j].Priority()
 		})
 	}
@@ -210,6 +213,20 @@ func (e *Environment) notifyConfigChange(event ConfigChangeEvent) {
 	e.mu.RUnlock()
 
 	for _, listener := range listeners {
-		go listener(event) // 异步通知
+		e.wg.Add(1)
+		go func(l func(ConfigChangeEvent)) {
+			defer e.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("[Environment] config listener panic recovered: %v\n", r)
+				}
+			}()
+			l(event)
+		}(listener)
 	}
+}
+
+// Close 等待所有异步通知 goroutine 完成
+func (e *Environment) Close() {
+	e.wg.Wait()
 }

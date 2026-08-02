@@ -16,19 +16,23 @@ import (
 	"github.com/xudefa/enhance/log"
 )
 
+var microAutoConfig = &MicroAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&MicroAutoConfiguration{},
+	boot.RegisterAutoConfigWith(microAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(MicroEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityBusinessLayer)),
 	)
+	boot.RegisterStarter(microAutoConfig)
 }
 
 // MicroAutoConfiguration go-micro 微服务框架自动配置类。
 type MicroAutoConfiguration struct {
 	logger  log.Logger
 	service micro.Service
+	ctx     context.Context
 }
 
 // Configure 配置 go-micro 微服务。
@@ -43,7 +47,7 @@ func (c *MicroAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 go-micro 配置失败: %w", err)
+		return fmt.Errorf("failed to load go-micro config: %w", err)
 	}
 
 	opts := []micro.Option{
@@ -61,11 +65,14 @@ func (c *MicroAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	c.service = micro.NewService(opts...)
 
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
 	if err := ctx.Container().RegisterInstance(c.service, reflect.TypeFor[micro.Service]()); err != nil {
-		return fmt.Errorf("注册 go-micro Service 失败: %w", err)
+		return fmt.Errorf("failed to register go-micro Service: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "go-micro 微服务已配置",
+	c.logger.Info(ctx.Context(), "go-micro service configured",
 		log.KeyValue{Key: "service_name", Value: cfg.ServiceName},
 		log.KeyValue{Key: "version", Value: cfg.Version},
 	)
@@ -74,11 +81,38 @@ func (c *MicroAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 }
 
 // Start 启动 go-micro 微服务。
-func (c *MicroAutoConfiguration) Start() error {
-	c.logger.Info(context.Background(), "go-micro 微服务启动中",
+func (c *MicroAutoConfiguration) Start(ctx boot.ApplicationContext) error {
+	c.logger.Info(c.ctx, "starting go-micro service...",
 		log.KeyValue{Key: "service_name", Value: c.service.Server().Options().Name},
 	)
 	return c.service.Run()
+}
+
+// Stop 停止 go-micro 微服务。
+func (c *MicroAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
+	var sCtx context.Context
+	if ctx != nil {
+		sCtx = ctx.Context()
+	} else {
+		sCtx = context.Background()
+	}
+	c.logger.Info(sCtx, "go-micro service stopped")
+	return nil
+}
+
+// Name 返回启动器名称。
+func (c *MicroAutoConfiguration) Name() string {
+	return "MicroStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *MicroAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *MicroAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(MicroEnabled, ConditionTrue)
 }
 
 // GetService 获取 go-micro 服务实例。
@@ -110,7 +144,7 @@ func (c *MicroAutoConfiguration) loadConfig(env *environment.Environment) (*Micr
 	}
 
 	if err := env.BindPrefix("micro", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 go-micro 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind go-micro config: %w", err)
 	}
 
 	return cfg, nil

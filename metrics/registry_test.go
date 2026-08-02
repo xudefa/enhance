@@ -197,15 +197,61 @@ func TestSimpleRegistry_NoTagsReturnsNilMap(t *testing.T) {
 	}
 }
 
-func TestSimpleRegistry_OddTagsIgnored(t *testing.T) {
+func TestSimpleRegistry_OddTagsPanics(t *testing.T) {
 	t.Parallel()
 	r := NewSimpleRegistry()
-	c := r.Counter("requests", "key1", "val1", "key2")
-	c.Inc()
+	defer func() {
+		if rec := recover(); rec == nil {
+			t.Fatal("expected panic for odd tag count")
+		}
+	}()
+	r.Counter("requests", "key1", "val1", "key2")
+}
 
-	metrics := r.Collect()
-	if len(metrics[0].Tags) != 1 {
-		t.Fatalf("expected 1 tag pair, got %d", len(metrics[0].Tags))
+func TestMetricKey_NoCollisionWithPipeInName(t *testing.T) {
+	t.Parallel()
+	reg := NewSimpleRegistry()
+
+	c1 := reg.Counter("api|v1_requests=1")
+	c1.Inc()
+
+	c2 := reg.Counter("api", "v1_requests", "1")
+	c2.Add(2)
+
+	collected := reg.Collect()
+	if len(collected) != 2 {
+		t.Fatalf("expected 2 distinct metrics, got %d", len(collected))
+	}
+
+	values := make(map[string]float64)
+	for _, m := range collected {
+		values[m.Name] = m.Value
+	}
+	if values["api|v1_requests=1"] != 1 {
+		t.Errorf("expected api|v1_requests=1 value 1, got %v", values["api|v1_requests=1"])
+	}
+	if values["api"] != 2 {
+		t.Errorf("expected api value 2, got %v", values["api"])
+	}
+}
+
+func TestSimpleHistogram_DoesNotAliasSharedTags(t *testing.T) {
+	t.Parallel()
+	shared := map[string]string{"method": "GET"}
+	h1 := NewSimpleHistogram("req_duration", shared)
+	h2 := NewSimpleHistogram("req_duration_other", shared)
+
+	h1.RecordWithLabels(1.5, map[string]string{"status": "200"})
+
+	h2Tags := h2.(*simpleHistogram).tagsSnapshot()
+	if _, ok := h2Tags["status"]; ok {
+		t.Errorf("expected h2 tags not to contain 'status' added via h1, got %v", h2Tags)
+	}
+
+	shared["method"] = "POST"
+	h1Tags := h1.(*simpleHistogram).tagsSnapshot()
+	if h1Tags["method"] != "GET" {
+		t.Errorf("expected h1 method GET, got %v", h1Tags)
 	}
 }
 
@@ -450,6 +496,20 @@ func TestPrometheusExporter(t *testing.T) {
 			Type:  "gauge",
 			Tags:  nil,
 		},
+		{
+			Name:  "test_histogram",
+			Value: 500.0,
+			Type:  "histogram",
+			Count: 3,
+			Sum:   1500.0,
+			Tags:  map[string]string{"path": "/api"},
+		},
+		{
+			Name:  "test_escape",
+			Value: 1.0,
+			Type:  "gauge",
+			Tags:  map[string]string{"label": `a\b"c\nd`},
+		},
 	}
 
 	err := exporter.Export(metrics)
@@ -458,11 +518,25 @@ func TestPrometheusExporter(t *testing.T) {
 	}
 
 	output := buffer.String()
-	if !strings.Contains(output, `test_counter{method="GET",path="/api"} 42`) {
+	if !strings.Contains(output, `# TYPE test_counter_total counter`) {
+		t.Fatalf("expected counter TYPE line in output, got: %s", output)
+	}
+	if !strings.Contains(output, `test_counter_total{method="GET",path="/api"} 42`) {
 		t.Fatalf("expected counter with labels in output, got: %s", output)
 	}
 	if !strings.Contains(output, `test_gauge 123.45`) {
 		t.Fatalf("expected gauge in output, got: %s", output)
+	}
+	if !strings.Contains(output, `# TYPE test_histogram histogram`) {
+		t.Fatalf("expected histogram TYPE line in output, got: %s", output)
+	}
+	if !strings.Contains(output, `test_histogram_bucket{le="+Inf",path="/api"} 3`) ||
+		!strings.Contains(output, `test_histogram_sum{path="/api"} 1500`) ||
+		!strings.Contains(output, `test_histogram_count{path="/api"} 3`) {
+		t.Fatalf("expected histogram lines in output, got: %s", output)
+	}
+	if !strings.Contains(output, `test_escape{label="a\\b\"c\\nd"} 1`) {
+		t.Fatalf("expected escaped label value in output, got: %s", output)
 	}
 }
 

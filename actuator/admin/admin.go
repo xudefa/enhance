@@ -11,6 +11,9 @@ import (
 var instanceIDCounter atomic.Int64
 
 // Application 应用对象
+//
+// 锁顺序约束：所有方法必须按 Application.mu -> ApplicationInstance.mu 的顺序获取锁，
+// 禁止反向获取以避免死锁。
 type Application struct {
 	// ID 应用 ID
 	ID string
@@ -24,7 +27,7 @@ type Application struct {
 	Status ApplicationStatus
 	// Metadata 应用元数据
 	Metadata map[string]string
-	// mu 互斥锁
+	// mu 互斥锁，保护 Instances 和 Status 字段
 	mu sync.RWMutex
 }
 
@@ -111,7 +114,7 @@ func (r *ApplicationRegistry) Register(instance *ApplicationInstance) {
 		Status:    StatusUnknown,
 		Metadata:  make(map[string]string),
 	})
-	app := appValue.(*Application)
+	app, _ := appValue.(*Application)
 
 	// 添加实例到应用（需要应用级别的锁）
 	app.mu.Lock()
@@ -129,7 +132,7 @@ func (r *ApplicationRegistry) Deregister(instanceID string) {
 		return
 	}
 
-	instance := instanceValue.(*ApplicationInstance)
+	instance, _ := instanceValue.(*ApplicationInstance)
 
 	// 从实例列表中移除
 	r.instances.Delete(instanceID)
@@ -139,7 +142,7 @@ func (r *ApplicationRegistry) Deregister(instanceID string) {
 	if !exists {
 		return
 	}
-	app := appValue.(*Application)
+	app, _ := appValue.(*Application)
 
 	app.mu.Lock()
 	newInstances := make([]*ApplicationInstance, 0, len(app.Instances)-1)
@@ -155,7 +158,10 @@ func (r *ApplicationRegistry) Deregister(instanceID string) {
 	r.updateApplicationStatus(app)
 
 	// 如果没有实例了，删除应用
-	if len(app.Instances) == 0 {
+	app.mu.RLock()
+	empty := len(app.Instances) == 0
+	app.mu.RUnlock()
+	if empty {
 		r.applications.Delete(app.ID)
 	}
 }
@@ -204,7 +210,7 @@ func (r *ApplicationRegistry) UpdateHealth(instanceID string, health *HealthInfo
 	if !exists {
 		return fmt.Errorf("instance %s does not exist", instanceID)
 	}
-	instance := instanceValue.(*ApplicationInstance)
+	instance, _ := instanceValue.(*ApplicationInstance)
 
 	instance.mu.Lock()
 	instance.Health = health
@@ -227,7 +233,7 @@ func (r *ApplicationRegistry) UpdateMetrics(instanceID string, metrics map[strin
 	if !exists {
 		return fmt.Errorf("instance %s does not exist", instanceID)
 	}
-	instance := instanceValue.(*ApplicationInstance)
+	instance, _ := instanceValue.(*ApplicationInstance)
 
 	instance.mu.Lock()
 	instance.Metrics = metrics
@@ -239,32 +245,43 @@ func (r *ApplicationRegistry) UpdateMetrics(instanceID string, metrics map[strin
 
 // updateApplicationStatus 更新应用状态
 func (r *ApplicationRegistry) updateApplicationStatus(app *Application) {
-	if len(app.Instances) == 0 {
+	app.mu.RLock()
+	instances := make([]*ApplicationInstance, len(app.Instances))
+	copy(instances, app.Instances)
+	app.mu.RUnlock()
+
+	if len(instances) == 0 {
+		app.mu.Lock()
 		app.Status = StatusUnknown
+		app.mu.Unlock()
 		return
 	}
 
 	upCount := 0
 	downCount := 0
 
-	for _, inst := range app.Instances {
+	for _, inst := range instances {
 		inst.mu.RLock()
 		switch inst.Status {
 		case StatusUp:
 			upCount++
 		case StatusDown:
 			downCount++
+		default:
+			// 其他状态不计入前端可用性统计
 		}
 		inst.mu.RUnlock()
 	}
 
-	if upCount == len(app.Instances) {
+	app.mu.Lock()
+	if upCount == len(instances) {
 		app.Status = StatusUp
-	} else if downCount == len(app.Instances) {
+	} else if downCount == len(instances) {
 		app.Status = StatusDown
 	} else if upCount > 0 {
 		app.Status = StatusOutOfService
 	} else {
 		app.Status = StatusUnknown
 	}
+	app.mu.Unlock()
 }

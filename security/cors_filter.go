@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,6 +38,9 @@ func NewCorsFilter(config CorsConfig) *CorsFilter {
 	if config.MaxAge == 0 {
 		config.MaxAge = 3600
 	}
+	if config.Log == nil {
+		config.Log = log.Build()
+	}
 	return &CorsFilter{
 		config: config,
 		logger: config.Log,
@@ -45,9 +49,18 @@ func NewCorsFilter(config CorsConfig) *CorsFilter {
 
 // DoFilter 实现 filter.Filter 接口
 func (f *CorsFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(SecurityRequest)
-	resp, _ := response.(SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("CorsFilter: ctx must be context.Context")
+	}
+	req, ok := request.(SecurityRequest)
+	if !ok {
+		return fmt.Errorf("CorsFilter: request must be SecurityRequest")
+	}
+	resp, ok := response.(SecurityResponse)
+	if !ok {
+		return fmt.Errorf("CorsFilter: response must be SecurityResponse")
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
@@ -57,19 +70,23 @@ func (f *CorsFilter) doFilter(ctx context.Context, request SecurityRequest, resp
 		return chain.DoFilter(ctx, request, response)
 	}
 
-	f.logger.Debug(ctx, "处理 CORS 请求", log.KeyValue{Key: "origin", Value: origin})
+	if f.logger != nil {
+		f.logger.Debug(ctx, "处理 CORS 请求", log.KeyValue{Key: "origin", Value: origin})
+	}
 
 	if f.isOriginAllowed(origin) {
 		response.SetHeader("Access-Control-Allow-Origin", origin)
 		if f.config.AllowCredentials {
 			response.SetHeader("Access-Control-Allow-Credentials", "true")
 		}
-	} else {
+	} else if f.logger != nil {
 		f.logger.Warn(ctx, "CORS 来源被拒绝", log.KeyValue{Key: "origin", Value: origin})
 	}
 
 	if request.GetMethod() == http.MethodOptions {
-		f.logger.Debug(ctx, "处理 CORS 预检请求")
+		if f.logger != nil {
+			f.logger.Debug(ctx, "处理 CORS 预检请求")
+		}
 		if len(f.config.AllowedMethods) > 0 {
 			response.SetHeader("Access-Control-Allow-Methods", strings.Join(f.config.AllowedMethods, ", "))
 		}
@@ -94,7 +111,7 @@ func (f *CorsFilter) Order() int { return -100 }
 
 func (f *CorsFilter) isOriginAllowed(origin string) bool {
 	if len(f.config.AllowedOrigins) == 0 {
-		return true
+		return false
 	}
 	for _, allowedOrigin := range f.config.AllowedOrigins {
 		if allowedOrigin == "*" || allowedOrigin == origin {
@@ -103,7 +120,10 @@ func (f *CorsFilter) isOriginAllowed(origin string) bool {
 		if strings.HasSuffix(allowedOrigin, "*") {
 			prefix := strings.TrimSuffix(allowedOrigin, "*")
 			if strings.HasPrefix(origin, prefix) {
-				return true
+				rest := origin[len(prefix):]
+				if rest == "" || strings.HasPrefix(rest, "/") {
+					return true
+				}
 			}
 		}
 	}

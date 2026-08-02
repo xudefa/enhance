@@ -84,10 +84,20 @@ func (b *PropertyBinder) bindStruct(v reflect.Value, prefix string) error {
 		// 获取 enhance 标签
 		tag := field.Tag.Get("enhance")
 		if tag == "" {
-			// 没有标签，尝试递归处理嵌套结构体
-			if fieldValue.Kind() == reflect.Struct {
+			// 没有标签，尝试递归处理嵌套结构体（含指针结构体）
+			switch fieldValue.Kind() {
+			case reflect.Struct:
 				if err := b.bindStruct(fieldValue, prefix); err != nil {
 					return err
+				}
+			case reflect.Ptr:
+				if fieldValue.IsNil() {
+					fieldValue.Set(reflect.New(fieldValue.Type().Elem()))
+				}
+				if fieldValue.Elem().Kind() == reflect.Struct {
+					if err := b.bindStruct(fieldValue.Elem(), prefix); err != nil {
+						return err
+					}
 				}
 			}
 			continue
@@ -143,13 +153,13 @@ func (b *PropertyBinder) setDefaultValue(v reflect.Value, defaultVal string, tar
 	case reflect.String:
 		v.SetString(defaultVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		val, err := strconv.ParseInt(defaultVal, 10, 64)
+		val, err := strconv.ParseInt(defaultVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("invalid integer value %q: %w", defaultVal, err)
 		}
 		v.SetInt(val)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		val, err := strconv.ParseUint(defaultVal, 10, 64)
+		val, err := strconv.ParseUint(defaultVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("invalid unsigned integer value %q: %w", defaultVal, err)
 		}
@@ -201,32 +211,18 @@ func (b *PropertyBinder) setValue(v reflect.Value, value any) error {
 		v.SetString(fmt.Sprintf("%v", value))
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		switch val := value.(type) {
-		case int:
-			v.SetInt(int64(val))
-		case int64:
-			v.SetInt(val)
-		case float64:
-			v.SetInt(int64(val))
-		case string:
-			if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
-				v.SetInt(parsed)
-			}
+		converted, err := environment.NewTypeConverter().ConvertTo(value, v.Type())
+		if err != nil {
+			return fmt.Errorf("cannot convert %T to %s: %w", value, v.Type(), err)
 		}
+		v.Set(converted)
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		switch val := value.(type) {
-		case uint:
-			v.SetUint(uint64(val))
-		case uint64:
-			v.SetUint(val)
-		case float64:
-			v.SetUint(uint64(val))
-		case string:
-			if parsed, err := strconv.ParseUint(val, 10, 64); err == nil {
-				v.SetUint(parsed)
-			}
+		converted, err := environment.NewTypeConverter().ConvertTo(value, v.Type())
+		if err != nil {
+			return fmt.Errorf("cannot convert %T to %s: %w", value, v.Type(), err)
 		}
+		v.Set(converted)
 
 	case reflect.Float32, reflect.Float64:
 		switch val := value.(type) {
@@ -235,9 +231,13 @@ func (b *PropertyBinder) setValue(v reflect.Value, value any) error {
 		case int:
 			v.SetFloat(float64(val))
 		case string:
-			if parsed, err := strconv.ParseFloat(val, 64); err == nil {
-				v.SetFloat(parsed)
+			parsed, err := strconv.ParseFloat(val, 64)
+			if err != nil {
+				return fmt.Errorf("cannot convert %q to %s: %w", val, v.Type(), err)
 			}
+			v.SetFloat(parsed)
+		default:
+			return fmt.Errorf("cannot convert %T to %s", value, v.Type())
 		}
 
 	case reflect.Bool:
@@ -245,9 +245,13 @@ func (b *PropertyBinder) setValue(v reflect.Value, value any) error {
 		case bool:
 			v.SetBool(val)
 		case string:
-			if parsed, err := strconv.ParseBool(val); err == nil {
-				v.SetBool(parsed)
+			parsed, err := strconv.ParseBool(val)
+			if err != nil {
+				return fmt.Errorf("cannot convert %q to %s: %w", val, v.Type(), err)
 			}
+			v.SetBool(parsed)
+		default:
+			return fmt.Errorf("cannot convert %T to %s", value, v.Type())
 		}
 
 	case reflect.Struct:
@@ -256,11 +260,15 @@ func (b *PropertyBinder) setValue(v reflect.Value, value any) error {
 			case time.Duration:
 				v.Set(reflect.ValueOf(val))
 			case string:
-				if parsed, err := time.ParseDuration(val); err == nil {
-					v.Set(reflect.ValueOf(parsed))
+				parsed, err := time.ParseDuration(val)
+				if err != nil {
+					return fmt.Errorf("cannot convert %q to %s: %w", val, v.Type(), err)
 				}
+				v.Set(reflect.ValueOf(parsed))
 			case int64:
 				v.Set(reflect.ValueOf(time.Duration(val)))
+			default:
+				return fmt.Errorf("cannot convert %T to %s", value, v.Type())
 			}
 		}
 
@@ -303,6 +311,8 @@ func (b *PropertyBinder) bindSlice(v reflect.Value, value any) error {
 			}
 		}
 		v.Set(slice)
+	default:
+		return fmt.Errorf("cannot convert %T to %s", value, v.Type())
 	}
 	return nil
 }
@@ -325,6 +335,8 @@ func (b *PropertyBinder) bindMap(v reflect.Value, value any) error {
 			mapVal.SetMapIndex(keyVal, elemVal)
 		}
 		v.Set(mapVal)
+	default:
+		return fmt.Errorf("cannot convert %T to %s", value, v.Type())
 	}
 	return nil
 }

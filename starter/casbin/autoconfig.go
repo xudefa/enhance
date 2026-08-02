@@ -77,21 +77,21 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger = log.Build()
 	}
 
-	c.logger.Info(context.Background(), "开始配置 Casbin 授权...")
+	c.logger.Info(ctx.Context(), "configuring Casbin authorization...")
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Casbin 配置失败: %w", err)
+		return fmt.Errorf("failed to load Casbin config: %w", err)
 	}
 
 	if err := c.validateConfig(cfg); err != nil {
-		return fmt.Errorf("Casbin 配置验证失败: %w", err)
+		return fmt.Errorf("Casbin config validation failed: %w", err)
 	}
 
 	var enforcer security.CasbinEnforcer
 	if beans, err := container.Get(reflect.TypeFor[security.CasbinEnforcer]()); err == nil && len(beans) > 0 {
-		enforcer = beans[0].(security.CasbinEnforcer)
-		c.logger.Info(context.Background(), "使用容器中已有的 CasbinEnforcer 实例")
+		enforcer, _ = beans[0].(security.CasbinEnforcer)
+		c.logger.Info(ctx.Context(), "using existing CasbinEnforcer instance from container")
 	} else {
 		// 根据配置选择模型和策略路径
 		modelPath := cfg.ModelPath
@@ -103,35 +103,39 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 			policyPath = security.DefaultCasbinPolicyPath
 		}
 
-		enforcer = NewCasbinEnforcer(c.logger, modelPath, policyPath)
-		c.logger.Info(context.Background(), "创建默认 CasbinEnforcer 实例",
+		created, err := NewCasbinEnforcer(ctx.Context(), c.logger, modelPath, policyPath)
+		if err != nil {
+			return fmt.Errorf("failed to create CasbinEnforcer: %w", err)
+		}
+		enforcer = created
+		c.logger.Info(ctx.Context(), "creating default CasbinEnforcer instance",
 			log.KeyValue{Key: "model-path", Value: modelPath},
 			log.KeyValue{Key: "policy-path", Value: policyPath},
 		)
 	}
 
 	if err := container.RegisterInstance(enforcer, reflect.TypeFor[security.CasbinEnforcer]()); err != nil {
-		return fmt.Errorf("注册 CasbinEnforcer 失败: %w", err)
+		return fmt.Errorf("failed to register CasbinEnforcer: %w", err)
 	}
-	c.logger.Info(context.Background(), "CasbinEnforcer 已注册")
+	c.logger.Info(ctx.Context(), "CasbinEnforcer registered")
 
 	voter := security.NewCasbinVoter(enforcer)
 	if err := container.RegisterInstance(voter, reflect.TypeFor[security.CasbinVoter]()); err != nil {
-		return fmt.Errorf("注册 CasbinVoter 失败: %w", err)
+		return fmt.Errorf("failed to register CasbinVoter: %w", err)
 	}
-	c.logger.Info(context.Background(), "CasbinVoter 已注册")
+	c.logger.Info(ctx.Context(), "CasbinVoter registered")
 
 	admBeans, err := container.Get(reflect.TypeFor[security.AccessDecisionManager]())
 	if err == nil && len(admBeans) > 0 {
-		c.logger.Info(context.Background(), "检测到 AccessDecisionManager，CasbinVoter 已就绪")
+		c.logger.Info(ctx.Context(), "AccessDecisionManager detected, CasbinVoter ready")
 	}
 
 	if cfg.AutoLoad {
-		c.ctx, c.cancel = context.WithCancel(context.Background())
+		c.ctx = ctx.Context()
 		c.startAutoReload(enforcer, cfg)
 	}
 
-	c.logger.Info(context.Background(), "Casbin 配置完成",
+	c.logger.Info(ctx.Context(), "Casbin configuration complete",
 		log.KeyValue{Key: "model-type", Value: cfg.ModelType},
 		log.KeyValue{Key: "policy-type", Value: cfg.PolicyType},
 	)
@@ -144,27 +148,27 @@ func (c *CasbinAutoConfiguration) validateConfig(cfg *CasbinConfig) error {
 	switch cfg.ModelType {
 	case "file":
 		if cfg.ModelPath == "" {
-			return fmt.Errorf("model-type 为 file 时，model-path 不能为空")
+			return fmt.Errorf("model-path must not be empty when model-type is file")
 		}
 	case "string":
 		if cfg.ModelText == "" {
-			return fmt.Errorf("model-type 为 string 时，model-text 不能为空")
+			return fmt.Errorf("model-text must not be empty when model-type is string")
 		}
 	default:
-		return fmt.Errorf("不支持的 model-type: %s，支持的值: file, string", cfg.ModelType)
+		return fmt.Errorf("unsupported model-type: %s, supported values: file, string", cfg.ModelType)
 	}
 
 	switch cfg.PolicyType {
 	case "file":
 		if cfg.PolicyPath == "" {
-			return fmt.Errorf("policy-type 为 file 时，policy-path 不能为空")
+			return fmt.Errorf("policy-path must not be empty when policy-type is file")
 		}
 	case "string":
 		if cfg.PolicyText == "" {
-			return fmt.Errorf("policy-type 为 string 时，policy-text 不能为空")
+			return fmt.Errorf("policy-text must not be empty when policy-type is string")
 		}
 	default:
-		return fmt.Errorf("不支持的 policy-type: %s，支持的值: file, string", cfg.PolicyType)
+		return fmt.Errorf("unsupported policy-type: %s, supported values: file, string", cfg.PolicyType)
 	}
 
 	return nil
@@ -177,24 +181,25 @@ func (c *CasbinAutoConfiguration) startAutoReload(enforcer security.CasbinEnforc
 		interval = security.DefaultCasbinAutoLoadInterval
 	}
 
-	c.logger.Info(context.Background(), "启动 Casbin 策略自动刷新",
-		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%d分钟", interval)},
+	c.logger.Info(c.ctx, "starting Casbin policy auto-reload",
+		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%d min", interval)},
 	)
 
 	go func() {
+		defer recoverLog("casbin policy auto-reload", c.ctx, c.logger)
 		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				if err := enforcer.LoadPolicy(context.Background()); err != nil {
-					c.logger.Warn(context.Background(), "自动刷新 Casbin 策略失败",
+				if err := enforcer.LoadPolicy(c.ctx); err != nil {
+					c.logger.Warn(c.ctx, "failed to auto-reload Casbin policy",
 						log.KeyValue{Key: "error", Value: err.Error()},
 					)
 					continue
 				}
-				c.logger.Info(context.Background(), "Casbin 策略已自动刷新")
+				c.logger.Info(c.ctx, "Casbin policy auto-reloaded")
 			case <-c.ctx.Done():
 				return
 			}
@@ -206,6 +211,15 @@ func (c *CasbinAutoConfiguration) startAutoReload(enforcer security.CasbinEnforc
 func (c *CasbinAutoConfiguration) Close() {
 	if c.cancel != nil {
 		c.cancel()
+	}
+}
+
+// recoverLog recovers from panic and logs the error.
+func recoverLog(component string, ctx context.Context, logger log.Logger) {
+	if r := recover(); r != nil {
+		logger.Error(ctx, fmt.Sprintf("%s panic recovered", component),
+			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+		)
 	}
 }
 
@@ -221,7 +235,7 @@ func (c *CasbinAutoConfiguration) loadConfig(env *environment.Environment) (*Cas
 	}
 
 	if err := env.BindPrefix("security.casbin", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Casbin 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Casbin config: %w", err)
 	}
 
 	return cfg, nil

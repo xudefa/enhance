@@ -3,6 +3,7 @@ package prometheus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -18,13 +19,16 @@ import (
 	"github.com/xudefa/enhance/log"
 )
 
+var prometheusAutoConfig = &PrometheusAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&PrometheusAutoConfiguration{},
+	boot.RegisterAutoConfigWith(prometheusAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(PrometheusEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityMonitoringLayer)),
 	)
+	boot.RegisterStarter(prometheusAutoConfig)
 }
 
 // PrometheusAutoConfiguration Prometheus 监控自动配置类。
@@ -33,6 +37,7 @@ type PrometheusAutoConfiguration struct {
 	registry *prometheus.Registry
 	server   *http.Server
 	config   *PrometheusConfig
+	ctx      context.Context
 }
 
 // Configure 配置 Prometheus 监控。
@@ -47,11 +52,14 @@ func (c *PrometheusAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Prometheus 配置失败: %w", err)
+		return fmt.Errorf("failed to load Prometheus config: %w", err)
 	}
 
 	c.config = cfg
 	c.registry = prometheus.NewRegistry()
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
 
 	handler := promhttp.HandlerFor(c.registry, promhttp.HandlerOpts{
 		EnableOpenMetrics: cfg.EnableOpenMetrics,
@@ -68,14 +76,14 @@ func (c *PrometheusAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 	}
 
 	if err := ctx.Container().RegisterInstance(c.registry, reflect.TypeFor[*prometheus.Registry]()); err != nil {
-		return fmt.Errorf("注册 Prometheus Registry 失败: %w", err)
+		return fmt.Errorf("failed to register Prometheus Registry: %w", err)
 	}
 
 	if err := ctx.Container().RegisterInstance(c.server, reflect.TypeFor[*http.Server]()); err != nil {
-		return fmt.Errorf("注册 Prometheus Server 失败: %w", err)
+		return fmt.Errorf("failed to register Prometheus Server: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Prometheus 监控已配置",
+	c.logger.Info(ctx.Context(), "Prometheus monitoring configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "path", Value: cfg.MetricsPath},
 	)
@@ -84,16 +92,49 @@ func (c *PrometheusAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 }
 
 // Start 启动 Prometheus 监控服务器。
-func (c *PrometheusAutoConfiguration) Start() error {
-	c.logger.Info(context.Background(), "Prometheus 监控服务器启动中",
+func (c *PrometheusAutoConfiguration) Start(ctx boot.ApplicationContext) error {
+	if c.server == nil {
+		return nil
+	}
+	go func() {
+		if err := c.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			c.logger.Error(context.Background(), "prometheus metrics server error",
+				log.KeyValue{Key: "error", Value: err.Error()},
+			)
+		}
+	}()
+	c.logger.Info(ctx.Context(), "prometheus metrics server started",
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
-	return c.server.ListenAndServe()
+	return nil
 }
 
 // Stop 停止 Prometheus 监控服务器。
-func (c *PrometheusAutoConfiguration) Stop(ctx context.Context) error {
-	return c.server.Shutdown(ctx)
+func (c *PrometheusAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
+	var sCtx context.Context
+	var cancel context.CancelFunc
+	if ctx != nil {
+		sCtx, cancel = context.WithTimeout(ctx.Context(), 30*time.Second)
+	} else {
+		sCtx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	}
+	defer cancel()
+	return c.server.Shutdown(sCtx)
+}
+
+// Name 返回启动器名称。
+func (c *PrometheusAutoConfiguration) Name() string {
+	return "PrometheusStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *PrometheusAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *PrometheusAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(PrometheusEnabled, ConditionTrue)
 }
 
 // GetRegistry 获取 Prometheus Registry 实例。
@@ -161,7 +202,7 @@ func (c *PrometheusAutoConfiguration) loadConfig(env *environment.Environment) (
 	}
 
 	if err := env.BindPrefix("prometheus", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Prometheus 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Prometheus config: %w", err)
 	}
 
 	return cfg, nil

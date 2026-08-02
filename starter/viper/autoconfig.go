@@ -2,7 +2,6 @@
 package viper
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -44,7 +43,7 @@ func (c *ViperAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Viper 配置失败: %w", err)
+		return fmt.Errorf("failed to load Viper config: %w", err)
 	}
 
 	c.config = cfg
@@ -57,7 +56,7 @@ func (c *ViperAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if cfg.WatchChanges {
 		v.WatchConfig()
 		v.OnConfigChange(func(e fsnotify.Event) {
-			c.logger.Info(context.Background(), "配置文件已更改",
+			c.logger.Info(ctx.Context(), "config file changed",
 				log.KeyValue{Key: "file", Value: e.Name},
 			)
 		})
@@ -65,17 +64,17 @@ func (c *ViperAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return fmt.Errorf("读取配置文件失败: %w", err)
+			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}
 
 	c.viper = v
 
 	if err := ctx.Container().RegisterInstance(c.viper, reflect.TypeFor[*viper.Viper]()); err != nil {
-		return fmt.Errorf("注册 Viper 实例失败: %w", err)
+		return fmt.Errorf("failed to register Viper instance: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Viper 配置已加载",
+	c.logger.Info(ctx.Context(), "Viper config loaded",
 		log.KeyValue{Key: "config_name", Value: cfg.ConfigName},
 		log.KeyValue{Key: "config_path", Value: cfg.ConfigPath},
 	)
@@ -132,7 +131,7 @@ func (c *ViperAutoConfiguration) loadConfig(env *environment.Environment) (*Vipe
 	}
 
 	if err := env.BindPrefix("viper", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Viper 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Viper config: %w", err)
 	}
 
 	return cfg, nil

@@ -1,0 +1,9 @@
+{
+  "otel": {
+    "enabled": true,
+    "service_name": "otel-example",
+    "service_version": "1.0.0",
+    "exporter_type": "console",
+    "sample_rate": 1.0
+  }
+}

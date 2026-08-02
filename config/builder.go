@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // ConfigBuilder 配置构建器，支持链式配置和便捷加载
@@ -122,6 +123,23 @@ func (b *ConfigBuilder) BuildAndLoad() (*ConfigModel, error) {
 		} else {
 			mergeMaps(model.Config, cfg.GetAll())
 		}
+	} else {
+		// 未设置自定义加载器时，从搜索路径加载默认配置文件
+		filePath := b.configFile
+		if filePath == "" {
+			filePath = b.findConfigFile()
+		}
+		if filePath != "" {
+			cfg := NewConfig()
+			if err := cfg.Load(filePath); err != nil {
+				return nil, fmt.Errorf("failed to load config file %s: %w", filePath, err)
+			}
+			if model.Config == nil {
+				model.Config = cfg.GetAll()
+			} else {
+				mergeMaps(model.Config, cfg.GetAll())
+			}
+		}
 	}
 
 	if b.validator != nil && model.Config != nil {
@@ -131,6 +149,20 @@ func (b *ConfigBuilder) BuildAndLoad() (*ConfigModel, error) {
 	}
 
 	return model, nil
+}
+
+// findConfigFile 在配置搜索路径中查找配置文件
+//
+// 依次检查每个路径下的 <configName>.<configType> 文件，返回第一个存在的路径。
+// 所有路径都不存在时返回空字符串。
+func (b *ConfigBuilder) findConfigFile() string {
+	for _, dir := range b.configPaths {
+		candidate := filepath.Join(dir, b.configName+"."+b.configType)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // mergeMaps 合并两个map，src的键值会覆盖dst

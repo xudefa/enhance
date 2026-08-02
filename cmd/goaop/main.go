@@ -65,10 +65,10 @@ func printUsage() {
 	fmt.Println("  enhance-aop gen -interface ServiceInterface")
 	fmt.Println()
 	fmt.Println("Usage in code (//go:generate directives):")
-	fmt.Println("  //go:generate enhance-aop gen -type=UserService")
-	fmt.Println("  //go:generate enhance-aop gen -type=UserService,OrderService -mode=static")
-	fmt.Println("  //go:generate enhance-aop gen -interface=ServiceInterface")
-	fmt.Println("  //go:generate enhance-aop gen -all")
+	fmt.Println("  //go:generate enhance aop gen -type=UserService")
+	fmt.Println("  //go:generate enhance aop gen -type=UserService,OrderService -mode=static")
+	fmt.Println("  //go:generate enhance aop gen -interface=ServiceInterface")
+	fmt.Println("  //go:generate enhance aop gen -all")
 	fmt.Println()
 	fmt.Println("Then run: go generate ./...")
 }
@@ -101,7 +101,7 @@ func runGenerate() {
 
 	if len(directives) > 0 {
 		// 使用 //go:generate 指令模式
-		if err := generateFromDirectives(dir, directives, mode); err != nil {
+		if err := generateFromDirectives(dir, directives, mode, output); err != nil {
 			slog.Error("enhance-aop: failed to generate from directives", "error", err)
 			os.Exit(1)
 		}
@@ -116,17 +116,29 @@ func runGenerate() {
 				os.Exit(1)
 			}
 
+			opts := generator.GenerateOptions{Output: output}
 			if typeFlag != "" {
 				for _, t := range strings.Split(typeFlag, ",") {
 					t = strings.TrimSpace(t)
 					if t == "" {
 						continue
 					}
+					opts.Types = append(opts.Types, t)
 					slog.Info("enhance-aop: generating proxy for type", "type", t)
 				}
 			}
+			if interfaceFlag != "" {
+				for _, iface := range strings.Split(interfaceFlag, ",") {
+					iface = strings.TrimSpace(iface)
+					if iface == "" {
+						continue
+					}
+					opts.Interfaces = append(opts.Interfaces, iface)
+					slog.Info("enhance-aop: generating proxy for interface", "interface", iface)
+				}
+			}
 
-			if err := gen.Generate(dir, mode); err != nil {
+			if err := gen.Generate(dir, mode, opts); err != nil {
 				slog.Error("enhance-aop: failed to generate proxies", "error", err)
 				os.Exit(1)
 			}
@@ -181,7 +193,7 @@ func scanGoGenerateDirectives(dir string) ([]*generator.GoGenerateDirective, err
 		lines := strings.Split(string(content), "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "//go:generate") && strings.Contains(line, "enhance-aop") {
+			if strings.HasPrefix(line, "//go:generate") && strings.Contains(line, "enhance aop gen") {
 				directive, err := generator.ParseGoGenerate(line)
 				if err != nil {
 					slog.Warn("enhance-aop: failed to parse directive", "line", line, "error", err)
@@ -200,7 +212,7 @@ func scanGoGenerateDirectives(dir string) ([]*generator.GoGenerateDirective, err
 }
 
 // generateFromDirectives 从 //go:generate 指令生成代理代码
-func generateFromDirectives(dir string, directives []*generator.GoGenerateDirective, defaultMode string) error {
+func generateFromDirectives(dir string, directives []*generator.GoGenerateDirective, defaultMode string, defaultOutput string) error {
 	gen, err := generator.NewGenerator()
 	if err != nil {
 		return fmt.Errorf("create generator: %w", err)
@@ -212,13 +224,22 @@ func generateFromDirectives(dir string, directives []*generator.GoGenerateDirect
 			mode = defaultMode
 		}
 
+		output := d.Output
+		if output == "" {
+			output = defaultOutput
+		}
+
 		slog.Info("enhance-aop: processing directive",
 			"types", d.Types,
 			"interfaces", d.Interfaces,
 			"mode", mode,
 		)
 
-		if err := gen.Generate(dir, mode); err != nil {
+		if err := gen.Generate(dir, mode, generator.GenerateOptions{
+			Types:      d.Types,
+			Interfaces: d.Interfaces,
+			Output:     output,
+		}); err != nil {
 			return fmt.Errorf("generate proxy: %w", err)
 		}
 	}
@@ -264,7 +285,7 @@ func runValidate() {
 		os.Exit(1)
 	}
 
-	if err := gen.Generate(dir, mode); err != nil {
+	if err := gen.Generate(dir, mode, generator.GenerateOptions{DryRun: true}); err != nil {
 		slog.Error("enhance-aop: validation failed", "error", err)
 		os.Exit(1)
 	}

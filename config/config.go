@@ -3,34 +3,56 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"reflect"
+	"sync"
+	"time"
+
+	"github.com/xudefa/enhance/config/environment"
+)
+
+// globalWatchers stores Watch callbacks keyed by key pattern.
+var (
+	globalWatchers  = make(map[string][]WatchCallback)
+	globalWatcherMu sync.Mutex
 )
 
 // NewConfig 创建配置实例。
 func NewConfig() Config {
-	return &memoryConfig{}
+	return &memoryConfig{data: make(map[string]any)}
 }
 
 // Get 获取配置值
 func (c *memoryConfig) Get(key string) any {
-	v, _ := c.data.Load(key)
-	return v
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.data[key]
 }
 
 // GetString 获取字符串值
+//
+// 支持字符串及可从其他类型转换的值（如 JSON 加载后的 float64 数值）。
 func (c *memoryConfig) GetString(key string) string {
-	if v, ok := c.data.Load(key); ok {
-		if s, ok := v.(string); ok {
-			return s
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if v, ok := c.data[key]; ok {
+		converted, err := environment.NewTypeConverter().ConvertTo(v, reflect.TypeOf(""))
+		if err == nil {
+			return converted.String()
 		}
 	}
 	return ""
 }
 
 // GetInt 获取整数值
+//
+// 支持整数及可从其他数值类型转换的值（如 JSON 加载后的 float64）。
 func (c *memoryConfig) GetInt(key string) int {
-	if v, ok := c.data.Load(key); ok {
-		if i, ok := v.(int); ok {
-			return i
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if v, ok := c.data[key]; ok {
+		converted, err := environment.NewTypeConverter().ConvertTo(v, reflect.TypeOf(0))
+		if err == nil {
+			return converted.Interface().(int)
 		}
 	}
 	return 0
@@ -38,7 +60,9 @@ func (c *memoryConfig) GetInt(key string) int {
 
 // GetBool 获取布尔值
 func (c *memoryConfig) GetBool(key string) bool {
-	if v, ok := c.data.Load(key); ok {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if v, ok := c.data[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
 		}
@@ -48,17 +72,38 @@ func (c *memoryConfig) GetBool(key string) bool {
 
 // GetAll 获取所有配置值
 func (c *memoryConfig) GetAll() map[string]any {
-	result := make(map[string]any)
-	c.data.Range(func(key, value any) bool {
-		result[key.(string)] = value
-		return true
-	})
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make(map[string]any, len(c.data))
+	for k, v := range c.data {
+		result[k] = v
+	}
 	return result
 }
 
 // Set 设置配置值
 func (c *memoryConfig) Set(key string, value any) {
-	c.data.Store(key, value)
+	c.mu.Lock()
+	c.data[key] = value
+	c.mu.Unlock()
+
+	globalWatcherMu.Lock()
+	list := globalWatchers[key]
+	globalWatcherMu.Unlock()
+	if len(list) == 0 {
+		return
+	}
+
+	event := WatchEvent{
+		Type:      EventModify,
+		Key:       key,
+		Value:     value,
+		Timestamp: time.Now(),
+		Source:    "memoryConfig",
+	}
+	for _, cb := range list {
+		cb(event)
+	}
 }
 
 // Load 从文件加载配置
@@ -73,16 +118,10 @@ func (c *memoryConfig) Load(path string) error {
 		return err
 	}
 
-	// 清空现有数据
-	c.data.Range(func(key, value any) bool {
-		c.data.Delete(key)
-		return true
-	})
-
-	// 写入新数据
-	for k, v := range m {
-		c.data.Store(k, v)
-	}
+	// 原子替换整个 map，读者不会看到中间状态
+	c.mu.Lock()
+	c.data = m
+	c.mu.Unlock()
 
 	return nil
 }
@@ -109,7 +148,8 @@ func (c *memoryConfig) Save(path string) error {
 //	    log.Printf("配置变更: %s -> %v", event.Key, event.Value)
 //	})
 func Watch(key string, callback WatchCallback) error {
-	// 默认实现：注册到全局 WatchManager
-	// 实际实现由 boot 层或 starter 层提供
+	globalWatcherMu.Lock()
+	globalWatchers[key] = append(globalWatchers[key], callback)
+	globalWatcherMu.Unlock()
 	return nil
 }

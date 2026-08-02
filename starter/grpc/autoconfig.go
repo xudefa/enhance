@@ -16,13 +16,16 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
+var grpcAutoConfig = &GrpcAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&GrpcAutoConfiguration{},
+	boot.RegisterAutoConfigWith(grpcAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(GrpcEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
+	boot.RegisterStarter(grpcAutoConfig)
 }
 
 // GrpcAutoConfiguration gRPC 服务自动配置类。
@@ -31,6 +34,7 @@ type GrpcAutoConfiguration struct {
 	server   *grpc.Server
 	listener net.Listener
 	config   *GrpcConfig
+	ctx      context.Context
 }
 
 // Configure 配置 gRPC 服务器。
@@ -45,10 +49,13 @@ func (c *GrpcAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 gRPC 配置失败: %w", err)
+		return fmt.Errorf("failed to load gRPC config: %w", err)
 	}
 
 	c.config = cfg
+
+	// 存储应用上下文
+	c.ctx = ctx.Context()
 
 	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(cfg.MaxRecvMsgSize),
@@ -62,10 +69,10 @@ func (c *GrpcAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := ctx.Container().RegisterInstance(c.server, reflect.TypeFor[*grpc.Server]()); err != nil {
-		return fmt.Errorf("注册 gRPC Server 失败: %w", err)
+		return fmt.Errorf("failed to register gRPC Server: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "gRPC 服务器已配置",
+	c.logger.Info(ctx.Context(), "gRPC server configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 	)
 
@@ -73,22 +80,22 @@ func (c *GrpcAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 }
 
 // Start 启动 gRPC 服务器。
-func (c *GrpcAutoConfiguration) Start() error {
+func (c *GrpcAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	addr := fmt.Sprintf(":%d", c.config.Port)
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("gRPC 监听失败: %w", err)
+		return fmt.Errorf("failed to listen gRPC: %w", err)
 	}
 	c.listener = listener
 
-	c.logger.Info(context.Background(), "gRPC 服务器启动中",
+	c.logger.Info(c.ctx, "starting gRPC server...",
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
 	go func() {
 		if err := c.server.Serve(listener); err != nil {
-			c.logger.Error(context.Background(), "gRPC 服务器错误",
+			c.logger.Error(c.ctx, "gRPC server error",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -98,10 +105,26 @@ func (c *GrpcAutoConfiguration) Start() error {
 }
 
 // Stop 停止 gRPC 服务器。
-func (c *GrpcAutoConfiguration) Stop() {
+func (c *GrpcAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.server != nil {
 		c.server.GracefulStop()
 	}
+	return nil
+}
+
+// Name 返回启动器名称。
+func (c *GrpcAutoConfiguration) Name() string {
+	return "GrpcStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *GrpcAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *GrpcAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(GrpcEnabled, ConditionTrue)
 }
 
 // GetServer 获取 gRPC 服务器实例。
@@ -143,7 +166,7 @@ func (c *GrpcAutoConfiguration) loadConfig(env *environment.Environment) (*GrpcC
 	}
 
 	if err := env.BindPrefix("grpc", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 gRPC 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind gRPC config: %w", err)
 	}
 
 	return cfg, nil

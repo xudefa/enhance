@@ -12,15 +12,17 @@ package condition
 //	    OnProfile("dev").
 //	    Build()
 type ConditionBuilder struct {
-	conditions []Condition
-	operators  []string // "and", "or"
+	conditions  []Condition
+	operators   []string // "and", "or"
+	opCondCount []int    // 每个操作符追加时已存在的条件数量，用于确定 Not 作用于哪个条件
 }
 
 // New 创建条件构建器
 func New() *ConditionBuilder {
 	return &ConditionBuilder{
-		conditions: make([]Condition, 0),
-		operators:  make([]string, 0),
+		conditions:  make([]Condition, 0),
+		operators:   make([]string, 0),
+		opCondCount: make([]int, 0),
 	}
 }
 
@@ -99,18 +101,21 @@ func (b *ConditionBuilder) OnEnvVarMissing(envVar string) *ConditionBuilder {
 // And 添加逻辑与操作
 func (b *ConditionBuilder) And() *ConditionBuilder {
 	b.operators = append(b.operators, "and")
+	b.opCondCount = append(b.opCondCount, len(b.conditions))
 	return b
 }
 
 // Or 添加逻辑或操作
 func (b *ConditionBuilder) Or() *ConditionBuilder {
 	b.operators = append(b.operators, "or")
+	b.opCondCount = append(b.opCondCount, len(b.conditions))
 	return b
 }
 
 // Not 添加逻辑非操作（对下一个条件取反）
 func (b *ConditionBuilder) Not() *ConditionBuilder {
 	b.operators = append(b.operators, "not")
+	b.opCondCount = append(b.opCondCount, len(b.conditions))
 	return b
 }
 
@@ -154,43 +159,22 @@ func (b *ConditionBuilder) buildComposite() Condition {
 		return All(b.conditions...)
 	}
 
-	// 处理 Not 操作符
-	processedConditions := make([]Condition, 0, len(b.conditions))
+	// 先将 Not 操作应用到其后的条件上。
+	// opCondCount[i] 记录了追加 operators[i] 时已存在的条件数量，
+	// 因此 Not 作用于条件索引 opCondCount[i]（即其"下一个"条件）。
+	processedConditions := make([]Condition, len(b.conditions))
+	copy(processedConditions, b.conditions)
+
 	processedOperators := make([]string, 0, len(b.operators))
-	notPending := false
-	condIndex := 0
-
-	for i := 0; i < len(b.operators); i++ {
-		op := b.operators[i]
-
+	for i, op := range b.operators {
 		if op == "not" {
-			notPending = true
+			idx := b.opCondCount[i]
+			if idx >= 0 && idx < len(processedConditions) {
+				processedConditions[idx] = Not(processedConditions[idx])
+			}
 			continue
 		}
-
-		if condIndex < len(b.conditions) {
-			cond := b.conditions[condIndex]
-			if notPending {
-				processedConditions = append(processedConditions, Not(cond))
-				notPending = false
-				processedOperators = append(processedOperators, op)
-				condIndex++
-				continue
-			}
-			processedConditions = append(processedConditions, cond)
-			processedOperators = append(processedOperators, op)
-			condIndex++
-		}
-	}
-
-	// 处理最后一个条件
-	if condIndex < len(b.conditions) {
-		cond := b.conditions[condIndex]
-		if notPending {
-			processedConditions = append(processedConditions, Not(cond))
-			return b.buildWithOperators(processedConditions, processedOperators)
-		}
-		processedConditions = append(processedConditions, cond)
+		processedOperators = append(processedOperators, op)
 	}
 
 	// 按操作符分组
@@ -313,11 +297,15 @@ func (g ConditionBuilderGroup) Or(conditions ...Condition) ConditionBuilderGroup
 		}
 	}
 
-	// 将新条件作为 OR 分支添加
-	allGroups := append(g.groups, conditions...)
+	// 将新条件作为 OR 分支添加（复制切片避免别名问题）
+	allGroups := make([]Condition, 0, len(g.groups)+len(conditions))
+	allGroups = append(allGroups, g.groups...)
+	allGroups = append(allGroups, conditions...)
+	allGroupTypes := make([]string, 0, len(g.groupTypes)+1)
+	allGroupTypes = append(allGroupTypes, g.groupTypes...)
 	return ConditionBuilderGroup{
 		groups:     allGroups,
-		groupTypes: append(g.groupTypes, "or"),
+		groupTypes: append(allGroupTypes, "or"),
 	}
 }
 
@@ -331,11 +319,15 @@ func (g ConditionBuilderGroup) And(conditions ...Condition) ConditionBuilderGrou
 		}
 	}
 
-	// 将新条件作为 AND 分支添加
-	allGroups := append(g.groups, conditions...)
+	// 将新条件作为 AND 分支添加（复制切片避免别名问题）
+	allGroups := make([]Condition, 0, len(g.groups)+len(conditions))
+	allGroups = append(allGroups, g.groups...)
+	allGroups = append(allGroups, conditions...)
+	allGroupTypes := make([]string, 0, len(g.groupTypes)+1)
+	allGroupTypes = append(allGroupTypes, g.groupTypes...)
 	return ConditionBuilderGroup{
 		groups:     allGroups,
-		groupTypes: append(g.groupTypes, "and"),
+		groupTypes: append(allGroupTypes, "and"),
 	}
 }
 

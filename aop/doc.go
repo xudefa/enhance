@@ -191,6 +191,21 @@ type JoinPoint interface {
 
 	// ProceedWithArgs 带参数执行原方法。
 	ProceedWithArgs(args []any) (any, error)
+
+	// Context 获取上下文。
+	Context() context.Context
+
+	// GetResult 获取已执行的结果。
+	GetResult() any
+
+	// GetError 获取已执行的错误。
+	GetError() error
+
+	// SetResult 设置执行结果。
+	SetResult(v any)
+
+	// SetError 设置执行错误。
+	SetError(err error)
 }
 
 // Invocation 调用接口。
@@ -332,6 +347,8 @@ type MethodInvocation struct {
 	Proxy      any             // 代理对象本身，未设置时 This() 返回 nil
 	Ctx        context.Context // 上下文信息，未设置时 Context() 返回 context.Background()
 	proceed    ProceedFunc     // 继续执行函数，用于 Around 通知中控制执行流程
+	result     any             // 方法执行结果
+	lastErr    error           // 方法执行错误
 }
 
 // AopConfig AOP 配置。

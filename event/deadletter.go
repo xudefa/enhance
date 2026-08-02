@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var dlqKeyCounter atomic.Uint64
+
 // BackoffStrategy 退避策略类型
 type BackoffStrategy string
 
@@ -57,9 +59,19 @@ func (p RetryPolicy) CalculateDelay(attempt int) time.Duration {
 	case BackoffLinear:
 		delay = p.InitialDelay * time.Duration(attempt+1)
 	case BackoffExponential:
-		delay = p.InitialDelay * time.Duration(float64(int(1)<<uint(attempt))*p.Multiplier)
+		shift := attempt
+		if shift > 62 {
+			shift = 62
+		}
+		delay = p.InitialDelay * time.Duration(float64(int64(1)<<uint(shift))*p.Multiplier)
 	default:
 		delay = p.InitialDelay
+	}
+
+	// 限制最大延迟为 24 小时，防止整数溢出导致负数延迟
+	const maxDuration = 24 * time.Hour
+	if delay < 0 || delay > maxDuration {
+		delay = maxDuration
 	}
 
 	if p.MaxDelay > 0 && delay > p.MaxDelay {
@@ -78,6 +90,7 @@ type FailedEvent struct {
 	FirstFailedAt time.Time        // 首次失败时间
 	LastFailedAt  time.Time        // 最后失败时间
 	NextRetryAt   time.Time        // 下次重试时间
+	dlqKey        string           // DLQ 内部 key（由 Add 方法设置）
 }
 
 // IsExhausted 返回是否已达到最大重试次数
@@ -95,6 +108,7 @@ func (fe FailedEvent) ShouldRetry() bool {
 // 存储处理失败的事件，支持重试和永久失败处理。
 // 线程安全，使用 sync.Map 优化并发访问，atomic.Int64 跟踪大小。
 type DeadLetterQueue struct {
+	mu                 sync.Mutex
 	events             sync.Map // map[string]FailedEvent，key 为事件唯一标识
 	size               atomic.Int64
 	onPermanentFailure func(FailedEvent) // 永久失败回调
@@ -112,19 +126,18 @@ func (dlq *DeadLetterQueue) SetPermanentFailureHandler(handler func(FailedEvent)
 
 // Add 添加失败事件到死信队列
 func (dlq *DeadLetterQueue) Add(fe FailedEvent) {
-	key := fmt.Sprintf("%s-%d", fe.Event.Type(), fe.Event.Timestamp().UnixNano())
-
-	if fe.IsExhausted() {
-		// 已达到最大重试次数，触发永久失败回调
-		if dlq.onPermanentFailure != nil {
-			dlq.onPermanentFailure(fe)
-		}
-		return
-	}
+	key := fmt.Sprintf("%s-%d", fe.Event.Type(), dlqKeyCounter.Add(1))
+	fe.dlqKey = key
 
 	// 检查是否是新 key，避免重复计数
 	if _, loaded := dlq.events.LoadOrStore(key, fe); !loaded {
 		dlq.size.Add(1)
+		// 仅在新事件且已耗尽时触发永久失败回调
+		if fe.IsExhausted() {
+			if dlq.onPermanentFailure != nil {
+				dlq.onPermanentFailure(fe)
+			}
+		}
 		return
 	}
 	// key 已存在，更新值
@@ -134,27 +147,44 @@ func (dlq *DeadLetterQueue) Add(fe FailedEvent) {
 // Peek 获取下一个可重试的事件（不移除）
 func (dlq *DeadLetterQueue) Peek() (FailedEvent, bool) {
 	var found FailedEvent
-	var ok bool
+	var foundOk bool
 
 	dlq.events.Range(func(key, value any) bool {
-		fe := value.(FailedEvent)
+		fe, ok := value.(FailedEvent)
+		if !ok {
+			return true
+		}
 		if fe.ShouldRetry() {
 			found = fe
-			ok = true
+			foundOk = true
 			return false
 		}
 		return true
 	})
 
-	return found, ok
+	return found, foundOk
 }
 
 // Remove 移除指定事件（重试成功后调用）
+//
+// 匹配规则：按事件类型和发生时间匹配，而非接口指针地址。
 func (dlq *DeadLetterQueue) Remove(event ApplicationEvent) {
-	key := fmt.Sprintf("%s-%d", event.Type(), event.Timestamp().UnixNano())
-	if _, loaded := dlq.events.LoadAndDelete(key); loaded {
-		dlq.size.Add(-1)
-	}
+	eventType := event.Type()
+	eventTime := event.Timestamp()
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
+	dlq.events.Range(func(key, value any) bool {
+		fe, ok := value.(FailedEvent)
+		if !ok {
+			return true
+		}
+		if fe.Event.Type() == eventType && fe.Event.Timestamp().Equal(eventTime) {
+			dlq.events.Delete(key)
+			dlq.size.Add(-1)
+			return false
+		}
+		return true
+	})
 }
 
 // Size 返回死信队列中的事件数量
@@ -166,7 +196,9 @@ func (dlq *DeadLetterQueue) Size() int {
 func (dlq *DeadLetterQueue) Events() []FailedEvent {
 	result := make([]FailedEvent, 0)
 	dlq.events.Range(func(key, value any) bool {
-		result = append(result, value.(FailedEvent))
+		if fe, ok := value.(FailedEvent); ok {
+			result = append(result, fe)
+		}
 		return true
 	})
 	return result
@@ -174,18 +206,23 @@ func (dlq *DeadLetterQueue) Events() []FailedEvent {
 
 // Clear 清空死信队列
 func (dlq *DeadLetterQueue) Clear() {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
 	dlq.events.Range(func(key, value any) bool {
 		dlq.events.Delete(key)
+		dlq.size.Add(-1)
 		return true
 	})
-	dlq.size.Store(0)
 }
 
 // GetByType 获取指定类型的所有失败事件（快照）
 func (dlq *DeadLetterQueue) GetByType(eventType string) []FailedEvent {
 	result := make([]FailedEvent, 0)
 	dlq.events.Range(func(key, value any) bool {
-		fe := value.(FailedEvent)
+		fe, ok := value.(FailedEvent)
+		if !ok {
+			return true
+		}
 		if fe.Event.Type() == eventType {
 			result = append(result, fe)
 		}
@@ -196,16 +233,21 @@ func (dlq *DeadLetterQueue) GetByType(eventType string) []FailedEvent {
 
 // RemoveByType 移除指定类型的所有事件
 func (dlq *DeadLetterQueue) RemoveByType(eventType string) int {
+	dlq.mu.Lock()
+	defer dlq.mu.Unlock()
 	removed := 0
 	dlq.events.Range(func(key, value any) bool {
-		fe := value.(FailedEvent)
+		fe, ok := value.(FailedEvent)
+		if !ok {
+			return true
+		}
 		if fe.Event.Type() == eventType {
 			dlq.events.Delete(key)
+			dlq.size.Add(-1)
 			removed++
 		}
 		return true
 	})
-	dlq.size.Add(-int64(removed))
 	return removed
 }
 
@@ -216,7 +258,10 @@ func (dlq *DeadLetterQueue) Stats() DeadLetterStats {
 	}
 
 	dlq.events.Range(func(key, value any) bool {
-		fe := value.(FailedEvent)
+		fe, ok := value.(FailedEvent)
+		if !ok {
+			return true
+		}
 		stats.Total++
 		if fe.ShouldRetry() {
 			stats.Retryable++

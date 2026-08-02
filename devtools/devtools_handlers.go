@@ -2,6 +2,7 @@ package devtools
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -40,12 +41,14 @@ func (d *devModeDetectorImpl) IsDevMode() bool {
 
 // fileWatcherImpl FileWatcher 接口的默认实现。
 type fileWatcherImpl struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	watchDirs  []string
 	extensions map[string]bool
 	callbacks  []ReloadCallback
 	stopChan   chan struct{}
 	running    bool
+	wg         sync.WaitGroup
+	callbackWg sync.WaitGroup
 }
 
 // NewFileWatcher 创建文件监控器。
@@ -79,9 +82,12 @@ func (w *fileWatcherImpl) Start() error {
 		return fmt.Errorf("file watcher is already running")
 	}
 	w.running = true
+	w.stopChan = make(chan struct{})
+	stopChan := w.stopChan
 	w.mu.Unlock()
 
-	go w.pollFiles()
+	w.wg.Add(1)
+	go w.pollFiles(stopChan)
 
 	return nil
 }
@@ -89,35 +95,49 @@ func (w *fileWatcherImpl) Start() error {
 // Stop 停止监控。
 func (w *fileWatcherImpl) Stop() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if !w.running {
+		w.mu.Unlock()
 		return
 	}
 
 	w.running = false
 	close(w.stopChan)
+	w.mu.Unlock()
+
+	w.wg.Wait()
+	w.callbackWg.Wait()
 }
 
 // pollFiles 轮询文件。
-func (w *fileWatcherImpl) pollFiles() {
+func (w *fileWatcherImpl) pollFiles(stopChan chan struct{}) {
+	defer w.wg.Done()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	fileHashes := make(map[string]string)
 
-	for _, dir := range w.watchDirs {
-		w.scanDirForWatcher(dir, fileHashes)
+	// 获取目录和扩展名的快照
+	w.mu.RLock()
+	dirs := make([]string, len(w.watchDirs))
+	copy(dirs, w.watchDirs)
+	extensions := make(map[string]bool)
+	for k, v := range w.extensions {
+		extensions[k] = v
+	}
+	w.mu.RUnlock()
+
+	for _, dir := range dirs {
+		w.scanDirForWatcher(dir, extensions, fileHashes)
 	}
 
 	for {
 		select {
-		case <-w.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			currentFiles := make(map[string]string)
-			for _, dir := range w.watchDirs {
-				w.scanDirForWatcher(dir, currentFiles)
+			for _, dir := range dirs {
+				w.scanDirForWatcher(dir, extensions, currentFiles)
 			}
 
 			for file, newHash := range currentFiles {
@@ -135,11 +155,23 @@ func (w *fileWatcherImpl) pollFiles() {
 						NewHash:   newHash,
 					}
 
-					w.mu.Lock()
-					for _, callback := range w.callbacks {
-						go callback(event)
+					w.mu.RLock()
+					cbs := make([]ReloadCallback, len(w.callbacks))
+					copy(cbs, w.callbacks)
+					w.mu.RUnlock()
+
+					for _, callback := range cbs {
+						w.callbackWg.Add(1)
+						go func(cb ReloadCallback) {
+							defer w.callbackWg.Done()
+							defer func() {
+								if r := recover(); r != nil {
+									fmt.Printf("[devtools] file watcher callback panic: %v\n", r)
+								}
+							}()
+							cb(event)
+						}(callback)
 					}
-					w.mu.Unlock()
 				}
 			}
 
@@ -152,11 +184,23 @@ func (w *fileWatcherImpl) pollFiles() {
 						OldHash:   oldHash,
 					}
 
-					w.mu.Lock()
-					for _, callback := range w.callbacks {
-						go callback(event)
+					w.mu.RLock()
+					cbs := make([]ReloadCallback, len(w.callbacks))
+					copy(cbs, w.callbacks)
+					w.mu.RUnlock()
+
+					for _, callback := range cbs {
+						w.callbackWg.Add(1)
+						go func(cb ReloadCallback) {
+							defer w.callbackWg.Done()
+							defer func() {
+								if r := recover(); r != nil {
+									fmt.Printf("[devtools] file watcher callback panic: %v\n", r)
+								}
+							}()
+							cb(event)
+						}(callback)
 					}
-					w.mu.Unlock()
 				}
 			}
 
@@ -166,15 +210,15 @@ func (w *fileWatcherImpl) pollFiles() {
 }
 
 // scanDirForWatcher 扫描目录。
-func (w *fileWatcherImpl) scanDirForWatcher(dir string, hashes map[string]string) {
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+func (w *fileWatcherImpl) scanDirForWatcher(dir string, extensions map[string]bool, hashes map[string]string) {
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return nil
 		}
 
-		if len(w.extensions) > 0 {
+		if len(extensions) > 0 {
 			ext := filepath.Ext(path)
-			if !w.extensions[ext] {
+			if !extensions[ext] {
 				return nil
 			}
 		}
@@ -201,13 +245,16 @@ type LiveReloadServer struct {
 }
 
 // NewLiveReloadServer 创建实时重载服务器。
-func NewLiveReloadServer(port int, reloader HotReloader) *LiveReloadServer {
-	impl, _ := reloader.(*hotReloaderImpl)
+func NewLiveReloadServer(port int, reloader HotReloader) (*LiveReloadServer, error) {
+	impl, ok := reloader.(*hotReloaderImpl)
+	if !ok {
+		return nil, fmt.Errorf("unsupported reloader type: %T", reloader)
+	}
 	return &LiveReloadServer{
 		port:     port,
 		reloader: impl,
 		stopChan: make(chan struct{}),
-	}
+	}, nil
 }
 
 // Start 启动服务器。

@@ -34,7 +34,6 @@ func (m *LifecycleManager) SetPhase(newPhase ApplicationPhase) error {
 		m.mu.Unlock()
 		return fmt.Errorf("无效的阶段转换，从 %s 到 %s", oldPhase, newPhase)
 	}
-	m.phase = newPhase
 	listeners := make([]PhaseListener, len(m.listeners))
 	copy(listeners, m.listeners)
 	m.mu.Unlock()
@@ -46,16 +45,26 @@ func (m *LifecycleManager) SetPhase(newPhase ApplicationPhase) error {
 		}
 	}
 
-	if err != nil && m.onError != nil {
-		m.mu.RLock()
-		handler := m.onError
-		m.mu.RUnlock()
-		if handler != nil {
-			handler(oldPhase, newPhase, err)
+	if err != nil {
+		m.mu.Lock()
+		m.phase = oldPhase
+		m.mu.Unlock()
+		if m.onError != nil {
+			m.mu.RLock()
+			handler := m.onError
+			m.mu.RUnlock()
+			if handler != nil {
+				handler(oldPhase, newPhase, err)
+			}
 		}
+		return err
 	}
 
-	return err
+	m.mu.Lock()
+	m.phase = newPhase
+	m.mu.Unlock()
+
+	return nil
 }
 
 // AddListener 添加生命周期阶段监听器

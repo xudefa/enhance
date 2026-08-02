@@ -1,6 +1,7 @@
 package event
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -151,8 +152,8 @@ func TestDeadLetterQueue_PermanentFailure(t *testing.T) {
 		t.Error("expected permanent failure handler to be called")
 	}
 
-	if dlq.Size() != 0 {
-		t.Error("exhausted event should not be added to queue")
+	if dlq.Size() != 1 {
+		t.Error("exhausted event should be added to queue")
 	}
 }
 
@@ -212,7 +213,7 @@ func TestDeadLetterQueue_Events(t *testing.T) {
 
 func TestEventBusWithDeadLetter_DefaultOptions(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter()
+	bus := NewEventBusWithDeadLetter(context.Background())
 
 	if bus.retryPolicy.MaxRetries != 3 {
 		t.Errorf("expected default max retries 3, got %d", bus.retryPolicy.MaxRetries)
@@ -227,7 +228,7 @@ func TestEventBusWithDeadLetter_CustomOptions(t *testing.T) {
 	t.Parallel()
 	var permanentCalled int32
 
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(5),
 		WithBackoff(BackoffFixed, 200*time.Millisecond),
 		WithDeadLetterHandler(func(fe FailedEvent) {
@@ -258,7 +259,7 @@ func TestEventBusWithDeadLetter_FullRetryPolicy(t *testing.T) {
 		Multiplier:   1.5,
 	}
 
-	bus := NewEventBusWithDeadLetter(WithRetryPolicy(policy))
+	bus := NewEventBusWithDeadLetter(context.Background(), WithRetryPolicy(policy))
 
 	if bus.retryPolicy != policy {
 		t.Error("expected retry policy to match")
@@ -267,7 +268,7 @@ func TestEventBusWithDeadLetter_FullRetryPolicy(t *testing.T) {
 
 func TestEventBusWithDeadLetter_PublishWithRecovery(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(0), // 不重试，直接进入死信队列
 	)
 
@@ -285,7 +286,7 @@ func TestEventBusWithDeadLetter_PublishWithRecovery(t *testing.T) {
 
 func TestEventBusWithDeadLetter_DeadLetterQueueAccess(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter()
+	bus := NewEventBusWithDeadLetter(context.Background())
 
 	dlq := bus.DeadLetterQueue()
 	if dlq == nil {
@@ -300,7 +301,7 @@ func TestEventBusWithDeadLetter_DeadLetterQueueAccess(t *testing.T) {
 
 func TestEventBusWithDeadLetter_RetryDeadLetter(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(3),
 		WithBackoff(BackoffNone, 0), // 无延迟
 	)
@@ -349,7 +350,7 @@ func TestEventBusWithDeadLetter_RetryDeadLetter(t *testing.T) {
 
 func TestEventBusWithDeadLetter_RetryAllDeadLetters(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(3),
 		WithBackoff(BackoffNone, 0),
 	)
@@ -378,7 +379,7 @@ func TestEventBusWithDeadLetter_RetryAllDeadLetters(t *testing.T) {
 
 func TestRetryDeadLetter_EmptyQueue(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter()
+	bus := NewEventBusWithDeadLetter(context.Background())
 
 	result := bus.RetryDeadLetter()
 	if result {
@@ -388,7 +389,7 @@ func TestRetryDeadLetter_EmptyQueue(t *testing.T) {
 
 func TestEventBusWithDeadLetter_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	bus := NewEventBusWithDeadLetter(
+	bus := NewEventBusWithDeadLetter(context.Background(),
 		WithMaxRetries(0),
 	)
 

@@ -36,9 +36,18 @@ func NewUsernamePasswordAuthenticationFilterWithDefaults(
 
 // DoFilter 实现 filter.Filter 接口
 func (f *UsernamePasswordAuthenticationFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(SecurityRequest)
-	resp, _ := response.(SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("UsernamePasswordAuthenticationFilter: ctx must be context.Context")
+	}
+	req, ok := request.(SecurityRequest)
+	if !ok {
+		return fmt.Errorf("UsernamePasswordAuthenticationFilter: request must be SecurityRequest")
+	}
+	resp, ok := response.(SecurityResponse)
+	if !ok {
+		return fmt.Errorf("UsernamePasswordAuthenticationFilter: response must be SecurityResponse")
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
@@ -79,7 +88,8 @@ func (f *UsernamePasswordAuthenticationFilter) doFilter(ctx context.Context, req
 	}
 
 	f.logger.Info(ctx, "用户认证成功", log.KeyValue{Key: "username", Value: username})
-	SetAuthentication(authenticated)
+	ctx = ContextWithAuthentication(ctx, authenticated)
+	request.SetAttribute("security.currentAuthentication", authenticated)
 
 	response.SetStatusCode(302)
 	response.SetHeader("Location", f.defaultSuccessURL)
@@ -106,6 +116,7 @@ func NewBasicAuthenticationEntryPointWithRealm(realmName string, logger log.Logg
 	}
 }
 
+// Commence 发送 401 Unauthorized 响应并设置 WWW-Authenticate 头为 Basic realm。
 func (e *BasicAuthenticationEntryPointWithRealm) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	e.logger.Debug(ctx, "Basic 认证入口点被触发", log.KeyValue{Key: "realm", Value: e.realmName})
 	response.SetStatusCode(401)
@@ -137,9 +148,18 @@ func NewBasicAuthenticationFilterWithRealm(authManager AuthenticationManager, re
 
 // DoFilter 实现 filter.Filter 接口
 func (f *BasicAuthenticationFilterWithRealm) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(SecurityRequest)
-	resp, _ := response.(SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilterWithRealm: ctx must be context.Context")
+	}
+	req, ok := request.(SecurityRequest)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilterWithRealm: request must be SecurityRequest")
+	}
+	resp, ok := response.(SecurityResponse)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilterWithRealm: response must be SecurityResponse")
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
@@ -190,7 +210,8 @@ func (f *BasicAuthenticationFilterWithRealm) doFilter(ctx context.Context, reque
 	}
 
 	f.logger.Info(ctx, "Basic 认证成功", log.KeyValue{Key: "username", Value: username})
-	SetAuthentication(authenticated)
+	ctx = ContextWithAuthentication(ctx, authenticated)
+	request.SetAttribute("security.currentAuthentication", authenticated)
 
 	return chain.DoFilter(ctx, request, response)
 }

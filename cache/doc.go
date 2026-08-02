@@ -79,25 +79,18 @@ type Cache interface {
 // 返回 nil 值不会被缓存。
 type Getter func(ctx context.Context, key string) (any, error)
 
-// Builder 缓存构建器。
-//
-// 支持链式配置缓存参数。
-type Builder struct {
-	maxSize int
-	ttl     time.Duration
-}
-
 // LRUCache LRU（最近最少使用）缓存实现。
 //
 // 基于双向链表和哈希表实现 O(1) 时间复杂度的缓存操作。
 // 支持 TTL 过期淘汰和容量限制淘汰。
 // LRUCache 是并发安全的，所有操作都通过互斥锁保护。
 type LRUCache struct {
-	mu        sync.Mutex
-	capacity  int
-	items     map[string]*list.Element
-	evictList *list.List
-	onEvict   func(key string, value any)
+	mu         sync.Mutex
+	capacity   int
+	items      map[string]*list.Element
+	evictList  *list.List
+	onEvict    func(key string, value any)
+	defaultTTL time.Duration
 }
 
 // LRUOption LRU 缓存选项函数。

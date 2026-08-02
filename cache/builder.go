@@ -34,7 +34,11 @@ func (b *MemoryCacheBuilder) TTL(ttl time.Duration) *MemoryCacheBuilder {
 
 // Build 构建 LRU 缓存
 func (b *MemoryCacheBuilder) Build() Cache {
-	return NewLRUCache(b.initialCapacity)
+	var opts []LRUOption
+	if b.ttl > 0 {
+		opts = append(opts, WithTTL(b.ttl))
+	}
+	return NewLRUCache(b.initialCapacity, opts...)
 }
 
 // MustBuild 构建 LRU 缓存

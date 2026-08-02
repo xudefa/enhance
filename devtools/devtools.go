@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -24,6 +25,8 @@ type hotReloaderImpl struct {
 	fileHashes   map[string]string
 	running      bool
 	stopChan     chan struct{}
+	wg           sync.WaitGroup
+	callbackWg   sync.WaitGroup
 }
 
 // computeFileHash 计算文件 MD5 哈希值。
@@ -32,31 +35,13 @@ func computeFileHash(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := md5.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
-// shouldWatchFile 检查是否应该监控该文件。
-func (r *hotReloaderImpl) shouldWatchFile(path string) bool {
-	if len(r.extensions) > 0 {
-		ext := filepath.Ext(path)
-		if !r.extensions[ext] {
-			return false
-		}
-	}
-
-	for ignoreDir := range r.ignoreDirs {
-		if filepath.HasPrefix(path, ignoreDir) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // WithWatchDirs 设置监控目录。
@@ -138,13 +123,16 @@ func (r *hotReloaderImpl) Start() error {
 		return fmt.Errorf("hot reloader is already running")
 	}
 	r.running = true
+	r.stopChan = make(chan struct{})
+	stopChan := r.stopChan
 	r.mu.Unlock()
 
 	if err := r.scanFiles(); err != nil {
 		return fmt.Errorf("failed to scan files: %w", err)
 	}
 
-	go r.poll()
+	r.wg.Add(1)
+	go r.poll(stopChan)
 
 	return nil
 }
@@ -152,9 +140,8 @@ func (r *hotReloaderImpl) Start() error {
 // Stop 停止文件监控。
 func (r *hotReloaderImpl) Stop() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if !r.running {
+		r.mu.Unlock()
 		return
 	}
 
@@ -164,6 +151,10 @@ func (r *hotReloaderImpl) Stop() {
 	default:
 		close(r.stopChan)
 	}
+	r.mu.Unlock()
+
+	r.wg.Wait()
+	r.callbackWg.Wait()
 }
 
 // IsRunning 检查是否正在运行。
@@ -175,13 +166,14 @@ func (r *hotReloaderImpl) IsRunning() bool {
 }
 
 // poll 轮询文件变化。
-func (r *hotReloaderImpl) poll() {
+func (r *hotReloaderImpl) poll(stopChan chan struct{}) {
+	defer r.wg.Done()
 	ticker := time.NewTicker(r.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-r.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			r.checkForChanges()
@@ -191,74 +183,89 @@ func (r *hotReloaderImpl) poll() {
 
 // checkForChanges 检查文件变化。
 func (r *hotReloaderImpl) checkForChanges() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
+	// 在锁外执行文件系统扫描，避免锁内I/O
 	currentFiles := make(map[string]string)
+	r.mu.RLock()
+	dirs := make([]string, len(r.watchDirs))
+	copy(dirs, r.watchDirs)
+	r.mu.RUnlock()
 
-	for _, dir := range r.watchDirs {
+	for _, dir := range dirs {
 		r.scanDir(dir, currentFiles)
 	}
 
+	// 在锁内收集事件并更新状态
+	r.mu.Lock()
+
+	var events []ReloadEvent
+
 	for file, oldHash := range r.fileHashes {
 		if _, exists := currentFiles[file]; !exists {
-			event := ReloadEvent{
+			events = append(events, ReloadEvent{
 				File:      file,
 				Type:      ReloadTypeDeleted,
 				Timestamp: time.Now(),
 				OldHash:   oldHash,
-			}
-			r.triggerCallbacks(event)
+			})
 		}
 	}
 
 	for file, newHash := range currentFiles {
 		oldHash, exists := r.fileHashes[file]
 		if !exists {
-			event := ReloadEvent{
+			events = append(events, ReloadEvent{
 				File:      file,
 				Type:      ReloadTypeCreated,
 				Timestamp: time.Now(),
 				NewHash:   newHash,
-			}
-			r.triggerCallbacks(event)
+			})
 		} else if oldHash != newHash {
-			event := ReloadEvent{
+			events = append(events, ReloadEvent{
 				File:      file,
 				Type:      ReloadTypeModified,
 				Timestamp: time.Now(),
 				OldHash:   oldHash,
 				NewHash:   newHash,
-			}
-			r.triggerCallbacks(event)
+			})
 		}
 	}
 
 	r.fileHashes = currentFiles
+	r.mu.Unlock()
+
+	// 在锁外触发回调，避免锁内执行用户代码
+	for i := range events {
+		r.triggerCallbacks(events[i])
+	}
 }
 
 // scanFiles 扫描所有文件。
 func (r *hotReloaderImpl) scanFiles() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	dirs := make([]string, len(r.watchDirs))
+	copy(dirs, r.watchDirs)
+	r.mu.RUnlock()
 
-	r.fileHashes = make(map[string]string)
-
-	for _, dir := range r.watchDirs {
-		r.scanDir(dir, r.fileHashes)
+	newHashes := make(map[string]string)
+	for _, dir := range dirs {
+		r.scanDir(dir, newHashes)
 	}
+
+	r.mu.Lock()
+	r.fileHashes = newHashes
+	r.mu.Unlock()
 
 	return nil
 }
 
 // scanDir 扫描目录。
 func (r *hotReloaderImpl) scanDir(dir string, hashes map[string]string) {
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 
-		if info.IsDir() {
+		if d.IsDir() {
 			baseName := filepath.Base(path)
 			if r.ignoreDirs[baseName] {
 				return filepath.SkipDir
@@ -285,8 +292,22 @@ func (r *hotReloaderImpl) scanDir(dir string, hashes map[string]string) {
 
 // triggerCallbacks 触发回调。
 func (r *hotReloaderImpl) triggerCallbacks(event ReloadEvent) {
-	for _, callback := range r.callbacks {
-		go callback(event)
+	r.mu.RLock()
+	callbacks := make([]ReloadCallback, len(r.callbacks))
+	copy(callbacks, r.callbacks)
+	r.mu.RUnlock()
+
+	for _, callback := range callbacks {
+		r.callbackWg.Add(1)
+		go func(cb ReloadCallback) {
+			defer r.callbackWg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("[devtools] hot reload callback panic: %v\n", r)
+				}
+			}()
+			cb(event)
+		}(callback)
 	}
 }
 

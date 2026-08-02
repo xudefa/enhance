@@ -67,22 +67,22 @@ type Scheduler interface {
 	RegisteredTasks() []Task
 }
 
-// ==================== 配置键常量 ====================
-
+// 调度器配置键常量。
 const (
-	// Schedule 配置
-	ScheduleEnabled         = "schedule.enabled"
-	SchedulePoolSize        = "schedule.pool-size"
+	// ScheduleEnabled 调度器启用开关。
+	ScheduleEnabled = "schedule.enabled"
+	// SchedulePoolSize 调度器线程池大小。
+	SchedulePoolSize = "schedule.pool-size"
+	// ScheduleScanAnnotations 是否扫描注解注册任务。
 	ScheduleScanAnnotations = "schedule.scan-annotations"
 )
 
-// ==================== 默认值常量 ====================
-
+// 默认值常量。
 const (
-	// Schedule 默认值
-	DefaultSchedulePoolSize        = 10
+	// DefaultSchedulePoolSize 默认线程池大小。
+	DefaultSchedulePoolSize = 10
+	// DefaultScheduleScanAnnotations 默认是否扫描注解。
 	DefaultScheduleScanAnnotations = true
-
-	// 条件值常量
+	// ConditionTrue 条件判断的真值常量。
 	ConditionTrue = "true"
 )

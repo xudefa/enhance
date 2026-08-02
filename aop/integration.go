@@ -3,6 +3,7 @@ package aop
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // AopIntegration AOP集成器
@@ -49,11 +50,17 @@ func (i *AopIntegration) GetMetadataExtractor() *AspectMetadataExtractor {
 
 // CreateProxy 创建代理对象
 func (i *AopIntegration) CreateProxy(beanID string, target any) any {
-	switch i.manager.config.Mode {
+	// 使用集成器自身配置，而非共享 manager 的配置，
+	// 避免多个容器互相覆盖配置并造成数据竞争。
+	cfg := i.config
+	if cfg == nil {
+		return target
+	}
+	switch cfg.Mode {
 	case AopModeGenerated:
-		return i.proxyFactory.CreateOrFallback(beanID, target, i.manager.config.Weaver)
+		return i.proxyFactory.CreateOrFallback(beanID, target, cfg.Weaver)
 	case AopModeRuntime:
-		return i.manager.config.Weaver.Weave(target)
+		return cfg.Weaver.Weave(target)
 	case AopModeMixed:
 		// 优先使用代码生成的代理
 		if HasGeneratedProxy(beanID) {
@@ -63,7 +70,7 @@ func (i *AopIntegration) CreateProxy(beanID string, target any) any {
 			}
 		}
 		// 回退到运行时代理
-		return i.manager.config.Weaver.Weave(target)
+		return cfg.Weaver.Weave(target)
 	default:
 		return target
 	}
@@ -99,34 +106,48 @@ func (i *AopIntegration) GetScannedProxy(typeName string) (string, bool) {
 	return path, ok
 }
 
-// GlobalAopIntegration 全局AOP集成器
-var GlobalAopIntegration = NewAopIntegration(nil)
+// GlobalAopIntegration 全局AOP集成器（原子访问）
+var globalAopIntegration atomic.Pointer[AopIntegration]
+
+func init() {
+	globalAopIntegration.Store(NewAopIntegration(nil))
+}
+
+// GetGlobalAopIntegration 获取全局AOP集成器
+func GetGlobalAopIntegration() *AopIntegration {
+	return globalAopIntegration.Load()
+}
+
+// SetGlobalAopIntegration 设置全局AOP集成器
+func SetGlobalAopIntegration(i *AopIntegration) {
+	globalAopIntegration.Store(i)
+}
 
 // CreateProxy 创建代理对象（使用全局集成器）
 func CreateProxy(beanID string, target any) any {
-	return GlobalAopIntegration.CreateProxy(beanID, target)
+	return GetGlobalAopIntegration().CreateProxy(beanID, target)
 }
 
 // RegisterAspectToGlobal 注册切面到全局集成器
 func RegisterAspectToGlobal(aspect *AspectMeta) {
-	GlobalAopIntegration.RegisterAspect(aspect)
+	GetGlobalAopIntegration().RegisterAspect(aspect)
 }
 
 // GetGlobalAspects 获取全局切面
 func GetGlobalAspects() []*AspectMeta {
-	return GlobalAopIntegration.GetAspects()
+	return GetGlobalAopIntegration().GetAspects()
 }
 
 // AutoRegister 自动注册切面
 //
 // 从代码生成的代理中自动提取并注册切面
 func AutoRegister(beanID string) error {
-	aspects := GlobalAopIntegration.GetMetadataExtractor().ExtractFromBeanID(beanID)
+	aspects := GetGlobalAopIntegration().GetMetadataExtractor().ExtractFromBeanID(beanID)
 	if len(aspects) == 0 {
 		return fmt.Errorf("no aspects found for bean: %s", beanID)
 	}
 
-	GlobalAopIntegration.RegisterAspects(aspects...)
+	GetGlobalAopIntegration().RegisterAspects(aspects...)
 	return nil
 }
 
@@ -199,7 +220,7 @@ func ConfigureAopManager() *AopConfig {
 // 自动配置并初始化AOP系统
 func InitializeAop() {
 	config := ConfigureAopManager()
-	GlobalAopIntegration = NewAopIntegration(config)
+	SetGlobalAopIntegration(NewAopIntegration(config))
 
 	// 如果是代码生成模式，自动注册切面
 	if config.Mode == AopModeGenerated || config.Mode == AopModeMixed {
@@ -211,5 +232,5 @@ func InitializeAop() {
 
 // GetProxyWithAutoMode 使用自动模式获取代理
 func GetProxyWithAutoMode(beanID string, target any) any {
-	return GlobalAopIntegration.CreateProxy(beanID, target)
+	return GetGlobalAopIntegration().CreateProxy(beanID, target)
 }

@@ -20,23 +20,33 @@ func NewHttpRequestAdapter(request *http.Request) *HttpRequestAdapter {
 	return &HttpRequestAdapter{request: request}
 }
 
+// GetMethod 返回 HTTP 请求方法（GET、POST 等）。
 func (a *HttpRequestAdapter) GetMethod() string {
 	return a.request.Method
 }
 
+// GetURI 返回 HTTP 请求的 URI 路径。
 func (a *HttpRequestAdapter) GetURI() string {
 	return a.request.URL.Path
 }
 
+// GetHeader 返回 HTTP 请求头的指定键对应的值。
 func (a *HttpRequestAdapter) GetHeader(key string) string {
 	return a.request.Header.Get(key)
 }
 
+// RemoteAddress 返回直连对端的地址。
+func (a *HttpRequestAdapter) RemoteAddress() string {
+	return a.request.RemoteAddr
+}
+
+// SetAttribute 设置请求上下文的属性键值对。
 func (a *HttpRequestAdapter) SetAttribute(key string, value any) {
 	ctx := context.WithValue(a.request.Context(), contextKey(key), value)
 	*a.request = *a.request.WithContext(ctx)
 }
 
+// GetAttribute 获取请求上下文的指定属性值。
 func (a *HttpRequestAdapter) GetAttribute(key string) (any, bool) {
 	value := a.request.Context().Value(contextKey(key))
 	return value, value != nil
@@ -46,35 +56,52 @@ func (a *HttpRequestAdapter) GetAttribute(key string) (any, bool) {
 type HttpResponseAdapter struct {
 	responseWriter http.ResponseWriter
 	statusCode     int
+	statusSet      bool
+	committed      bool
 	written        bool
 }
 
 func NewHttpResponseAdapter(responseWriter http.ResponseWriter) *HttpResponseAdapter {
-	return &HttpResponseAdapter{responseWriter: responseWriter, statusCode: 200}
+	return &HttpResponseAdapter{responseWriter: responseWriter, statusCode: http.StatusOK}
 }
 
+// SetStatusCode 设置 HTTP 响应状态码。
+//
+// WriteHeader 延迟到首次写入响应体时提交，确保 SetStatusCode 之后设置的
+// 响应头仍能生效（net/http 中 WriteHeader 之后再修改 Header 无效）。
 func (a *HttpResponseAdapter) SetStatusCode(code int) {
 	a.statusCode = code
-	a.responseWriter.WriteHeader(code)
-	a.written = true
+	a.statusSet = true
 }
 
+// StatusCode 返回已设置的 HTTP 响应状态码。
 func (a *HttpResponseAdapter) StatusCode() int {
 	return a.statusCode
 }
 
+// SetHeader 设置 HTTP 响应头的指定键值对。
 func (a *HttpResponseAdapter) SetHeader(key, value string) {
 	a.responseWriter.Header().Set(key, value)
 }
 
+// Write 写入 HTTP 响应体数据。
 func (a *HttpResponseAdapter) Write(data []byte) error {
+	a.flush()
 	_, err := a.responseWriter.Write(data)
 	a.written = true
 	return err
 }
 
+// flush 将已设置的状态码与响应头提交到底层 ResponseWriter。
+func (a *HttpResponseAdapter) flush() {
+	if a.statusSet && !a.committed {
+		a.responseWriter.WriteHeader(a.statusCode)
+		a.committed = true
+	}
+}
+
 func (a *HttpResponseAdapter) headersWritten() bool {
-	return a.written
+	return a.committed || a.written
 }
 
 // SecurityFilterChainHandler 安全过滤器链处理器
@@ -99,15 +126,17 @@ func (h *SecurityFilterChainHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	err := h.securityFilterChain.DoFilter(ctx, request, response)
 	if err != nil {
 		if !response.headersWritten() {
-			response.SetStatusCode(500)
+			response.SetStatusCode(http.StatusInternalServerError)
 			if writeErr := response.Write([]byte(err.Error())); writeErr != nil {
 				fmt.Printf("[enhance] failed to write error response: %v\n", writeErr)
 			}
 		}
+		response.flush()
 		return
 	}
 
-	if response.StatusCode() >= 400 {
+	response.flush()
+	if response.headersWritten() {
 		return
 	}
 
@@ -121,6 +150,7 @@ func (h *SecurityFilterChainHandler) ServeHTTP(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// SetNextHandler 设置下一个 HTTP 处理器（用于过滤器链接力）。
 func (h *SecurityFilterChainHandler) SetNextHandler(handler http.Handler) {
 	h.nextHandler = handler
 }
@@ -138,9 +168,18 @@ func NewBasicAuthenticationFilter(authenticationManager AuthenticationManager) *
 
 // DoFilter 处理Basic认证
 func (f *BasicAuthenticationFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(SecurityRequest)
-	resp, _ := response.(SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilter: ctx must be context.Context")
+	}
+	req, ok := request.(SecurityRequest)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilter: request must be SecurityRequest")
+	}
+	resp, ok := response.(SecurityResponse)
+	if !ok {
+		return fmt.Errorf("BasicAuthenticationFilter: response must be SecurityResponse")
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
@@ -166,8 +205,8 @@ func (f *BasicAuthenticationFilter) doFilter(ctx context.Context, request Securi
 		return err
 	}
 
-	SetAuthentication(authenticated)
 	ctx = ContextWithAuthentication(ctx, authenticated)
+	request.SetAttribute("security.currentAuthentication", authenticated)
 
 	return chain.DoFilter(ctx, request, response)
 }

@@ -7,15 +7,20 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 )
 
+// defaultMaxJSONBodySize 默认 JSON 请求体大小限制（32 MB，与 web/core/route_registry.go 保持一致）。
+const defaultMaxJSONBodySize = 32 << 20
+
 // FormBinder 将 HTTP 表单数据绑定到 Go 结构体。
 type FormBinder struct {
-	tagName string
+	tagName     string
+	maxBodySize int64
 }
 
 // BinderOption 配置表单绑定器。
@@ -28,10 +33,18 @@ func WithTagName(tagName string) BinderOption {
 	}
 }
 
+// WithMaxBodySize 设置 JSON 请求体大小限制（默认 32 MB）。
+func WithMaxBodySize(size int64) BinderOption {
+	return func(b *FormBinder) {
+		b.maxBodySize = size
+	}
+}
+
 // NewFormBinder 创建一个新的表单绑定器。
 func NewFormBinder(opts ...BinderOption) *FormBinder {
 	b := &FormBinder{
-		tagName: "form",
+		tagName:     "form",
+		maxBodySize: defaultMaxJSONBodySize,
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -58,8 +71,25 @@ func (b *FormBinder) BindJSON(req *http.Request, target any) error {
 	if reflect.ValueOf(target).Kind() != reflect.Ptr {
 		return ErrNotPointer
 	}
+	defer func() { _ = req.Body.Close() }()
 
-	return json.NewDecoder(req.Body).Decode(target)
+	// 限制请求体大小，防止无界读取
+	r := http.MaxBytesReader(nil, req.Body, b.maxBodySize)
+	decoder := json.NewDecoder(r)
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("failed to decode JSON body: %w", err)
+	}
+
+	// 拒绝第一个 JSON 值之后的尾部内容
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("request body contains trailing data after JSON value")
+		}
+		return fmt.Errorf("failed to decode JSON body: %w", err)
+	}
+
+	return nil
 }
 
 func (b *FormBinder) bindForm(values map[string][]string, target any) error {
@@ -91,16 +121,18 @@ func (b *FormBinder) bindForm(values map[string][]string, target any) error {
 		parts := strings.Split(tag, ",")
 		fieldName := parts[0]
 
-		formValues := values[fieldName]
-		if len(formValues) == 0 {
-			// 检查字段是否必填
-			required := false
-			for _, part := range parts[1:] {
-				if part == "required" {
-					required = true
-					break
-				}
+		required := false
+		for _, part := range parts[1:] {
+			if part == "required" {
+				required = true
+				break
 			}
+		}
+
+		formValues := values[fieldName]
+		// 参数缺失；required 字段的显式空值（?name=）也视为缺失
+		missing := len(formValues) == 0 || (required && len(formValues) == 1 && formValues[0] == "")
+		if missing {
 			if required {
 				return &BindingError{
 					Field:   fieldName,
@@ -110,7 +142,7 @@ func (b *FormBinder) bindForm(values map[string][]string, target any) error {
 			continue
 		}
 
-		if err := b.setFieldValue(field, formValues[0]); err != nil {
+		if err := b.setFieldValues(field, formValues); err != nil {
 			return &BindingError{
 				Field:   fieldName,
 				Message: err.Error(),
@@ -121,24 +153,46 @@ func (b *FormBinder) bindForm(values map[string][]string, target any) error {
 	return nil
 }
 
+// setFieldValues 绑定字段值：切片字段绑定全部值，标量字段使用第一个值。
+func (b *FormBinder) setFieldValues(field reflect.Value, values []string) error {
+	if field.Kind() != reflect.Slice {
+		return b.setFieldValue(field, values[0])
+	}
+
+	// 支持重复参数（?tags=a&tags=b）以及逗号分隔（tags=a,b）
+	parts := make([]string, 0, len(values))
+	for _, v := range values {
+		parts = append(parts, strings.Split(v, ",")...)
+	}
+
+	slice := reflect.MakeSlice(field.Type(), len(parts), len(parts))
+	for i, part := range parts {
+		if err := b.setFieldValue(slice.Index(i), part); err != nil {
+			return err
+		}
+	}
+	field.Set(slice)
+	return nil
+}
+
 func (b *FormBinder) setFieldValue(field reflect.Value, value string) error {
 	switch field.Kind() {
 	case reflect.String:
 		field.SetString(value)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(value, 10, 64)
+		v, err := strconv.ParseInt(value, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetInt(v)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(value, 10, 64)
+		v, err := strconv.ParseUint(value, 10, field.Type().Bits())
 		if err != nil {
 			return err
 		}
 		field.SetUint(v)
 	case reflect.Float32, reflect.Float64:
-		v, err := strconv.ParseFloat(value, 64)
+		v, err := strconv.ParseFloat(value, field.Type().Bits())
 		if err != nil {
 			return err
 		}
@@ -149,11 +203,6 @@ func (b *FormBinder) setFieldValue(field reflect.Value, value string) error {
 			return err
 		}
 		field.SetBool(v)
-	case reflect.Slice:
-		// 处理切片字段
-		if field.Type().Elem().Kind() == reflect.String {
-			field.Set(reflect.ValueOf(strings.Split(value, ",")))
-		}
 	case reflect.Ptr:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
@@ -170,6 +219,7 @@ type BindingError struct {
 	Message string
 }
 
+// Error 返回 BindingError 的错误描述信息。
 func (e *BindingError) Error() string {
 	if e.Field != "" {
 		return fmt.Sprintf("binding error: field %q: %s", e.Field, e.Message)

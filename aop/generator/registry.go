@@ -30,14 +30,17 @@ func (r *Registry) Get(beanID string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return value.(string), true
+	s, _ := value.(string)
+	return s, true
 }
 
 // List 获取所有代理映射的副本
 func (r *Registry) List() map[string]string {
 	result := make(map[string]string)
 	r.proxies.Range(func(key, value any) bool {
-		result[key.(string)] = value.(string)
+		k, _ := key.(string)
+		v, _ := value.(string)
+		result[k] = v
 		return true
 	})
 	return result

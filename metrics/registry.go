@@ -3,6 +3,7 @@ package metrics
 import (
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -100,7 +101,7 @@ type simpleHistogram struct {
 func NewSimpleHistogram(name string, tags map[string]string) Histogram {
 	return &simpleHistogram{
 		name: name,
-		tags: tags,
+		tags: copyTags(tags),
 		min:  math.MaxFloat64,
 		max:  math.Inf(-1),
 	}
@@ -134,6 +135,13 @@ func (h *simpleHistogram) RecordWithLabels(v float64, labels map[string]string) 
 		h.mu.Unlock()
 	}
 	h.Record(v)
+}
+
+// tagsSnapshot 返回标签的快照副本，调用方持锁，避免与 RecordWithLabels 竞争。
+func (h *simpleHistogram) tagsSnapshot() map[string]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return copyTags(h.tags)
 }
 
 // Count 返回记录的样本数
@@ -184,8 +192,11 @@ func parseTags(tags []string) map[string]string {
 	if len(tags) == 0 {
 		return nil
 	}
+	if len(tags)%2 != 0 {
+		panic("metrics: tags must be provided as key/value pairs, got odd count " + strconv.Itoa(len(tags)))
+	}
 	result := make(map[string]string, len(tags)/2)
-	for i := 0; i+1 < len(tags); i += 2 {
+	for i := 0; i < len(tags); i += 2 {
 		result[tags[i]] = tags[i+1]
 	}
 	return result
@@ -195,9 +206,10 @@ func parseTags(tags []string) map[string]string {
 //
 // 通过对标签键进行排序，确保相同标签组合总是生成相同的键，
 // 避免 map 迭代顺序不确定导致的键冲突。
+// 名称、标签键和标签值中的分隔符 | 会被转义，避免名称包含 | 时与其他键冲突。
 func metricKey(name string, tags map[string]string) string {
 	if len(tags) == 0 {
-		return name
+		return escapeMetricPart(name)
 	}
 
 	// 排序标签键以确保确定性
@@ -208,14 +220,28 @@ func metricKey(name string, tags map[string]string) string {
 	sort.Strings(keys)
 
 	var sb strings.Builder
-	sb.WriteString(name)
+	sb.WriteString(escapeMetricPart(name))
 	for _, k := range keys {
 		sb.WriteString("|")
-		sb.WriteString(k)
+		sb.WriteString(escapeMetricPart(k))
 		sb.WriteString("=")
-		sb.WriteString(tags[k])
+		sb.WriteString(escapeMetricPart(tags[k]))
 	}
 	return sb.String()
+}
+
+// escapeMetricPart 转义指标键组成部分中的分隔符和转义符本身。
+func escapeMetricPart(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `|`, `\|`)
+	return s
+}
+
+// unescapeMetricName 还原被 escapeMetricPart 转义过的指标名称。
+func unescapeMetricName(s string) string {
+	s = strings.ReplaceAll(s, `\|`, `|`)
+	s = strings.ReplaceAll(s, `\\`, `\`)
+	return s
 }
 
 // Counter 获取或创建指定名称的计数器
@@ -277,10 +303,30 @@ func (r *simpleRegistry) Histogram(name string, tags ...string) Histogram {
 
 // metricNameFromKey 从 metricKey 中提取纯指标名称
 func metricNameFromKey(key string) string {
-	if idx := strings.Index(key, "|"); idx >= 0 {
-		return key[:idx]
+	name := key
+	if idx := findUnescaped(key, "|"); idx >= 0 {
+		name = key[:idx]
 	}
-	return key
+	return unescapeMetricName(name)
+}
+
+// findUnescaped 返回 s 中第一个未被转义符 \ 转义的 sep 的下标，未找到返回 -1。
+func findUnescaped(s, sep string) int {
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if s[i] == '\\' {
+			escaped = true
+			continue
+		}
+		if strings.HasPrefix(s[i:], sep) {
+			return i
+		}
+	}
+	return -1
 }
 
 // Collect 收集所有已注册的指标快照
@@ -300,7 +346,7 @@ func (r *simpleRegistry) Collect() []Metric {
 			Timestamp: now,
 		}
 		if tags, ok := r.tags.Load(k); ok {
-			m.Tags = tags.(map[string]string)
+			m.Tags = copyTags(tags.(map[string]string))
 		}
 		metrics = append(metrics, m)
 		return true
@@ -316,7 +362,7 @@ func (r *simpleRegistry) Collect() []Metric {
 			Timestamp: now,
 		}
 		if tags, ok := r.tags.Load(k); ok {
-			m.Tags = tags.(map[string]string)
+			m.Tags = copyTags(tags.(map[string]string))
 		}
 		metrics = append(metrics, m)
 		return true
@@ -338,14 +384,26 @@ func (r *simpleRegistry) Collect() []Metric {
 			Count:     count,
 			Sum:       h.Sum(),
 		}
-		if tags, ok := r.tags.Load(k); ok {
-			m.Tags = tags.(map[string]string)
+		if tags := h.tagsSnapshot(); len(tags) > 0 {
+			m.Tags = tags
 		}
 		metrics = append(metrics, m)
 		return true
 	})
 
 	return metrics
+}
+
+// copyTags 复制标签 map，避免调用方与内部 map 共享引用导致数据竞争。
+func copyTags(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]string, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 // RegisterExporter 注册指标导出器
@@ -377,6 +435,10 @@ func (r *simpleRegistry) Reset() {
 	})
 	r.histograms.Range(func(key, value any) bool {
 		value.(*simpleHistogram).Reset()
+		return true
+	})
+	r.gauges.Range(func(key, value any) bool {
+		value.(*simpleGauge).Set(0)
 		return true
 	})
 }

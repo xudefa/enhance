@@ -200,6 +200,40 @@ func TestAuditor_Async(t *testing.T) {
 	}
 }
 
+func TestAuditor_Async_LogConcurrentWithClose(t *testing.T) {
+	t.Parallel()
+	writer := &mockWriter{}
+	auditor := NewAuditor(
+		WithWriter(writer),
+		WithAsync(),
+		WithBufferSize(1),
+	)
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					auditor.Log(Event{Actor: "user", Action: EventCreate})
+				}
+			}
+		}()
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	if err := auditor.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+	close(stop)
+	wg.Wait()
+}
+
 func TestAuditor_ConsoleWriter(t *testing.T) {
 	t.Parallel()
 	writer := NewConsoleWriter()

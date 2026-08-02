@@ -25,7 +25,7 @@ func TestAdvice_Interface(t *testing.T) {
 		args:   []any{},
 	}
 
-	advice.Execute(context.Background(), joinPoint)
+	_, _ = advice.Execute(context.Background(), joinPoint)
 	if !executed {
 		t.Error("advice function should be executed")
 	}
@@ -162,6 +162,16 @@ func (j *mockJoinPointForTest) Method() string                          { return
 func (j *mockJoinPointForTest) Args() []any                             { return j.args }
 func (j *mockJoinPointForTest) Proceed() (any, error)                   { return nil, nil }
 func (j *mockJoinPointForTest) ProceedWithArgs(args []any) (any, error) { return nil, nil }
+func (j *mockJoinPointForTest) Context() context.Context {
+	if j.ctx != nil {
+		return j.ctx
+	}
+	return context.Background()
+}
+func (j *mockJoinPointForTest) GetResult() any     { return nil }
+func (j *mockJoinPointForTest) GetError() error    { return nil }
+func (j *mockJoinPointForTest) SetResult(v any)    {}
+func (j *mockJoinPointForTest) SetError(err error) {}
 
 // mockInvocationForTest 测试用的 Invocation 模拟实现
 type mockInvocationForTest struct {

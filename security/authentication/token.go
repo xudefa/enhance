@@ -81,14 +81,17 @@ func (t *UsernamePasswordToken) Name() string {
 // anonymousToken 匿名认证令牌。
 type anonymousToken struct{}
 
+// Principal 返回匿名用户主体标识。
 func (t *anonymousToken) Principal() any {
 	return "anonymousUser"
 }
 
+// Credentials 返回匿名用户的凭证，始终为 nil。
 func (t *anonymousToken) Credentials() any {
 	return nil
 }
 
+// Authenticated 返回匿名用户的认证状态，始终为 false。
 func (t *anonymousToken) Authenticated() bool {
 	return false
 }

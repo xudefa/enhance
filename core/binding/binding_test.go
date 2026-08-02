@@ -266,6 +266,9 @@ func TestTypeConverter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Convert duration failed: %v", err)
 	}
+	if d, ok := v.(time.Duration); !ok || d != 5*time.Second {
+		t.Errorf("Expected 5s duration, got %v", v)
+	}
 
 	// 测试不支持的类型
 	_, err = converter.Convert("test", "unsupported")

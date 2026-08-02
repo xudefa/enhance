@@ -305,3 +305,161 @@ func TestFormBinder_ParseFormError(t *testing.T) {
 		t.Logf("Got error (may be expected): %v", err)
 	}
 }
+
+func TestFormBinder_SliceIntOverflowReturnsError(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	type sliceIntForm struct {
+		Vals []int16 `form:"vals"`
+	}
+
+	req := httptest.NewRequest("POST", "/submit", nil)
+	req.Form = map[string][]string{
+		"vals": {"1,9999999999"},
+	}
+
+	form := &sliceIntForm{}
+	if err := binder.Bind(req, form); err == nil {
+		t.Fatal("expected overflow error for slice element, got nil")
+	}
+}
+
+func TestFormBinder_BindRepeatedQueryValuesToSlice(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	type sliceForm struct {
+		Tags []string `form:"tags"`
+	}
+
+	req := httptest.NewRequest("GET", "/search?tags=a&tags=b&tags=c", nil)
+
+	form := &sliceForm{}
+	if err := binder.BindQuery(req, form); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"a", "b", "c"}
+	if len(form.Tags) != len(expected) {
+		t.Fatalf("expected %d tags, got %d: %v", len(expected), len(form.Tags), form.Tags)
+	}
+	for i, v := range expected {
+		if form.Tags[i] != v {
+			t.Errorf("tags[%d] = %q, want %q", i, form.Tags[i], v)
+		}
+	}
+}
+
+func TestFormBinder_BindRepeatedIntValuesToSlice(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	type intSliceForm struct {
+		Nums []int32 `form:"nums"`
+	}
+
+	req := httptest.NewRequest("GET", "/search?nums=1&nums=2&nums=3", nil)
+
+	form := &intSliceForm{}
+	if err := binder.BindQuery(req, form); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []int32{1, 2, 3}
+	if len(form.Nums) != len(expected) {
+		t.Fatalf("expected %d nums, got %d: %v", len(expected), len(form.Nums), form.Nums)
+	}
+	for i, v := range expected {
+		if form.Nums[i] != v {
+			t.Errorf("nums[%d] = %d, want %d", i, form.Nums[i], v)
+		}
+	}
+}
+
+func TestFormBinder_ScalarFieldTakesFirstValue(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	type scalarForm struct {
+		Name string `form:"name"`
+	}
+
+	req := httptest.NewRequest("GET", "/search?name=first&name=second", nil)
+
+	form := &scalarForm{}
+	if err := binder.BindQuery(req, form); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if form.Name != "first" {
+		t.Errorf("expected first value, got %q", form.Name)
+	}
+}
+
+func TestFormBinder_RequiredFieldRejectsEmptyValue(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	// testRequiredForm.Name 标记为 required，?name= 视为缺失
+	req := httptest.NewRequest("GET", "/search?name=&age=1", nil)
+
+	form := &testRequiredForm{}
+	err := binder.BindQuery(req, form)
+	if err == nil {
+		t.Fatal("expected error for empty required field")
+	}
+
+	bindingErr, ok := err.(*BindingError)
+	if !ok {
+		t.Fatalf("expected *BindingError, got %T", err)
+	}
+	if bindingErr.Field != "name" {
+		t.Errorf("expected field 'name', got %q", bindingErr.Field)
+	}
+}
+
+func TestFormBinder_BindJSON_ExceedsSizeLimit(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder(WithMaxBodySize(64))
+
+	body := strings.NewReader(`{"name":"` + strings.Repeat("a", 100) + `"}`)
+	req := httptest.NewRequest("POST", "/api", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	form := &testForm{}
+	if err := binder.BindJSON(req, form); err == nil {
+		t.Fatal("expected error for oversized JSON body")
+	}
+}
+
+func TestFormBinder_BindJSON_TrailingContentRejected(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	body := strings.NewReader(`{"name":"Bob","age":1}{"name":"Eve"}`)
+	req := httptest.NewRequest("POST", "/api", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	form := &testForm{}
+	if err := binder.BindJSON(req, form); err == nil {
+		t.Fatal("expected error for trailing JSON content")
+	}
+}
+
+func TestFormBinder_BindJSON_SingleValueOK(t *testing.T) {
+	t.Parallel()
+	binder := NewFormBinder()
+
+	body := strings.NewReader(`{"name":"Bob","age":1}`)
+	req := httptest.NewRequest("POST", "/api", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	form := &testForm{}
+	if err := binder.BindJSON(req, form); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if form.Name != "Bob" {
+		t.Errorf("expected name 'Bob', got %q", form.Name)
+	}
+}

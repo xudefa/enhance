@@ -29,7 +29,8 @@ func NewDefaultMetricsRecorder() MetricsRecorder {
 func (m *DefaultMetricsRecorder) RecordException(exceptionType string, statusCode int) {
 	key := fmt.Sprintf("%s:%d", exceptionType, statusCode)
 	v, _ := m.counters.LoadOrStore(key, &atomic.Int64{})
-	v.(*atomic.Int64).Add(1)
+	ctr, _ := v.(*atomic.Int64)
+	ctr.Add(1)
 }
 
 // GetCount 获取计数（用于测试）
@@ -42,5 +43,6 @@ func (m *DefaultMetricsRecorder) GetCount(exceptionType string, statusCode int) 
 	if !ok {
 		return 0
 	}
-	return int(v.(*atomic.Int64).Load())
+	ctr, _ := v.(*atomic.Int64)
+	return int(ctr.Load())
 }

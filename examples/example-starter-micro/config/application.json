@@ -1,0 +1,8 @@
+{
+  "micro": {
+    "enabled": true,
+    "service_name": "my-micro-service",
+    "version": "1.0.0",
+    "registry_addr": "localhost:8500"
+  }
+}

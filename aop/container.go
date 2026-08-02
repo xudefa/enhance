@@ -25,8 +25,10 @@ func NewAopContainer(baseContainer core.Container) *AopContainer {
 		baseContainer = core.NewContainer()
 	}
 
-	// 使用全局集成器，确保切面共享
-	integration := GlobalAopIntegration
+	// 每个容器使用独立的集成器，保证配置互不影响。
+	// 集成器内部的 manager 仍为全局共享（NewAopIntegration 使用 GlobalAopManager），
+	// 因此切面仍可在容器间共享。
+	integration := NewAopIntegration(DefaultAopConfig())
 	factory := NewAopBeanFactory(integration)
 	processor := factory.GetProcessor()
 

@@ -34,6 +34,9 @@ type starterRegistryImpl struct {
 
 // Register 注册一个 Starter 到注册表。
 func (r *starterRegistryImpl) Register(starter Starter) {
+	if starter == nil {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.starters = append(r.starters, starter)

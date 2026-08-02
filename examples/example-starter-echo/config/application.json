@@ -1,0 +1,12 @@
+{
+  "echo": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "hide_banner": false,
+    "hide_port": false,
+    "enable_recover": true,
+    "enable_logger": true,
+    "enable_cors": true
+  }
+}

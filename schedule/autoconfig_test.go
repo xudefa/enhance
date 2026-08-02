@@ -88,7 +88,7 @@ func TestScheduleConfig_DefaultValues(t *testing.T) {
 func TestScheduler_CalculateNextRun_FixedDelay(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewFixedDelayTask("test-delay", 5*time.Second, func(ctx context.Context) error {
 		return nil
@@ -108,7 +108,7 @@ func TestScheduler_CalculateNextRun_FixedDelay(t *testing.T) {
 func TestScheduler_CalculateNextRun_FixedRate(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewFixedRateTask("test-rate", 10*time.Second, func(ctx context.Context) error {
 		return nil
@@ -128,7 +128,7 @@ func TestScheduler_CalculateNextRun_FixedRate(t *testing.T) {
 func TestScheduler_CalculateNextRun_CronTask(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	task := NewTask("test-cron", "30 * * * * *", func(ctx context.Context) error {
 		return nil
@@ -154,7 +154,7 @@ func TestScheduler_CalculateNextRun_CronTask(t *testing.T) {
 func TestScheduler_CalculateNextRun_InvalidCron(t *testing.T) {
 	t.Parallel()
 
-	scheduler := NewScheduler()
+	scheduler := NewScheduler(context.Background())
 
 	// 创建一个带有无效 cron 表达式的任务（通过直接构造）
 	task := &invalidCronTask{name: "invalid", cron: "invalid cron"}

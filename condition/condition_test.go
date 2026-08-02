@@ -77,6 +77,51 @@ func TestOnProperty(t *testing.T) {
 	}
 }
 
+// TestOnProperty_NonStringValues 验证 OnProperty 的存在性检查支持非字符串值：
+// bool false / int 0 / float 等合法值存在时应匹配。
+func TestOnProperty_NonStringValues(t *testing.T) {
+	t.Parallel()
+	ctx := &mockConditionContext{
+		envFn: func(key string) (any, bool) {
+			switch key {
+			case "feature.off":
+				return false, true
+			case "feature.zero":
+				return 0, true
+			case "feature.ratio":
+				return 0.5, true
+			case "feature.empty":
+				return "", true
+			}
+			return nil, false
+		},
+	}
+
+	tests := []struct {
+		name    string
+		key     string
+		want    bool
+		message string
+	}{
+		{"bool false present", "feature.off", true, "bool false should match (value is present)"},
+		{"int zero present", "feature.zero", true, "int 0 should match (value is present)"},
+		{"float present", "feature.ratio", true, "float should match (value is present)"},
+		{"empty string present", "feature.empty", false, "empty string should not match"},
+		{"missing", "feature.missing", false, "missing property should not match"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := OnProperty(tt.key)
+			if got := c.Matches(ctx); got != tt.want {
+				t.Errorf("%s", tt.message)
+			}
+		})
+	}
+}
+
 // TestOnMissingProperty 验证 OnMissingProperty 条件的行为：
 //  1. 属性不存在时匹配
 //  2. 属性存在时不匹配

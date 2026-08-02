@@ -4,6 +4,7 @@ package mq
 import (
 	"container/list"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ type InMemoryQueue struct {
 	BaseQueue
 	messages *list.List
 	cond     *sync.Cond
+	wg       sync.WaitGroup
 }
 
 var messageIDCounter atomic.Int64
@@ -36,7 +38,12 @@ func generateMessageID() string {
 
 // AcquireMessage 从池中获取 Message 对象。
 func AcquireMessage() *Message {
-	msg := messagePool.Get().(*Message)
+	msg, ok := messagePool.Get().(*Message)
+	if !ok {
+		msg = &Message{
+			Headers: make(map[string]string, 8),
+		}
+	}
 	if msg.Headers != nil {
 		for k := range msg.Headers {
 			delete(msg.Headers, k)
@@ -92,8 +99,8 @@ func (m *Message) Ack() {
 //
 // 线程安全，多次调用只会执行一次。
 func (m *Message) Nack(requeue bool) {
-	if m.acknowledged.Load() == 1 {
-		return // 已确认，无需重复处理
+	if !m.acknowledged.CompareAndSwap(0, 2) {
+		return // 已确认或已拒绝，无需重复处理
 	}
 	if m.nack != nil {
 		m.nack(requeue)
@@ -176,10 +183,6 @@ func (q *InMemoryQueue) Send(msg *Message) error {
 	}
 
 	msg.nack = func(requeue bool) {
-		if !msg.acknowledged.CompareAndSwap(0, 1) {
-			return // 已确认，无需重复处理
-		}
-
 		q.mu.Lock()
 		defer q.mu.Unlock()
 
@@ -189,7 +192,10 @@ func (q *InMemoryQueue) Send(msg *Message) error {
 			q.messages.PushBack(msg)
 			q.cond.Signal()
 		} else if q.deadLetterQueue != nil {
-			_ = q.deadLetterQueue.Send(msg)
+			msg.acknowledged.Store(0) // 重置确认状态，使 DLQ 消费者可以 Ack/Nack
+			if err := q.deadLetterQueue.Send(msg); err != nil {
+				slog.Error("failed to send to dead letter queue", "error", err)
+			}
 		}
 	}
 
@@ -205,6 +211,9 @@ func (q *InMemoryQueue) Receive() (*Message, error) {
 	defer q.mu.Unlock()
 
 	for q.messages.Len() == 0 {
+		if q.stopped.Load() {
+			return nil, ErrStopped
+		}
 		q.cond.Wait()
 	}
 
@@ -214,7 +223,7 @@ func (q *InMemoryQueue) Receive() (*Message, error) {
 	}
 
 	q.messages.Remove(elem)
-	msg := elem.Value.(*Message)
+	msg, _ := elem.Value.(*Message)
 
 	return msg, nil
 }
@@ -227,20 +236,34 @@ func (q *InMemoryQueue) ReceiveWithTimeout(timeout time.Duration) (*Message, err
 	deadline := time.Now().Add(timeout)
 
 	for q.messages.Len() == 0 {
+		if q.stopped.Load() {
+			return nil, ErrStopped
+		}
+
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return nil, fmt.Errorf("receive message timeout")
 		}
 
-		// 使用定时器等待
+		// 使用 select + done channel 防止定时器唤醒丢失：
+		// 定时器回调先获取互斥锁再 Broadcast，确保唤醒发生在 Wait() 挂起之后。
+		done := make(chan struct{})
 		timer := time.AfterFunc(remaining, func() {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			q.mu.Lock()
 			q.cond.Broadcast()
+			q.mu.Unlock()
 		})
 
 		q.cond.Wait()
 
 		// 确保清理定时器，避免泄漏
 		timer.Stop()
+		close(done)
 	}
 
 	elem := q.messages.Front()
@@ -249,7 +272,7 @@ func (q *InMemoryQueue) ReceiveWithTimeout(timeout time.Duration) (*Message, err
 	}
 
 	q.messages.Remove(elem)
-	msg := elem.Value.(*Message)
+	msg, _ := elem.Value.(*Message)
 
 	return msg, nil
 }
@@ -262,10 +285,19 @@ func (q *InMemoryQueue) Consume(handler MessageHandler) error {
 
 	q.mu.Lock()
 	q.stopChan = make(chan struct{})
+	q.stopped.Store(false)
 	stopChan := q.stopChan
 	q.mu.Unlock()
 
+	q.wg.Add(1)
 	go func() {
+		defer q.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[MQ] message handler panic recovered in queue %s: %v\n", q.name, r)
+			}
+		}()
+
 		for {
 			if !q.consuming.Load() {
 				return
@@ -295,13 +327,14 @@ func (q *InMemoryQueue) Consume(handler MessageHandler) error {
 // StopConsuming 实现 Queue 接口
 func (q *InMemoryQueue) StopConsuming() {
 	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	if !q.consuming.Load() {
+		q.mu.Unlock()
 		return
 	}
 
 	q.consuming.Store(false)
+	q.stopped.Store(true)
+	q.cond.Broadcast()
 
 	// 安全关闭 channel，避免重复关闭 panic
 	select {
@@ -310,6 +343,10 @@ func (q *InMemoryQueue) StopConsuming() {
 	default:
 		close(q.stopChan)
 	}
+	q.mu.Unlock()
+
+	// 等待消费者 goroutine 退出
+	q.wg.Wait()
 }
 
 // Purge 实现 Queue 接口
@@ -360,7 +397,8 @@ func (f *MessageQueueFactory) GetQueue(name string) (Queue, error) {
 	if !ok {
 		return nil, fmt.Errorf("queue %s does not exist", name)
 	}
-	return val.(Queue), nil
+	q, _ := val.(Queue)
+	return q, nil
 }
 
 // DeleteQueue 删除队列
@@ -369,8 +407,13 @@ func (f *MessageQueueFactory) DeleteQueue(name string) error {
 	if !ok {
 		return fmt.Errorf("queue %s does not exist", name)
 	}
-	queue := val.(Queue)
-	_ = queue.Close()
+	queue, ok := val.(Queue)
+	if !ok {
+		return fmt.Errorf("queue %s has invalid type", name)
+	}
+	if err := queue.Close(); err != nil {
+		return fmt.Errorf("failed to close queue %s: %w", name, err)
+	}
 	f.queues.Delete(name)
 	return nil
 }
@@ -379,7 +422,8 @@ func (f *MessageQueueFactory) DeleteQueue(name string) error {
 func (f *MessageQueueFactory) ListQueues() []string {
 	var names []string
 	f.queues.Range(func(key, value any) bool {
-		names = append(names, key.(string))
+		k, _ := key.(string)
+		names = append(names, k)
 		return true
 	})
 	return names

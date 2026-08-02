@@ -151,6 +151,7 @@ func TestContext_SetStatusCode(t *testing.T) {
 
 	ctx := NewContext(rec, req)
 	ctx.SetStatusCode(201)
+	ctx.String(201, "ok")
 
 	if rec.Code != 201 {
 		t.Errorf("expected 201, got %d", rec.Code)
@@ -277,10 +278,12 @@ func TestContext_Context(t *testing.T) {
 		t.Error("expected context to be set")
 	}
 
-	newCtx := context.WithValue(req.Context(), "key", "value")
+	type contextKey string
+	const testKey contextKey = "key"
+	newCtx := context.WithValue(req.Context(), testKey, "value")
 	ctx.SetContext(newCtx)
 
-	if ctx.Context().Value("key") != "value" {
+	if ctx.Context().Value(testKey) != "value" {
 		t.Error("expected context value to be set")
 	}
 }

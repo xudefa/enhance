@@ -1,0 +1,10 @@
+{
+  "gin": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "mode": "debug",
+    "enable_recover": true,
+    "enable_logger": true
+  }
+}

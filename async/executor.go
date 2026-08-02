@@ -12,16 +12,17 @@ import (
 //
 // 基于 goroutine 池实现异步任务执行，支持 Future 模式返回值。
 type AsyncExecutor struct {
-	workerCount int
-	queueSize   int
-	taskQueue   chan asyncTask
-	wg          sync.WaitGroup
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex
-	running     bool
-	started     bool // 标记 worker 是否已启动
-	done        chan struct{} // 标记执行器是否已关闭
+	workerCount  int
+	queueSize    int
+	taskQueue    chan asyncTask
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.Mutex
+	running      bool
+	started      bool          // 标记 worker 是否已启动
+	done         chan struct{} // 标记执行器是否已关闭
+	shutdownOnce sync.Once
 }
 
 // asyncTask 异步任务内部结构。
@@ -86,10 +87,11 @@ func (f *Future) setResult(result any, err error) {
 // NewAsyncExecutor 创建异步执行器
 //
 // 参数:
+//   - ctx: 父级 context，用于控制执行器生命周期
 //   - workerCount: 工作线程数
 //   - queueSize: 任务队列容量
-func NewAsyncExecutor(workerCount, queueSize int) *AsyncExecutor {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewAsyncExecutor(ctx context.Context, workerCount, queueSize int) *AsyncExecutor {
+	ctx, cancel := context.WithCancel(ctx)
 
 	executor := &AsyncExecutor{
 		workerCount: workerCount,
@@ -110,11 +112,10 @@ func (e *AsyncExecutor) Start() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.running {
+	if e.started {
 		return
 	}
 
-	e.running = true
 	e.started = true
 
 	// 启动核心工作线程
@@ -138,10 +139,7 @@ func (e *AsyncExecutor) worker() {
 					if !ok {
 						return
 					}
-					result, err := task.fn()
-					if task.future != nil {
-						task.future.setResult(result, err)
-					}
+					e.executeTask(task)
 				default:
 					return
 				}
@@ -150,19 +148,32 @@ func (e *AsyncExecutor) worker() {
 			if !ok {
 				return
 			}
+			e.executeTask(task)
+		}
+	}
+}
 
-			// 执行任务
-			result, err := task.fn()
+// executeTask 执行单个任务，包含 panic 恢复逻辑
+func (e *AsyncExecutor) executeTask(task asyncTask) {
+	defer func() {
+		if r := recover(); r != nil {
 			if task.future != nil {
-				task.future.setResult(result, err)
+				task.future.setResult(nil, fmt.Errorf("task panic: %v", r))
 			}
 		}
+	}()
+	result, err := task.fn()
+	if task.future != nil {
+		task.future.setResult(result, err)
 	}
 }
 
 // Submit 提交异步任务
 func (e *AsyncExecutor) Submit(fn func() (any, error)) *Future {
-	future := NewFuture()
+	future := &Future{
+		done: make(chan struct{}),
+		ctx:  e.ctx,
+	}
 
 	e.mu.Lock()
 	if !e.running {
@@ -187,14 +198,16 @@ func (e *AsyncExecutor) Submit(fn func() (any, error)) *Future {
 	}
 	e.mu.Unlock()
 
-	// 使用 done channel 安全检测关闭状态，避免向已关闭的 channel 发送
-	select {
-	case e.taskQueue <- task:
-		// 任务成功提交
-	case <-e.done:
-		// 执行器已关闭，设置错误
-		future.setResult(nil, fmt.Errorf("executor is shutdown"))
-	}
+	// 使用 recover 捕获向已关闭 channel 发送时的 panic
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// 向已关闭的 channel 发送会 panic，捕获后设置错误
+				future.setResult(nil, fmt.Errorf("executor is shutdown"))
+			}
+		}()
+		e.taskQueue <- task
+	}()
 
 	return future
 }
@@ -211,8 +224,8 @@ func (e *AsyncExecutor) GetQueueSize() int {
 	return len(e.taskQueue)
 }
 
-// Shutdown 优雅关闭执行器
-func (e *AsyncExecutor) Shutdown() {
+// doShutdown 执行关闭的核心逻辑，通过 sync.Once 保证只执行一次。
+func (e *AsyncExecutor) doShutdown() {
 	e.mu.Lock()
 	if !e.running {
 		e.mu.Unlock()
@@ -224,33 +237,30 @@ func (e *AsyncExecutor) Shutdown() {
 	e.cancel()
 	close(e.done)      // 先通知所有等待者
 	close(e.taskQueue) // 再关闭任务队列
+}
+
+// Shutdown 优雅关闭执行器
+func (e *AsyncExecutor) Shutdown() {
+	e.shutdownOnce.Do(e.doShutdown)
 	e.wg.Wait()
 }
 
 // ShutdownWithTimeout 带超时的优雅关闭
 func (e *AsyncExecutor) ShutdownWithTimeout(timeout time.Duration) error {
-	e.mu.Lock()
-	if !e.running {
-		e.mu.Unlock()
-		return nil
-	}
-	e.running = false
-	e.mu.Unlock()
+	e.shutdownOnce.Do(e.doShutdown)
 
-	e.cancel()
-	close(e.done)      // 先通知所有等待者
-	close(e.taskQueue) // 再关闭任务队列
-
-	done := make(chan struct{})
+	done := make(chan struct{}, 1)
 	go func() {
 		e.wg.Wait()
 		close(done)
 	}()
 
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-done:
 		return nil
-	case <-time.After(timeout):
+	case <-timer.C:
 		return fmt.Errorf("关闭超时，等待时间 %v", timeout)
 	}
 }

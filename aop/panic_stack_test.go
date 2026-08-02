@@ -1,6 +1,7 @@
 package aop
 
 import (
+	"context"
 	"testing"
 )
 
@@ -119,3 +120,8 @@ func (m *mockJoinPointForPanicTest) Proceed() (any, error) { return m.proceedFun
 func (m *mockJoinPointForPanicTest) ProceedWithArgs(args []any) (any, error) {
 	return m.proceedFunc()
 }
+func (m *mockJoinPointForPanicTest) Context() context.Context { return context.Background() }
+func (m *mockJoinPointForPanicTest) GetResult() any           { return nil }
+func (m *mockJoinPointForPanicTest) GetError() error          { return nil }
+func (m *mockJoinPointForPanicTest) SetResult(v any)          {}
+func (m *mockJoinPointForPanicTest) SetError(err error)       {}

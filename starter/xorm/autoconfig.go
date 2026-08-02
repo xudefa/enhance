@@ -1,7 +1,6 @@
 package xorm
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -50,18 +49,18 @@ func (c *XormAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	} else {
 		c.logger = log.Build()
 	}
-	c.logger.Info(context.Background(), "开始配置 XORM 数据库连接...")
+	c.logger.Info(ctx.Context(), "configuring XORM database connection...")
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 XORM 配置失败: %w", err)
+		return fmt.Errorf("failed to load XORM config: %w", err)
 	}
 
 	dsn := c.buildDSN(cfg)
 
 	engine, err := xorm.NewEngine(cfg.Type, dsn)
 	if err != nil {
-		return fmt.Errorf("连接数据库失败: %w", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	engine.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -73,10 +72,10 @@ func (c *XormAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := ctx.Container().RegisterInstance(engine, reflect.TypeFor[*xorm.Engine]()); err != nil {
-		return fmt.Errorf("注册 XORM Engine 失败: %w", err)
+		return fmt.Errorf("failed to register XORM Engine: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "XORM 数据库连接成功",
+	c.logger.Info(ctx.Context(), "XORM database connected successfully",
 		log.KeyValue{Key: LogFieldHost, Value: cfg.Host},
 		log.KeyValue{Key: LogFieldPort, Value: cfg.Port},
 		log.KeyValue{Key: LogFieldDatabase, Value: cfg.Database},
@@ -119,11 +118,11 @@ func (c *XormAutoConfiguration) loadConfig(env *environment.Environment) (*XormC
 	}
 
 	if err := env.BindPrefix("db.xorm", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 XORM 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind XORM config: %w", err)
 	}
 
 	if cfg.Host == "" || cfg.Database == "" {
-		return nil, fmt.Errorf("%s 和 %s 配置不能为空", XORMHost, XORMDatabase)
+		return nil, fmt.Errorf("%s and %s config must not be empty", XORMHost, XORMDatabase)
 	}
 
 	return cfg, nil

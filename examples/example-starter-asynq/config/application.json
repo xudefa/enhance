@@ -1,0 +1,10 @@
+{
+  "asynq": {
+    "enabled": true,
+    "redis_addr": "localhost:6379",
+    "redis_password": "",
+    "redis_db": 0,
+    "concurrency": 10,
+    "queue_name": "enhance-tasks"
+  }
+}

@@ -25,6 +25,7 @@ func NewStickySession(sessionCookieName string) *StickySession {
 
 // Next 选择后端（不带会话信息）
 func (ss *StickySession) Next(backends []*ServiceInstance) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}
@@ -34,6 +35,7 @@ func (ss *StickySession) Next(backends []*ServiceInstance) (*ServiceInstance, er
 
 // NextWithSession 根据会话 ID 选择后端
 func (ss *StickySession) NextWithSession(backends []*ServiceInstance, sessionID string) (*ServiceInstance, error) {
+	backends = nonNilBackends(backends)
 	if len(backends) == 0 {
 		return nil, ErrNoBackends
 	}
@@ -60,7 +62,7 @@ func (ss *StickySession) NextWithSession(backends []*ServiceInstance, sessionID 
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
-	idx := int(simpleHash(sessionID)) % len(backends)
+	idx := int(simpleHash(sessionID) % uint32(len(backends)))
 	backend = backends[idx]
 	ss.sessionBackendMap[sessionID] = backend
 

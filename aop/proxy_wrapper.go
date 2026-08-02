@@ -31,9 +31,11 @@ type InterfaceProxyWrapper struct {
 
 // NewInterfaceProxyWrapper 创建接口代理包装器。
 func NewInterfaceProxyWrapper(target any, advisors []*AspectMeta, iface reflect.Type) *InterfaceProxyWrapper {
+	copied := make([]*AspectMeta, len(advisors))
+	copy(copied, advisors)
 	return &InterfaceProxyWrapper{
 		target:      target,
-		advisors:    advisors,
+		advisors:    copied,
 		iface:       iface,
 		methodCache: make(map[string]reflect.Method),
 	}
@@ -46,19 +48,12 @@ func (w *InterfaceProxyWrapper) Invoke(methodName string, args ...any) (any, err
 
 // InvokeContext 带上下文的方法调用
 func (w *InterfaceProxyWrapper) InvokeContext(ctx context.Context, methodName string, args ...any) (any, error) {
-	method, err := w.getMethod(methodName)
-	if err != nil {
+	if _, err := w.getMethod(methodName); err != nil {
 		return nil, err
 	}
 
 	targetFunc := func(callArgs ...any) any {
-		val := reflect.ValueOf(w.target)
-		in := make([]reflect.Value, 0, len(callArgs)+1)
-		in = append(in, val)
-		for _, a := range callArgs {
-			in = append(in, reflect.ValueOf(a))
-		}
-		results := method.Func.Call(in)
+		results := w.invokeTarget(methodName, callArgs)
 		switch len(results) {
 		case 0:
 			return nil
@@ -74,12 +69,18 @@ func (w *InterfaceProxyWrapper) InvokeContext(ctx context.Context, methodName st
 	}
 
 	proceedFn := func() (any, error) {
-		return targetFunc(args...), nil
+		return extractResult(targetFunc(args...))
 	}
-	joinPoint := NewJoinPoint(w.target, methodName, args, proceedFn, nil)
+	joinPoint := NewJoinPointWithContext(ctx, w.target, methodName, args, proceedFn, nil)
 	inv := NewInvocation(joinPoint, proceedFn)
 
-	return w.getExecutor().Execute(inv, w.advisors, targetFunc), nil
+	result := w.getExecutor().Execute(inv, w.advisors, targetFunc)
+	if jp := inv.JoinPoint(); jp != nil {
+		if err := jp.GetError(); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
 }
 
 // GetTarget 获取原始目标对象
@@ -105,6 +106,28 @@ func (w *InterfaceProxyWrapper) getExecutor() ChainExecutor {
 	return getDefaultExecutor()
 }
 
+// invokeTarget 通过反射调用目标对象的方法。
+//
+// 注意：不能使用接口类型上 MethodByName 返回的 reflect.Method.Func，
+// 因为对于接口类型该方法值为零值 reflect.Value，调用会 panic。
+// 这里使用目标对象值上的 MethodByName 获取绑定方法，并处理指针/值接收者场景。
+func (w *InterfaceProxyWrapper) invokeTarget(methodName string, callArgs []any) []reflect.Value {
+	targetVal := reflect.ValueOf(w.target)
+	methodVal := targetVal.MethodByName(methodName)
+	if !methodVal.IsValid() && targetVal.Kind() == reflect.Pointer {
+		methodVal = targetVal.Elem().MethodByName(methodName)
+	}
+	if !methodVal.IsValid() {
+		panic(fmt.Sprintf("method %s not found on target %T", methodName, w.target))
+	}
+
+	in := make([]reflect.Value, 0, len(callArgs))
+	for _, a := range callArgs {
+		in = append(in, reflect.ValueOf(a))
+	}
+	return methodVal.Call(in)
+}
+
 // getMethod 获取接口方法（带缓存）
 func (w *InterfaceProxyWrapper) getMethod(methodName string) (reflect.Method, error) {
 	w.cacheMu.RLock()
@@ -124,4 +147,43 @@ func (w *InterfaceProxyWrapper) getMethod(methodName string) (reflect.Method, er
 	w.cacheMu.Unlock()
 
 	return method, nil
+}
+
+// extractResult 从目标函数返回值中提取结果与错误。
+//
+// 支持以下返回形态：
+//   - 单个返回值：直接作为结果返回
+//   - 单个 error 返回值：作为错误返回
+//   - 多返回值：末尾为 error 时拆分结果与错误
+func extractResult(result any) (any, error) {
+	switch v := result.(type) {
+	case nil:
+		return nil, nil
+	case []any:
+		if len(v) == 0 {
+			return nil, nil
+		}
+		last := v[len(v)-1]
+		if err, ok := last.(error); ok {
+			switch len(v) {
+			case 1:
+				return nil, err
+			case 2:
+				return v[0], err
+			default:
+				rest := make([]any, len(v)-1)
+				copy(rest, v[:len(v)-1])
+				return rest, err
+			}
+		}
+		if len(v) == 1 {
+			return v[0], nil
+		}
+		return v, nil
+	default:
+		if err, ok := result.(error); ok {
+			return nil, err
+		}
+		return result, nil
+	}
 }

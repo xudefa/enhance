@@ -35,7 +35,7 @@ func NewSanitizer() *Sanitizer {
 func (s *Sanitizer) AddStrategy(strategy SanitizeStrategy) {
 	// 使用 CAS 无锁算法添加策略
 	for {
-		old := s.strategies.Load().(*strategyList)
+		old, _ := s.strategies.Load().(*strategyList)
 		newList := make([]SanitizeStrategy, len(old.list)+1)
 		copy(newList, old.list)
 		newList[len(old.list)] = strategy
@@ -53,7 +53,8 @@ func (s *Sanitizer) Sanitize(key string, value any) any {
 	}
 
 	// 检查自定义策略（无锁读取）
-	strategies := s.strategies.Load().(*strategyList).list
+	sl, _ := s.strategies.Load().(*strategyList)
+	strategies := sl.list
 	for _, strategy := range strategies {
 		if strategy.IsSensitive(key, value) {
 			return redactedValue
@@ -62,7 +63,7 @@ func (s *Sanitizer) Sanitize(key string, value any) any {
 
 	// 检查关键词（无锁读取）
 	keyLower := strings.ToLower(key)
-	keywords := s.keywords.Load().([]string)
+	keywords, _ := s.keywords.Load().([]string)
 	for _, keyword := range keywords {
 		if strings.Contains(keyLower, keyword) {
 			return redactedValue
@@ -82,8 +83,7 @@ func (s *Sanitizer) Sanitize(key string, value any) any {
 // defaultKeywords 返回默认敏感关键词列表
 func defaultKeywords() []string {
 	return []string{
-		"password", "secret", "token", "key", "auth",
-		"credential", "private", "api_key", "access_token",
+		"password", "secret", "token", "api_key", "access_token",
 		"client_secret", "oauth", "bearer", "jwt",
 	}
 }

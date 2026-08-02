@@ -1,8 +1,10 @@
 package actuator
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/condition"
@@ -30,8 +32,9 @@ import (
 //   - actuator.expose.info: 应用信息端点(默认 true)
 //   - actuator.expose.prometheus: Prometheus 端点(默认 true)
 type ActuatorHttpStarter struct {
-	actuator *Actuator
-	basePath string
+	actuator      *Actuator
+	basePath      string
+	standaloneSrv *http.Server
 }
 
 // Name 返回启动器名称
@@ -96,8 +99,13 @@ func (s *ActuatorHttpStarter) Start(ctx boot.ApplicationContext) error {
 	return nil
 }
 
-// Stop 停止阶段:无需特殊处理
+// Stop 停止阶段:关闭独立 HTTP 服务器（如有）
 func (s *ActuatorHttpStarter) Stop(ctx boot.ApplicationContext) error {
+	if s.standaloneSrv != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return s.standaloneSrv.Shutdown(shutdownCtx)
+	}
 	return nil
 }
 
@@ -252,8 +260,20 @@ func (s *ActuatorHttpStarter) startStandaloneServer(env *environment.Environment
 	host := env.GetString("actuator.host", "0.0.0.0")
 	addr := fmt.Sprintf("%s:%s", host, port)
 
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	s.standaloneSrv = srv
+
 	go func() {
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[Actuator] Panic in standalone server handler: %v\n", r)
+			}
+		}()
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("[Actuator] Failed to start standalone server on %s: %v\n", addr, err)
 		}
 	}()

@@ -189,6 +189,8 @@ type CircuitState int
 const (
 	// DefaultTimeout 默认请求超时时间。
 	DefaultTimeout = 30 * time.Second
+	// DefaultMaxResponseBodySize 默认最大响应体大小（50 MB）。
+	DefaultMaxResponseBodySize = 50 << 20
 )
 
 const (
@@ -228,12 +230,13 @@ type FixedDelay struct {
 
 // RetryableClient 支持重试的 HTTP 客户端。
 type RetryableClient struct {
-	client *NetClient
+	client HTTPClient
 	config RetryConfig
 }
 
 // CircuitBreaker 断路器。
 type CircuitBreaker struct {
+	mu           sync.Mutex // 并发锁
 	maxFailures  int
 	resetTimeout time.Duration
 	failures     int
@@ -243,7 +246,7 @@ type CircuitBreaker struct {
 
 // CircuitBreakerClient 带断路器的 HTTP 客户端。
 type CircuitBreakerClient struct {
-	client   *NetClient
+	client   HTTPClient
 	breaker  *CircuitBreaker
 	fallback func(ctx context.Context) (*HTTPResponse, error)
 }

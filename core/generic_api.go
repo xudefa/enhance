@@ -4,10 +4,31 @@
 package core
 
 import (
+	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/xudefa/enhance/core/registry"
 )
+
+// defaultFactories 缓存各类型对应的默认工厂函数。
+// 相同类型始终返回同一个函数实例，用于重复注册的幂等性检测。
+var defaultFactories sync.Map // reflect.Type -> func(c ...any) (any, error)
+
+// getDefaultFactory 返回指定类型的默认工厂函数。
+func getDefaultFactory(defType reflect.Type) func(c ...any) (any, error) {
+	if f, ok := defaultFactories.Load(defType); ok {
+		return f.(func(c ...any) (any, error))
+	}
+	f := func(c ...any) (any, error) {
+		if defType.Kind() == reflect.Ptr {
+			return reflect.New(defType.Elem()).Interface(), nil
+		}
+		return reflect.Zero(defType).Interface(), nil
+	}
+	actual, _ := defaultFactories.LoadOrStore(defType, f)
+	return actual.(func(c ...any) (any, error))
+}
 
 // Register 使用泛型注册 Bean 定义，提供编译期类型安全。
 //
@@ -30,9 +51,7 @@ func Register[T any](container Container, opts ...BeanOption) error {
 	}
 
 	if def.Factory == nil {
-		def.Factory = func(c ...any) (any, error) {
-			return reflect.New(def.Type.Elem()).Interface(), nil
-		}
+		def.Factory = getDefaultFactory(def.Type)
 	}
 
 	if def.Scope == "" {
@@ -60,7 +79,11 @@ func GetByName[T any](container Container, name string) (T, error) {
 		if err != nil {
 			return zero, err
 		}
-		return instance.(T), nil
+		result, ok := instance.(T)
+		if !ok {
+			return zero, fmt.Errorf("bean %q type mismatch: got %T, want %v", name, instance, typ)
+		}
+		return result, nil
 	}
 
 	instances, err := container.Get(typ)
@@ -72,7 +95,11 @@ func GetByName[T any](container Container, name string) (T, error) {
 		return zero, ErrBeanNotFound
 	}
 
-	return instances[0].(T), nil
+	result, ok := instances[0].(T)
+	if !ok {
+		return zero, fmt.Errorf("bean type mismatch: got %T, want %v", instances[0], typ)
+	}
+	return result, nil
 }
 
 // MustGet 泛型获取函数，失败时 panic。

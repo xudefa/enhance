@@ -1,10 +1,5 @@
 package exception
 
-import (
-	"context"
-	"encoding/json"
-)
-
 // AccessDeniedHandlerAdapter 适配 AccessDeniedHandler 到异常处理器
 //
 // AccessDeniedHandlerAdapter 是一个适配器，将安全模块的 AccessDeniedHandler 接口适配到异常处理器。
@@ -31,20 +26,8 @@ func (a *AccessDeniedHandlerAdapter) Handle(response ResponseWriter, err error) 
 		return
 	}
 
-	ctx := context.Background()
-	resp := a.handler.Handle(ctx, err, response)
-
-	if resp != nil {
-		response.SetStatusCode(resp.Code)
-		response.SetHeader("Content-Type", "application/json")
-		data, marshalErr := json.Marshal(resp)
-		if marshalErr != nil {
-			return
-		}
-		if writeErr := response.Write(data); writeErr != nil {
-			return
-		}
-	}
+	ctx := response.Context()
+	a.handler.Handle(ctx, err, response)
 }
 
 // AuthenticationEntryPointAdapter 适配 AuthenticationEntryPoint 到异常处理器
@@ -73,18 +56,6 @@ func (a *AuthenticationEntryPointAdapter) Commence(response ResponseWriter, err 
 		return
 	}
 
-	ctx := context.Background()
-	resp := a.handler.Handle(ctx, err, response)
-
-	if resp != nil {
-		response.SetStatusCode(resp.Code)
-		response.SetHeader("Content-Type", "application/json")
-		data, marshalErr := json.Marshal(resp)
-		if marshalErr != nil {
-			return
-		}
-		if writeErr := response.Write(data); writeErr != nil {
-			return
-		}
-	}
+	ctx := response.Context()
+	a.handler.Handle(ctx, err, response)
 }

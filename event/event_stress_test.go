@@ -10,6 +10,7 @@ import (
 
 // TestEventBus_StressHighConcurrencyPublish 测试高并发发布事件
 func TestEventBus_StressHighConcurrencyPublish(t *testing.T) {
+	t.Parallel()
 	bus := NewEventBus()
 	var called int32
 	var wg sync.WaitGroup
@@ -50,6 +51,7 @@ func TestEventBus_StressHighConcurrencyPublish(t *testing.T) {
 
 // TestEventBus_StressHighConcurrencySubscribe 测试高并发订阅
 func TestEventBus_StressHighConcurrencySubscribe(t *testing.T) {
+	t.Parallel()
 	bus := NewEventBus()
 	var called int32
 	var wg sync.WaitGroup
@@ -96,6 +98,7 @@ func TestEventBus_StressHighConcurrencySubscribe(t *testing.T) {
 
 // TestEventBus_StressMultipleEventTypes 测试多种事件类型的压力测试
 func TestEventBus_StressMultipleEventTypes(t *testing.T) {
+	t.Parallel()
 	bus := NewEventBus()
 	var called int32
 	var wg sync.WaitGroup

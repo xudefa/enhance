@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -10,30 +11,35 @@ import (
 
 // DefaultRouter 默认路由器实现
 type DefaultRouter struct {
-	mux         *http.ServeMux
 	middlewares []mvc.MiddlewareFunc
 	handlers    map[string]mvc.HandlerFunc
 	prefix      string
-	mu          sync.RWMutex
+	mu          *sync.RWMutex // 共享的mutex，父子router共享
 	// 性能优化：缓存路由模式，避免每次请求都遍历
-	routePatterns []routePattern
+	routePatterns *[]routePattern
+	// 路由注册时的中间件链（子路由组的中间件在 handle 时绑定到路由）
+	routeMiddleware map[string][]mvc.MiddlewareFunc
 }
 
 // routePattern 预编译的路由模式
 type routePattern struct {
-	method     string
-	parts      []string
-	paramNames []string // 参数名称列表
-	paramIdxs  []int    // 参数在路径中的索引
-	handler    mvc.HandlerFunc
-	hasParams  bool
+	method      string
+	parts       []string
+	paramNames  []string // 参数名称列表
+	paramIdxs   []int    // 参数在路径中的索引
+	handler     mvc.HandlerFunc
+	hasParams   bool
+	patternPath string // 原始路由模式路径（含 {param}），用于中间件查找
 }
 
 // NewRouter 创建新的路由器
 func NewRouter() *DefaultRouter {
+	patterns := make([]routePattern, 0)
 	return &DefaultRouter{
-		mux:      http.NewServeMux(),
-		handlers: make(map[string]mvc.HandlerFunc),
+		handlers:        make(map[string]mvc.HandlerFunc),
+		mu:              &sync.RWMutex{},
+		routePatterns:   &patterns,
+		routeMiddleware: make(map[string][]mvc.MiddlewareFunc),
 	}
 }
 
@@ -67,11 +73,14 @@ func (r *DefaultRouter) Group(prefix string) mvc.Router {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// 子router与父router共享handlers映射、mutex、routePatterns和routeMiddleware
 	return &DefaultRouter{
-		mux:         r.mux,
-		middlewares: append([]mvc.MiddlewareFunc{}, r.middlewares...),
-		handlers:    r.handlers,
-		prefix:      r.prefix + prefix,
+		middlewares:     append([]mvc.MiddlewareFunc{}, r.middlewares...),
+		handlers:        r.handlers,
+		prefix:          r.prefix + prefix,
+		mu:              r.mu,
+		routePatterns:   r.routePatterns,
+		routeMiddleware: r.routeMiddleware,
 	}
 }
 
@@ -86,28 +95,55 @@ func (r *DefaultRouter) Use(middleware mvc.MiddlewareFunc) {
 func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 查找匹配的路由
 	path := req.URL.Path
+	matchPath := path
 	if r.prefix != "" {
+		// 校验请求路径确实以路由前缀开头
+		if !strings.HasPrefix(path, r.prefix) {
+			http.NotFound(w, req)
+			return
+		}
+		// 前缀必须落在路径分段边界上：/api 不能匹配 /apix
+		if len(path) > len(r.prefix) && path[len(r.prefix)] != '/' {
+			http.NotFound(w, req)
+			return
+		}
 		path = strings.TrimPrefix(path, r.prefix)
 		if path == "" {
 			path = "/"
 		}
+		matchPath = r.prefix + path
 	}
 
-	// 构建完整路径用于查找
-	fullPath := req.Method + " " + path
-	if r.prefix != "" {
-		fullPath = req.Method + " " + r.prefix + path
-	}
+	// 构建完整路径用于查找（路由模式使用完整前缀+路径编译）
+	// RFC 7231 §4.3.2：无显式 HEAD 路由时，HEAD 请求由 GET 路由处理
+	method := req.Method
+	key := method + " " + matchPath
 
-	handler, ok := r.handlers[fullPath]
+	// 使用读锁保护 handlers 和 routeMiddleware 的读取
+	r.mu.RLock()
 	var params map[string]string
+	var patternKey string
+	handler, ok := r.handlers[key]
 	if !ok {
-		// 尝试查找带路径参数的路由
-		handler, params, ok = r.findHandlerWithParams(req.Method, path)
-		if !ok {
-			http.NotFound(w, req)
-			return
+		// HEAD 请求回退到 GET 路由
+		if method == http.MethodHead {
+			method = http.MethodGet
+			key = method + " " + matchPath
+			handler, ok = r.handlers[key]
 		}
+	}
+	if !ok {
+		handler, params, ok, patternKey = r.findHandlerWithParamsLocked(method, matchPath)
+	}
+	if patternKey != "" {
+		key = patternKey
+	}
+	middlewaresCopy := r.routeMiddleware[key]
+	r.mu.RUnlock()
+
+	if !ok {
+		http.NotFound(w, req)
+		return
 	}
 
 	// 创建上下文
@@ -118,11 +154,8 @@ func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		ctx.WithParams(params)
 	}
 
-	// 构建中间件链
-	allMiddleware := append([]mvc.MiddlewareFunc{}, r.middlewares...)
-
 	// 执行中间件链和处理器
-	ctx.WithMiddleware(allMiddleware, handler)
+	ctx.WithMiddleware(middlewaresCopy, handler)
 	ctx.Next()
 }
 
@@ -133,14 +166,24 @@ func (r *DefaultRouter) handle(method, path string, handler mvc.HandlerFunc) {
 
 	fullPath := r.prefix + path
 	key := method + " " + fullPath
+
+	// 拒绝重复注册，避免静默覆盖导致静态路由与参数路由行为不一致
+	if _, exists := r.handlers[key]; exists {
+		slog.Error("duplicate route registration ignored",
+			"method", method,
+			"path", fullPath,
+		)
+		return
+	}
+
 	r.handlers[key] = handler
 
 	// 性能优化：预编译路由模式
 	pattern := r.compileRoutePattern(method, fullPath, handler)
-	r.routePatterns = append(r.routePatterns, pattern)
+	*r.routePatterns = append(*r.routePatterns, pattern)
 
-	// 注意：不再注册到标准 mux，因为 Go 1.25 不允许重复注册
-	// 所有请求都通过 ServeHTTP 处理
+	// 绑定路由注册时的中间件链（组中间件在此成为处理链的一部分）
+	r.routeMiddleware[key] = append([]mvc.MiddlewareFunc{}, r.middlewares...)
 }
 
 // compileRoutePattern 预编译路由模式
@@ -160,25 +203,23 @@ func (r *DefaultRouter) compileRoutePattern(method, path string, handler mvc.Han
 	}
 
 	return routePattern{
-		method:     method,
-		parts:      parts,
-		paramNames: paramNames,
-		paramIdxs:  paramIdxs,
-		handler:    handler,
-		hasParams:  hasParams,
+		method:      method,
+		parts:       parts,
+		paramNames:  paramNames,
+		paramIdxs:   paramIdxs,
+		handler:     handler,
+		hasParams:   hasParams,
+		patternPath: path,
 	}
 }
 
-// findHandlerWithParams 查找带路径参数的路由（使用预编译模式）
-func (r *DefaultRouter) findHandlerWithParams(method, path string) (mvc.HandlerFunc, map[string]string, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
+// findHandlerWithParamsLocked 查找带路径参数的路由（使用预编译模式，调用方须持有读锁）
+func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (mvc.HandlerFunc, map[string]string, bool, string) {
 	pathParts := strings.Split(path, "/")
 
 	// 使用预编译的路由模式进行匹配，避免每次都解析
-	for i := range r.routePatterns {
-		pattern := &r.routePatterns[i]
+	for i := range *r.routePatterns {
+		pattern := &(*r.routePatterns)[i]
 		if pattern.method != method {
 			continue
 		}
@@ -201,16 +242,16 @@ func (r *DefaultRouter) findHandlerWithParams(method, path string) (mvc.HandlerF
 		if matched {
 			// 提取参数
 			params := make(map[string]string, len(pattern.paramNames))
-			for i, idx := range pattern.paramIdxs {
+			for pi, idx := range pattern.paramIdxs {
 				if idx < len(pathParts) {
-					params[pattern.paramNames[i]] = pathParts[idx]
+					params[pattern.paramNames[pi]] = pathParts[idx]
 				}
 			}
-			return pattern.handler, params, true
+			return pattern.handler, params, true, method + " " + pattern.patternPath
 		}
 	}
 
-	return nil, nil, false
+	return nil, nil, false, ""
 }
 
 // matchPath 匹配路径（支持 {param} 语法）
@@ -237,21 +278,6 @@ func (r *DefaultRouter) matchPath(pattern, path string) bool {
 	return true
 }
 
-// handleRequest 处理请求
-func (r *DefaultRouter) handleRequest(w http.ResponseWriter, req *http.Request, handler mvc.HandlerFunc, pattern string) {
-	ctx := NewContext(w, req)
-
-	// 提取路径参数（使用已知的路由模式）
-	params := r.extractParamsForPattern(pattern, req.URL.Path)
-	ctx.WithParams(params)
-
-	// 构建中间件链
-	allMiddleware := append([]mvc.MiddlewareFunc{}, r.middlewares...)
-
-	ctx.WithMiddleware(allMiddleware, handler)
-	ctx.Next()
-}
-
 // extractParamsForPattern 根据给定模式提取路径参数
 func (r *DefaultRouter) extractParamsForPattern(pattern, path string) map[string]string {
 	params := make(map[string]string)
@@ -271,46 +297,4 @@ func (r *DefaultRouter) extractParamsForPattern(pattern, path string) map[string
 	}
 
 	return params
-}
-
-// extractParams 提取路径参数（使用预编译模式）
-// 注意：此方法主要用于测试，实际请求处理使用 extractParamsForPattern
-func (r *DefaultRouter) extractParams(path string) map[string]string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	pathParts := strings.Split(path, "/")
-
-	// 使用预编译的路由模式进行匹配
-	for i := range r.routePatterns {
-		pattern := &r.routePatterns[i]
-		if !pattern.hasParams {
-			continue
-		}
-		if len(pattern.parts) != len(pathParts) {
-			continue
-		}
-
-		// 快速路径匹配
-		matched := true
-		for j, part := range pattern.parts {
-			if part != "" && part != pathParts[j] {
-				matched = false
-				break
-			}
-		}
-
-		if matched {
-			// 提取参数
-			params := make(map[string]string, len(pattern.paramNames))
-			for i, idx := range pattern.paramIdxs {
-				if idx < len(pathParts) {
-					params[pattern.paramNames[i]] = pathParts[idx]
-				}
-			}
-			return params
-		}
-	}
-
-	return nil
 }

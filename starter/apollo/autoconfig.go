@@ -1,8 +1,7 @@
-// Package apollo 提供 Apollo 配置中心自动配置。
+// Package apollo provides Apollo configuration center auto-configuration.
 package apollo
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -25,13 +24,13 @@ func init() {
 	)
 }
 
-// ApolloAutoConfiguration Apollo 配置中心自动配置类。
+// ApolloAutoConfiguration Apollo configuration center auto-configuration.
 type ApolloAutoConfiguration struct {
 	logger log.Logger
 	client agollo.Client
 }
 
-// Configure 配置 Apollo 配置中心客户端。
+// Configure configures Apollo configuration center client.
 func (c *ApolloAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	env := ctx.Environment()
 
@@ -43,12 +42,7 @@ func (c *ApolloAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Apollo 配置失败: %w", err)
-	}
-
-	if !cfg.Enabled {
-		c.logger.Info(context.Background(), "Apollo 配置中心未启用，跳过配置")
-		return nil
+		return fmt.Errorf("failed to load Apollo config: %w", err)
 	}
 
 	apolloConfig := &config.AppConfig{
@@ -64,16 +58,16 @@ func (c *ApolloAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		return apolloConfig, nil
 	})
 	if err != nil {
-		return fmt.Errorf("启动 Apollo 客户端失败: %w", err)
+		return fmt.Errorf("failed to start Apollo client: %w", err)
 	}
 
 	c.client = client
 
 	if err := ctx.Container().RegisterInstance(client, reflect.TypeFor[agollo.Client]()); err != nil {
-		return fmt.Errorf("注册 Apollo Client 失败: %w", err)
+		return fmt.Errorf("failed to register Apollo Client: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Apollo 配置中心客户端已配置",
+	c.logger.Info(ctx.Context(), "Apollo configuration center client configured",
 		log.KeyValue{Key: "app_id", Value: cfg.AppID},
 		log.KeyValue{Key: "meta_addr", Value: cfg.MetaAddr},
 		log.KeyValue{Key: "namespace", Value: cfg.Namespace},
@@ -86,12 +80,12 @@ func (c *ApolloAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 func (c *ApolloAutoConfiguration) GetConfig(key, namespace string) (string, error) {
 	cache := c.client.GetConfigCache(namespace)
 	if cache == nil {
-		return "", fmt.Errorf("namespace %s 不存在", namespace)
+		return "", fmt.Errorf("namespace %s not found", namespace)
 	}
 
 	val, err := cache.Get(key)
 	if err != nil {
-		return "", fmt.Errorf("key %s 不存在: %w", key, err)
+		return "", fmt.Errorf("key %s not found: %w", key, err)
 	}
 
 	if str, ok := val.(string); ok {
@@ -100,7 +94,7 @@ func (c *ApolloAutoConfiguration) GetConfig(key, namespace string) (string, erro
 	return fmt.Sprintf("%v", val), nil
 }
 
-// ApolloConfig Apollo 配置中心配置。
+// ApolloConfig Apollo configuration center config.
 type ApolloConfig struct {
 	Enabled        bool   `json:"enabled" mapstructure:"enabled"`
 	AppID          string `json:"app_id" mapstructure:"app_id"`
@@ -111,7 +105,7 @@ type ApolloConfig struct {
 	Secret         string `json:"secret" mapstructure:"secret"`
 }
 
-// 配置常量。
+// Configuration constants.
 const (
 	ApolloEnabled         = "apollo.enabled"
 	DefaultCluster        = "default"
@@ -120,7 +114,7 @@ const (
 	ConditionTrue         = "true"
 )
 
-// loadConfig 从 Environment 加载 Apollo 配置。
+// loadConfig loads Apollo config from Environment.
 func (c *ApolloAutoConfiguration) loadConfig(env *environment.Environment) (*ApolloConfig, error) {
 	cfg := &ApolloConfig{
 		Cluster:        DefaultCluster,
@@ -129,7 +123,7 @@ func (c *ApolloAutoConfiguration) loadConfig(env *environment.Environment) (*Apo
 	}
 
 	if err := env.BindPrefix("apollo", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Apollo 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Apollo config: %w", err)
 	}
 
 	return cfg, nil

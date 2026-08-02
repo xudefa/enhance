@@ -1,6 +1,7 @@
 package aop
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
@@ -277,3 +278,11 @@ func (m *mockJoinPointForProxyTest) Proceed() (any, error) {
 func (m *mockJoinPointForProxyTest) ProceedWithArgs(args []any) (any, error) {
 	return nil, nil
 }
+
+func (m *mockJoinPointForProxyTest) Context() context.Context {
+	return context.Background()
+}
+func (m *mockJoinPointForProxyTest) GetResult() any     { return nil }
+func (m *mockJoinPointForProxyTest) GetError() error    { return nil }
+func (m *mockJoinPointForProxyTest) SetResult(v any)    {}
+func (m *mockJoinPointForProxyTest) SetError(err error) {}

@@ -131,7 +131,11 @@ type PointCutFunc func(reflect.Method) bool
 // Matches 实现 PointCut 接口。
 func (f PointCutFunc) Matches(target any, methodName string) bool {
 	if target == nil {
-		return true
+		dummyMethod := reflect.Method{
+			Name: methodName,
+			Type: reflect.TypeOf(func() {}),
+		}
+		return f(dummyMethod)
 	}
 
 	targetType := reflect.TypeOf(target)

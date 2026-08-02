@@ -83,6 +83,7 @@
 package boot
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/xudefa/enhance/boot/banner"
@@ -170,6 +171,13 @@ type Application interface {
 // 实际由 context.DefaultApplicationContext 实现。
 // 这是 context.ApplicationContext 的子集，仅包含自动配置需要的方法。
 type ApplicationContext interface {
+	// Context 返回应用级别的 Go 标准 context.Context。
+	//
+	// 该 context 在应用启动时创建，在应用停止时取消。
+	// Starters 和 AutoConfigurations 应使用此 context 进行日志记录、
+	// 超时控制和取消传播，避免使用 context.Background()。
+	Context() context.Context
+
 	// Container 返回 IoC 容器实例。
 	Container() core.Container
 

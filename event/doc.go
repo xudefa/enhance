@@ -33,7 +33,7 @@
 //
 //	bus := event.NewEventBus()
 //	bus.Publish(&UserCreatedEvent{
-//	    BaseEvent: event.NewBaseEvent(),
+//	    BaseEvent: &event.BaseEvent{EventType: "user.created"},
 //	    UserID:    123,
 //	})
 //
@@ -193,6 +193,8 @@ type EventBusWithOrdering struct {
 	mu        sync.Mutex // 仅用于写操作（Subscribe/Unsubscribe）
 	listeners sync.Map   // map[string]*listenerSlice
 	nextID    int        // 监听器 ID 计数器
+	wg        sync.WaitGroup
+	closeMu   sync.Mutex // 保护 wg.Add/Wait 之间的竞态
 }
 
 // LegacyEventBusAdapter 将 EventBusWithOrdering 适配为 EventBus 接口。

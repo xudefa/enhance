@@ -8,6 +8,7 @@ import (
 // ResourceBundleMessageSource 基于资源包的消息源实现。
 type ResourceBundleMessageSource struct {
 	bundles  sync.Map // map[string]map[string]string，使用 sync.Map 优化并发读取
+	mu       sync.RWMutex
 	fallback MessageSource
 }
 
@@ -43,6 +44,8 @@ func (m *ResourceBundleMessageSource) AddResourceBundle(locale Locale, messages 
 
 // SetFallback 设置回退消息源，当当前消息源找不到消息时会委托给 fallback。
 func (m *ResourceBundleMessageSource) SetFallback(fallback MessageSource) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.fallback = fallback
 }
 
@@ -72,8 +75,12 @@ func (m *ResourceBundleMessageSource) GetMessageWithLocale(code string, locale L
 		}
 	}
 
-	if m.fallback != nil {
-		return m.fallback.GetMessageWithLocale(code, locale, args...)
+	m.mu.RLock()
+	fallback := m.fallback
+	m.mu.RUnlock()
+
+	if fallback != nil {
+		return fallback.GetMessageWithLocale(code, locale, args...)
 	}
 
 	return code

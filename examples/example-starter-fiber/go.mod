@@ -1,0 +1,28 @@
+module github.com/xudefa/enhance/examples/example-starter-fiber
+
+go 1.25.12
+
+require (
+	github.com/gofiber/fiber/v2 v2.52.0
+	github.com/xudefa/enhance v0.0.3
+	github.com/xudefa/enhance/starter/fiber v0.0.3
+)
+
+require (
+	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/klauspost/compress v1.17.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.51.0 // indirect
+	github.com/valyala/tcplisten v1.0.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+)
+
+replace (
+	github.com/xudefa/enhance => ../../
+	github.com/xudefa/enhance/starter/fiber => ../../starter/fiber
+)

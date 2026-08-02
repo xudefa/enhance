@@ -25,6 +25,7 @@ func TestTracingMiddleware_WithTracer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("请求失败: %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		t.Errorf("期望状态码 200，实际 %d", resp.StatusCode)
@@ -62,6 +63,7 @@ func TestTracingMiddleware_WithoutTracer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("请求失败: %v", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		t.Errorf("期望状态码 200，实际 %d", resp.StatusCode)

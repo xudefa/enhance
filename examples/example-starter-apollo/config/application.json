@@ -1,0 +1,11 @@
+{
+  "apollo": {
+    "enabled": true,
+    "app_id": "apollo-example",
+    "cluster": "default",
+    "meta_addr": "http://localhost:8080",
+    "namespace": "application",
+    "is_backup_config": true,
+    "secret": ""
+  }
+}

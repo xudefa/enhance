@@ -11,6 +11,9 @@ type HealthAware struct {
 
 // NewHealthAware 创建健康感知负载均衡器
 func NewHealthAware(inner Balancer) *HealthAware {
+	if inner == nil {
+		panic("resilience: inner balancer must not be nil")
+	}
 	return &HealthAware{
 		inner:   inner,
 		failure: make(map[string]int),
@@ -26,15 +29,19 @@ func (ha *HealthAware) Next(backends []*ServiceInstance) (*ServiceInstance, erro
 	ha.mu.Lock()
 	defer ha.mu.Unlock()
 
-	healthyBackends := make([]*ServiceInstance, 0)
+	healthyBackends := make([]*ServiceInstance, 0, len(backends))
 	for _, b := range backends {
-		if b.Health == HealthUp {
+		if b != nil && b.Health == HealthUp {
 			healthyBackends = append(healthyBackends, b)
 		}
 	}
 
 	if len(healthyBackends) == 0 {
-		healthyBackends = backends
+		healthyBackends = nonNilBackends(backends)
+	}
+
+	if len(healthyBackends) == 0 {
+		return nil, ErrNoBackends
 	}
 
 	return ha.inner.Next(healthyBackends)

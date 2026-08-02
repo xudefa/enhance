@@ -4,23 +4,25 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 )
 
-// GroupRule 验证组规则
+// GroupRule 验证组规则。
 type GroupRule struct {
 	GroupName string
 	Rules     []string
 	Inherited bool
 }
 
-// GroupedTagValidator 支持验证组的标签验证器
+// GroupedTagValidator 支持验证组的标签验证器。
 type GroupedTagValidator struct {
 	registry      *ValidatorRegistry
+	mu            sync.RWMutex
 	defaultGroups []string
 	groups        map[string]bool // 存储已定义的组名
 }
 
-// NewGroupedValidator 创建新的分组验证器
+// NewGroupedValidator 创建新的分组验证器。
 func NewGroupedValidator(registry *ValidatorRegistry) *GroupedTagValidator {
 	return &GroupedTagValidator{
 		registry: registry,
@@ -28,21 +30,25 @@ func NewGroupedValidator(registry *ValidatorRegistry) *GroupedTagValidator {
 	}
 }
 
-// SetDefaultGroups 设置默认验证组
+// SetDefaultGroups 设置默认验证组。
 func (v *GroupedTagValidator) SetDefaultGroups(groups ...string) {
+	v.mu.Lock()
 	v.defaultGroups = groups
 	// 将默认组添加到组注册表
 	for _, g := range groups {
 		v.groups[g] = true
 	}
+	v.mu.Unlock()
 }
 
-// RegisterGroup 注册一个验证组
+// RegisterGroup 注册一个验证组。
 func (v *GroupedTagValidator) RegisterGroup(name string) {
+	v.mu.Lock()
 	v.groups[name] = true
+	v.mu.Unlock()
 }
 
-// ValidateWithGroups 使用指定组验证对象
+// ValidateWithGroups 使用指定组验证对象。
 func (v *GroupedTagValidator) ValidateWithGroups(obj any, groups ...string) error {
 	if obj == nil {
 		return nil
@@ -102,7 +108,7 @@ func (v *GroupedTagValidator) ValidateWithGroups(obj any, groups ...string) erro
 	return nil
 }
 
-// Validate 使用默认组验证对象
+// Validate 使用默认组验证对象。
 func (v *GroupedTagValidator) Validate(obj any) error {
 	if len(v.defaultGroups) > 0 {
 		return v.ValidateWithGroups(obj, v.defaultGroups...)
@@ -183,9 +189,11 @@ func (v *GroupedTagValidator) resolveInheritedRules(rules []GroupRule, groups []
 	return resolvedRules
 }
 
-// GetGroup 获取组是否存在
+// GetGroup 获取组是否存在。
 func (v *GroupedTagValidator) GetGroup(name string) (bool, bool) {
+	v.mu.RLock()
 	exists := v.groups[name]
+	v.mu.RUnlock()
 	return exists, exists
 }
 

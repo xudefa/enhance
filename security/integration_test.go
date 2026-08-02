@@ -49,7 +49,6 @@ func TestPasswordEncoding(t *testing.T) {
 // 演示多个认证提供者的使用
 func TestMultipleProviderManager(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
 	userDetailsService := NewInMemoryUserDetailsService()
 	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
@@ -171,9 +170,8 @@ func TestAccessDecisionManagers(t *testing.T) {
 // 演示安全上下文的线程安全操作
 func TestSecurityContextThreadSafety(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
-	ctx := GetSecurityContext()
+	ctx := NewSecurityContext()
 	if ctx.Authentication() != nil {
 		t.Error("Expected no initial authentication")
 	}
@@ -247,7 +245,6 @@ func TestFilterInvocationSecurityMetadataSource(t *testing.T) {
 // 演示完整的HTTP安全配置
 func TestHttpSecurityChain(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
 	userDetailsService := NewInMemoryUserDetailsService()
 	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
@@ -280,7 +277,6 @@ func TestHttpSecurityChain(t *testing.T) {
 // 演示从认证到授权的完整流程
 func TestSecurityIntegration(t *testing.T) {
 	t.Parallel()
-	InitSecurityContext()
 
 	userDetailsService := NewInMemoryUserDetailsService()
 	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN", "ROLE_USER"})

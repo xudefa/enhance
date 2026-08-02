@@ -4,9 +4,6 @@ import "errors"
 
 // tracing 包错误定义。
 var (
-	// ErrSpanAlreadyEnded Span 已结束错误。
-	ErrSpanAlreadyEnded = errors.New("span already ended")
-
 	// ErrExporterNotSet 导出器未设置错误。
 	ErrExporterNotSet = errors.New("exporter not set")
 

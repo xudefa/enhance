@@ -16,6 +16,9 @@ import (
 
 // AESEncrypt 使用 AES-CBC 模式加密数据。
 //
+// 警告：AES-CBC 模式不提供认证保护，存在 padding oracle 攻击风险。
+// 建议使用 AESGCMEncrypt 代替，后者提供认证加密（AEAD）。
+//
 // 参数:
 //   - plaintext: 明文数据
 //   - key: 密钥（16/24/32 字节对应 AES-128/AES-192/AES-256）
@@ -44,6 +47,9 @@ func AESEncrypt(plaintext, key, iv []byte) ([]byte, error) {
 }
 
 // AESDecrypt 使用 AES-CBC 模式解密数据。
+//
+// 警告：AES-CBC 模式不提供认证保护，存在 padding oracle 攻击风险。
+// 建议使用 AESGCMDecrypt 代替，后者提供认证加密（AEAD）。
 //
 // 参数:
 //   - ciphertext: 密文数据

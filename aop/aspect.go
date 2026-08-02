@@ -8,13 +8,14 @@ import (
 
 // SortAspectsByOrder 按 Order 升序排序切面列表。
 //
-// 使用标准库 slices.SortFunc 按 Order 升序排列切面，Order 小的在前。
+// 使用标准库 slices.SortStableFunc 按 Order 升序排列切面，Order 小的在前。
+// 使用稳定排序，保证 Order 相同的切面保持注册顺序，执行顺序确定。
 // 当多个切点匹配同一方法时，通过 Order 控制通知的执行顺序。
 func SortAspectsByOrder(aspects []*AspectMeta) {
 	if len(aspects) < 2 {
 		return
 	}
-	slices.SortFunc(aspects, func(a, b *AspectMeta) int {
+	slices.SortStableFunc(aspects, func(a, b *AspectMeta) int {
 		if a == nil && b == nil {
 			return 0
 		}

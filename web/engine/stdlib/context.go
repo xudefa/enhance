@@ -20,6 +20,7 @@ type Context struct {
 	mw      []core.MiddlewareFunc
 	handler core.HandlerFunc
 	aborted bool
+	code    int
 }
 
 // NewContext 创建新的 HTTP 上下文。
@@ -82,6 +83,7 @@ func (c *Context) Header(key string) string {
 // BindJSON 解析 JSON 请求体。
 func (c *Context) BindJSON(target any) error {
 	defer func() { _ = c.request.Body.Close() }()
+	c.request.Body = http.MaxBytesReader(c.writer, c.request.Body, 32<<20)
 	body, err := io.ReadAll(c.request.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
@@ -94,6 +96,7 @@ func (c *Context) BindJSON(target any) error {
 
 // SetStatusCode 设置响应状态码。
 func (c *Context) SetStatusCode(code int) {
+	c.code = code
 	c.writer.WriteHeader(code)
 }
 
@@ -159,4 +162,9 @@ func (c *Context) Context() context.Context {
 // SetContext 设置请求上下文。
 func (c *Context) SetContext(ctx context.Context) {
 	c.request = c.request.WithContext(ctx)
+}
+
+// Request 获取底层 HTTP 请求。
+func (c *Context) Request() *http.Request {
+	return c.request
 }

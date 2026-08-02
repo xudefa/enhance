@@ -188,6 +188,10 @@ func (t *Timer) Start() {
 func (t *Timer) Stop() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.startTime.IsZero() {
+		t.duration = 0
+		return
+	}
 	t.duration = time.Since(t.startTime)
 }
 

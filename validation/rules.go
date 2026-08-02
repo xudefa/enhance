@@ -101,6 +101,9 @@ func (v *TagValidator) isRegexpValid(field reflect.Value, pattern string) bool {
 		return false
 	}
 	re := compileRegex(pattern)
+	if re == nil {
+		return false
+	}
 	return re.MatchString(field.String())
 }
 

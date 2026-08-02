@@ -45,6 +45,7 @@ package i18n
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Locale 表示语言和区域设置。
@@ -76,9 +77,65 @@ type MessageSource interface {
 }
 
 // formatMessage 格式化消息模板。
+//
+// 格式化前先转义非格式动词的 %，避免 "折扣 50% 使用" 这类字面量 % 被破坏。
+// 消息中不存在格式动词时直接返回原文，避免多余的 %!(EXTRA ...) 标记。
 func formatMessage(msg string, args []any) string {
 	if len(args) == 0 {
 		return msg
 	}
-	return fmt.Sprintf(msg, args...)
+	escaped, hasVerb := escapePercent(msg)
+	if !hasVerb {
+		return msg
+	}
+	return fmt.Sprintf(escaped, args...)
+}
+
+// escapePercent 转义消息中非格式动词的 %，并报告是否存在格式动词。
+//
+// 仅当 % 后跟合法格式动词（含标志、宽度、精度等前缀）时保留，其余 % 转义为 %%。
+func escapePercent(msg string) (string, bool) {
+	const verbs = "vTtbcdoOxXUeEfFgGqs"
+	hasVerb := false
+	var b strings.Builder
+	for i := 0; i < len(msg); i++ {
+		if msg[i] != '%' {
+			b.WriteByte(msg[i])
+			continue
+		}
+
+		// 已转义的字面量 %（%%），原样保留
+		if i+1 < len(msg) && msg[i+1] == '%' {
+			b.WriteString("%%")
+			i++
+			continue
+		}
+
+		// 解析 %[flags][width][.precision]verb
+		j := i + 1
+		for j < len(msg) && isFormatPrefix(msg[j]) {
+			j++
+		}
+		if j < len(msg) && strings.ContainsRune(verbs, rune(msg[j])) {
+			hasVerb = true
+			b.WriteString(msg[i : j+1])
+			i = j
+			continue
+		}
+
+		// 字面量 %，转义为 %%
+		b.WriteString("%%")
+	}
+	return b.String(), hasVerb
+}
+
+// isFormatPrefix 判断字符是否为格式动词前缀（标志、宽度、精度）。
+func isFormatPrefix(c byte) bool {
+	switch {
+	case c == '#' || c == '0' || c == '-' || c == '+' || c == ' ' || c == '.':
+		return true
+	case c >= '0' && c <= '9':
+		return true
+	}
+	return false
 }

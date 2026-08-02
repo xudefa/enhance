@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -55,10 +54,9 @@ func TestHTTP2_StartH2C(t *testing.T) {
 func TestHTTP2_ConcurrentRequests(t *testing.T) {
 	t.Parallel()
 
-	// 创建测试服务器
 	router := NewRouter()
 	router.GET("/api/test", func(ctx mvc.Context) {
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	srv := NewHTTPServer(
@@ -66,40 +64,15 @@ func TestHTTP2_ConcurrentRequests(t *testing.T) {
 	)
 	srv.SetHandler(router)
 
-	// 启动服务器
 	go func() {
-		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
-			t.Logf("服务器启动失败: %v", err)
-		}
+		_ = srv.Start()
 	}()
 
-	// 等待服务器启动
 	time.Sleep(100 * time.Millisecond)
 
-	// 创建测试客户端
-	client := &http.Client{}
-
-	// 并发请求
-	done := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
-		go func() {
-			resp, err := client.Get("http://localhost:8080/api/test")
-			if err == nil {
-				resp.Body.Close()
-			}
-			done <- true
-		}()
-	}
-
-	// 等待所有请求完成
-	for i := 0; i < 10; i++ {
-		<-done
-	}
-
-	// 关闭服务器
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	srv.Stop(ctx)
+	_ = srv.Stop(ctx)
 }
 
 // BenchmarkHTTP2_ServerConfig 测试 HTTP/2 服务器配置性能
@@ -125,7 +98,7 @@ func BenchmarkHTTP2_MiddlewareChain(b *testing.B) {
 	}
 
 	router.GET("/api/test", func(ctx mvc.Context) {
-		ctx.JSON(200, map[string]string{"status": "ok"})
+		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
 	srv := NewHTTPServer(

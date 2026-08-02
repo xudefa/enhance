@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // RefreshProxy Bean 刷新代理
@@ -59,14 +60,18 @@ func (p *RefreshProxy) GetTarget() any {
 		return p.target.Load()
 	}
 
+	startTime := time.Now()
 	newBean, err := p.manager.createBean(p.beanID)
 	if err != nil {
+		p.manager.Metrics().RecordRefresh(time.Since(startTime), false)
 		p.logger.Error("Failed to refresh bean", "beanID", p.beanID, "error", err)
 		return p.target.Load()
 	}
 
 	p.target.Store(newBean)
 	p.needsRefresh.Store(false)
+	p.manager.incrementBeanVersion(p.beanID)
+	p.manager.Metrics().RecordRefresh(time.Since(startTime), true)
 	p.logger.Info("Bean refreshed successfully", "beanID", p.beanID)
 	return newBean
 }

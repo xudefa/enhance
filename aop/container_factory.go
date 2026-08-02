@@ -15,7 +15,7 @@ type AopBeanFactory struct {
 // NewAopBeanFactory 创建AOP Bean工厂
 func NewAopBeanFactory(integration *AopIntegration) *AopBeanFactory {
 	if integration == nil {
-		integration = GlobalAopIntegration
+		integration = GetGlobalAopIntegration()
 	}
 	return &AopBeanFactory{
 		integration: integration,

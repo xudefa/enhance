@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"os"
 	"sync/atomic"
 )
 
@@ -84,7 +85,9 @@ func (l *ContextLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue
 	keys = appendContextKeys(ctx, keys)
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.DPanic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Panic 记录日志并 panic
@@ -92,7 +95,9 @@ func (l *ContextLogger) Panic(ctx context.Context, msg string, keys ...KeyValue)
 	keys = appendContextKeys(ctx, keys)
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.Panic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Fatal 记录致命级别日志
@@ -100,7 +105,9 @@ func (l *ContextLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue)
 	keys = appendContextKeys(ctx, keys)
 	if fl, ok := l.logger.(LoggerFatal); ok {
 		fl.Fatal(ctx, msg, keys...)
+		return
 	}
+	os.Exit(1)
 }
 
 // Sync 同步日志缓冲区
@@ -203,21 +210,27 @@ func (d *DynamicLevelLogger) Error(ctx context.Context, msg string, keys ...KeyV
 func (d *DynamicLevelLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := d.logger.(LoggerFatal); ok {
 		fl.DPanic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Panic 记录日志并 panic
 func (d *DynamicLevelLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := d.logger.(LoggerFatal); ok {
 		fl.Panic(ctx, msg, keys...)
+		return
 	}
+	panic(msg)
 }
 
 // Fatal 记录致命级别日志
 func (d *DynamicLevelLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
 	if fl, ok := d.logger.(LoggerFatal); ok {
 		fl.Fatal(ctx, msg, keys...)
+		return
 	}
+	os.Exit(1)
 }
 
 // Sync 同步日志缓冲区

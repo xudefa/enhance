@@ -3,18 +3,28 @@ package tracing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 )
 
 type mockExporter struct {
+	mu    sync.Mutex
 	spans []*Span
 }
 
 func (e *mockExporter) ExportSpans(spans []*Span) error {
+	e.mu.Lock()
 	e.spans = spans
+	e.mu.Unlock()
 	return nil
+}
+
+func (e *mockExporter) getSpans() []*Span {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.spans
 }
 
 func TestTracer_StartSpan_Basic(t *testing.T) {
@@ -44,6 +54,52 @@ func TestTracer_StartSpan_WithParent(t *testing.T) {
 
 	if child.TraceID != parent.TraceID {
 		t.Errorf("expected same trace ID, parent=%s, child=%s", parent.TraceID, child.TraceID)
+	}
+}
+
+func TestTracer_StartSpan_WithContext(t *testing.T) {
+	t.Parallel()
+	tracer := NewTracer(WithServiceName("test-service"))
+
+	upstream := SpanContext{
+		TraceID: TraceID("abc123"),
+		SpanID:  SpanID("parent-456"),
+		Sampled: false,
+	}
+
+	span := tracer.StartSpan("childOperation", WithContext(upstream))
+
+	if span.TraceID != upstream.TraceID {
+		t.Errorf("expected trace ID %s, got %s", upstream.TraceID, span.TraceID)
+	}
+
+	if span.ParentSpanID != upstream.SpanID {
+		t.Errorf("expected parent span ID %s, got %s", upstream.SpanID, span.ParentSpanID)
+	}
+
+	if span.spanContext.ParentSpanID != upstream.SpanID {
+		t.Errorf("expected span context parent %s, got %s", upstream.SpanID, span.spanContext.ParentSpanID)
+	}
+
+	if span.spanContext.Sampled {
+		t.Error("expected Sampled=false to be propagated from context")
+	}
+}
+
+func TestTracer_StartSpan_WithContextSampled(t *testing.T) {
+	t.Parallel()
+	tracer := NewTracer(WithServiceName("test-service"))
+
+	upstream := SpanContext{
+		TraceID: TraceID("abc123"),
+		SpanID:  SpanID("parent-456"),
+		Sampled: true,
+	}
+
+	span := tracer.StartSpan("childOperation", WithContext(upstream))
+
+	if !span.spanContext.Sampled {
+		t.Error("expected Sampled=true to be propagated from context")
 	}
 }
 
@@ -179,8 +235,8 @@ func TestTracer_Export_Basic(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(exporter.spans) != 2 {
-		t.Errorf("expected 2 spans exported, got %d", len(exporter.spans))
+	if len(exporter.getSpans()) != 2 {
+		t.Errorf("expected 2 spans exported, got %d", len(exporter.getSpans()))
 	}
 }
 
@@ -261,11 +317,11 @@ func TestTraceHelper_TraceHTTP_Success(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(exporter.spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(exporter.spans))
+	if len(exporter.getSpans()) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(exporter.getSpans()))
 	}
 
-	span := exporter.spans[0]
+	span := exporter.getSpans()[0]
 	if span.Tags["http.method"] != "GET" {
 		t.Errorf("expected http.method GET, got %s", span.Tags["http.method"])
 	}
@@ -300,11 +356,11 @@ func TestTraceHelper_TraceHTTP_Error(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(exporter.spans) == 0 {
+	if len(exporter.getSpans()) == 0 {
 		t.Fatal("expected at least 1 span")
 	}
 
-	span := exporter.spans[0]
+	span := exporter.getSpans()[0]
 	if span.Status != StatusError {
 		t.Errorf("expected status ERROR, got %s", span.Status)
 	}
@@ -333,11 +389,11 @@ func TestTraceHelper_TraceDB_Success(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(exporter.spans) == 0 {
+	if len(exporter.getSpans()) == 0 {
 		t.Fatal("expected at least 1 span")
 	}
 
-	span := exporter.spans[0]
+	span := exporter.getSpans()[0]
 	if span.Tags["db.operation"] != "SELECT" {
 		t.Errorf("expected db.operation SELECT, got %s", span.Tags["db.operation"])
 	}
@@ -366,11 +422,11 @@ func TestTraceHelper_TraceRPC_Success(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(exporter.spans) == 0 {
+	if len(exporter.getSpans()) == 0 {
 		t.Fatal("expected at least 1 span")
 	}
 
-	span := exporter.spans[0]
+	span := exporter.getSpans()[0]
 	if span.Tags["rpc.service"] != "UserService" {
 		t.Errorf("expected rpc.service UserService, got %s", span.Tags["rpc.service"])
 	}
@@ -473,9 +529,19 @@ func TestTracer_SpanCount_Basic(t *testing.T) {
 		t.Errorf("expected span count 10, got %d", count)
 	}
 
+	// 所有 span 已结束，活跃 span 应为 0
 	activeCount := tracer.GetActiveSpanCount()
-	if activeCount != 10 {
-		t.Errorf("expected active span count 10, got %d", activeCount)
+	if activeCount != 0 {
+		t.Errorf("expected active span count 0 (all ended), got %d", activeCount)
+	}
+
+	// 创建 3 个不结束的 span，验证活跃计数
+	for i := 0; i < 3; i++ {
+		tracer.StartSpan("active-span")
+	}
+	activeCount = tracer.GetActiveSpanCount()
+	if activeCount != 3 {
+		t.Errorf("expected active span count 3, got %d", activeCount)
 	}
 }
 
@@ -584,7 +650,7 @@ func TestTracer_Export_NoExporter(t *testing.T) {
 	tracer.StartSpan("test-operation")
 
 	err := tracer.Export()
-	if err != ErrExporterNotSet {
+	if !errors.Is(err, ErrExporterNotSet) {
 		t.Errorf("expected ErrExporterNotSet, got %v", err)
 	}
 }
@@ -608,7 +674,7 @@ func TestContextWithSpan_Basic(t *testing.T) {
 
 func TestTraceFromContext_Empty(t *testing.T) {
 	t.Parallel()
-	ctx, ok := TraceFromContext(nil)
+	ctx, ok := TraceFromContext(context.TODO())
 
 	if ok {
 		t.Error("expected false for empty context")

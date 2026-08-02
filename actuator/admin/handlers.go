@@ -32,24 +32,19 @@ func (s *AdminServer) Handler() http.Handler {
 
 // registerRoutes 注册路由
 func (s *AdminServer) registerRoutes() {
-	s.mux.HandleFunc("/admin/applications", s.handleListApplications)
-	s.mux.HandleFunc("/admin/applications/", s.handleGetApplication)
-	s.mux.HandleFunc("/admin/instances", s.handleListInstances)
-	s.mux.HandleFunc("/admin/instances/", s.handleGetInstance)
-	s.mux.HandleFunc("/admin/instances/{id}/health", s.handleGetHealth)
-	s.mux.HandleFunc("/admin/instances/{id}/metrics", s.handleGetMetrics)
-	s.mux.HandleFunc("/admin/health", s.handleOverallHealth)
-	s.mux.HandleFunc("/admin/register", s.handleRegister)
-	s.mux.HandleFunc("/admin/deregister", s.handleDeregister)
+	s.mux.HandleFunc("GET /admin/applications", s.handleListApplications)
+	s.mux.HandleFunc("GET /admin/applications/{id}", s.handleGetApplication)
+	s.mux.HandleFunc("GET /admin/instances", s.handleListInstances)
+	s.mux.HandleFunc("GET /admin/instances/{id}", s.handleGetInstance)
+	s.mux.HandleFunc("GET /admin/instances/{id}/health", s.handleGetHealth)
+	s.mux.HandleFunc("GET /admin/instances/{id}/metrics", s.handleGetMetrics)
+	s.mux.HandleFunc("GET /admin/health", s.handleOverallHealth)
+	s.mux.HandleFunc("POST /admin/register", s.handleRegister)
+	s.mux.HandleFunc("POST /admin/deregister", s.handleDeregister)
 }
 
 // handleListApplications 处理列出应用请求
 func (s *AdminServer) handleListApplications(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	apps := s.registry.ListApplications()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -58,12 +53,10 @@ func (s *AdminServer) handleListApplications(w http.ResponseWriter, r *http.Requ
 
 // handleGetApplication 处理获取应用请求
 func (s *AdminServer) handleGetApplication(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	appID := r.PathValue("id")
+	if appID == "" {
+		appID = r.URL.Query().Get("id")
 	}
-
-	appID := r.URL.Query().Get("id")
 	if appID == "" {
 		http.Error(w, "Application ID required", http.StatusBadRequest)
 		return
@@ -81,11 +74,6 @@ func (s *AdminServer) handleGetApplication(w http.ResponseWriter, r *http.Reques
 
 // handleListInstances 处理列出实例请求
 func (s *AdminServer) handleListInstances(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	instances := s.registry.ListInstances()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -94,12 +82,10 @@ func (s *AdminServer) handleListInstances(w http.ResponseWriter, r *http.Request
 
 // handleGetInstance 处理获取实例请求
 func (s *AdminServer) handleGetInstance(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	instanceID := r.PathValue("id")
+	if instanceID == "" {
+		instanceID = r.URL.Query().Get("id")
 	}
-
-	instanceID := r.URL.Query().Get("id")
 	if instanceID == "" {
 		http.Error(w, "Instance ID required", http.StatusBadRequest)
 		return
@@ -117,12 +103,10 @@ func (s *AdminServer) handleGetInstance(w http.ResponseWriter, r *http.Request) 
 
 // handleGetHealth 处理获取健康信息请求
 func (s *AdminServer) handleGetHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	instanceID := r.PathValue("id")
+	if instanceID == "" {
+		instanceID = r.URL.Query().Get("id")
 	}
-
-	instanceID := r.URL.Query().Get("id")
 	if instanceID == "" {
 		http.Error(w, "Instance ID required", http.StatusBadRequest)
 		return
@@ -149,12 +133,10 @@ func (s *AdminServer) handleGetHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleGetMetrics 处理获取指标信息请求
 func (s *AdminServer) handleGetMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+	instanceID := r.PathValue("id")
+	if instanceID == "" {
+		instanceID = r.URL.Query().Get("id")
 	}
-
-	instanceID := r.URL.Query().Get("id")
 	if instanceID == "" {
 		http.Error(w, "Instance ID required", http.StatusBadRequest)
 		return
@@ -181,11 +163,6 @@ func (s *AdminServer) handleGetMetrics(w http.ResponseWriter, r *http.Request) {
 
 // handleOverallHealth 处理整体健康状态请求
 func (s *AdminServer) handleOverallHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	apps := s.registry.ListApplications()
 
 	totalApps := len(apps)
@@ -246,8 +223,8 @@ func (s *AdminServer) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	s.registry.Register(&instance)
 
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"message": "Instance registered successfully",
 		"id":      instance.ID,
@@ -277,8 +254,8 @@ func (s *AdminServer) handleDeregister(w http.ResponseWriter, r *http.Request) {
 
 	s.registry.Deregister(req.InstanceID)
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"message": "Instance deregistered successfully",
 	})
@@ -374,7 +351,10 @@ func (r *ApplicationRegistry) GetInstanceCount() int {
 func (r *ApplicationRegistry) GetUpInstanceCount() int {
 	count := 0
 	r.instances.Range(func(key, value any) bool {
-		instance := value.(*ApplicationInstance)
+		instance, ok := value.(*ApplicationInstance)
+		if !ok {
+			return true
+		}
 		instance.mu.RLock()
 		if instance.Status == StatusUp {
 			count++
@@ -389,7 +369,10 @@ func (r *ApplicationRegistry) GetUpInstanceCount() int {
 func (r *ApplicationRegistry) GetDownInstanceCount() int {
 	count := 0
 	r.instances.Range(func(key, value any) bool {
-		instance := value.(*ApplicationInstance)
+		instance, ok := value.(*ApplicationInstance)
+		if !ok {
+			return true
+		}
 		instance.mu.RLock()
 		if instance.Status == StatusDown {
 			count++

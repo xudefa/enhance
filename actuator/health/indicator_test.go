@@ -3,7 +3,9 @@ package health
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
+	"time"
 )
 
 type testIndicator struct{}
@@ -78,6 +80,35 @@ func (u *unknownIndicator) Health(ctx context.Context) Health {
 		Details: map[string]any{
 			"error": "no check function",
 		},
+	}
+}
+
+type hungIndicator struct{}
+
+func (h *hungIndicator) Name() string {
+	return "hung"
+}
+
+func (h *hungIndicator) Health(ctx context.Context) Health {
+	<-make(chan struct{})
+	return Health{Status: StatusUp}
+}
+
+func TestAggregate_BoundedGoroutines(t *testing.T) {
+	aggregator := NewAggregator()
+	before := runtime.NumGoroutine()
+
+	for range 20 {
+		h := aggregator.aggregateWithTimeout(context.Background(), &hungIndicator{}, 10*time.Millisecond)
+		if h.Status != StatusDown {
+			t.Fatalf("expected StatusDown (timeout), got %v", h.Status)
+		}
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	after := runtime.NumGoroutine()
+	if leaked := after - before; leaked > 12 {
+		t.Fatalf("expected bounded goroutine growth, leaked %d goroutines", leaked)
 	}
 }
 

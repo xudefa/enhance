@@ -8,20 +8,34 @@ import (
 	"github.com/xudefa/enhance/security/filter"
 )
 
-// LogoutFilter 登出过滤器
+// LogoutFilter 登出过滤器。
+//
+// 处理用户登出请求，支持自定义登出 URL 和登出处理器。
 type LogoutFilter struct {
 	logoutUrl      string
 	handlers       []LogoutHandler
 	successHandler LogoutSuccessHandler
-	filterChain    filter.FilterChain
 	httpMethods    []string
 }
 
+// NewLogoutFilter 创建登出过滤器。
+//
+// 参数:
+//   - logoutUrl: 登出 URL 路径，必须以 "/" 开头
+//   - handlers: 登出处理器列表，可为 nil
+//
+// 返回:
+//   - *LogoutFilter: 登出过滤器实例
+//
+// panic: logoutUrl 为空时触发 panic
 func NewLogoutFilter(logoutUrl string, handlers []LogoutHandler) *LogoutFilter {
+	if logoutUrl == "" {
+		panic("logout: logoutUrl must not be empty")
+	}
 	return &LogoutFilter{
 		logoutUrl:   logoutUrl,
 		handlers:    handlers,
-		httpMethods: []string{"POST", "GET"},
+		httpMethods: []string{"POST", "DELETE"},
 	}
 }
 
@@ -35,14 +49,22 @@ func (f *LogoutFilter) SetSuccessHandler(handler LogoutSuccessHandler) {
 
 // DoFilter 实现 filter.Filter 接口
 func (f *LogoutFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(SecurityRequest)
-	resp, _ := response.(SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("LogoutFilter: ctx must be context.Context")
+	}
+	req, ok := request.(SecurityRequest)
+	if !ok {
+		return fmt.Errorf("LogoutFilter: request must be SecurityRequest")
+	}
+	resp, ok := response.(SecurityResponse)
+	if !ok {
+		return fmt.Errorf("LogoutFilter: response must be SecurityResponse")
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
 func (f *LogoutFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
-	f.filterChain = chain
 
 	method := request.GetMethod()
 	methodAllowed := false
@@ -61,13 +83,11 @@ func (f *LogoutFilter) doFilter(ctx context.Context, request SecurityRequest, re
 		return chain.DoFilter(ctx, request, response)
 	}
 
-	authentication := GetAuthentication()
+	authentication := GetAuthenticationFromContext(ctx)
 
 	for _, handler := range f.handlers {
 		handler.Logout(ctx, request, response, authentication)
 	}
-
-	ClearAuthentication()
 
 	if f.successHandler == nil {
 		response.SetStatusCode(200)
@@ -125,7 +145,6 @@ func NewSecurityContextLogoutHandler() *SecurityContextLogoutHandler {
 }
 
 func (h *SecurityContextLogoutHandler) Logout(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
-	ClearAuthentication()
 }
 
 // CookieClearingLogoutHandler Cookie清除登出处理器

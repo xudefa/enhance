@@ -64,7 +64,8 @@ func (e *expressionCondition) String() string {
 
 // resolvePlaceholders 解析 ${...} 占位符
 func (e *expressionCondition) resolvePlaceholders(expr string, ctx ConditionContext) string {
-	for {
+	const maxIterations = 10
+	for range maxIterations {
 		start := strings.Index(expr, "${")
 		if start == -1 {
 			break

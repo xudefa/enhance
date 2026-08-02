@@ -42,9 +42,18 @@ func WithUserDetailsService(service security.UserDetailsService) JwtFilterOption
 
 // DoFilter 实现 filter.Filter 接口
 func (f *JwtAuthenticationFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
-	ctxVal, _ := ctx.(context.Context)
-	req, _ := request.(security.SecurityRequest)
-	resp, _ := response.(security.SecurityResponse)
+	ctxVal, ok := ctx.(context.Context)
+	if !ok {
+		return fmt.Errorf("expected context.Context, got %T", ctx)
+	}
+	req, ok := request.(security.SecurityRequest)
+	if !ok {
+		return fmt.Errorf("expected SecurityRequest, got %T", request)
+	}
+	resp, ok := response.(security.SecurityResponse)
+	if !ok {
+		return fmt.Errorf("expected SecurityResponse, got %T", response)
+	}
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
@@ -87,8 +96,8 @@ func (f *JwtAuthenticationFilter) doFilter(ctx context.Context, request security
 
 	auth := security.NewAuthenticatedUsernamePasswordAuthenticationToken(userDetails, userDetails.Authorities())
 
-	security.SetAuthentication(auth)
 	ctx = security.ContextWithAuthentication(ctx, auth)
+	request.SetAttribute("security.currentAuthentication", auth)
 
 	return chain.DoFilter(ctx, request, response)
 }
@@ -146,10 +155,10 @@ func NewSimpleUserDetails(username string, authorities []string) *SimpleUserDeta
 	}
 }
 
-func (u *SimpleUserDetails) Username() string             { return u.username }
-func (u *SimpleUserDetails) Password() string             { return "" }
-func (u *SimpleUserDetails) Authorities() []string        { return u.authorities }
-func (u *SimpleUserDetails) Enabled() bool                { return true }
-func (u *SimpleUserDetails) AccountNonExpired() bool      { return true }
-func (u *SimpleUserDetails) CredentialsNonExpired() bool  { return true }
-func (u *SimpleUserDetails) AccountNonLocked() bool       { return true }
+func (u *SimpleUserDetails) Username() string            { return u.username }
+func (u *SimpleUserDetails) Password() string            { return "" }
+func (u *SimpleUserDetails) Authorities() []string       { return u.authorities }
+func (u *SimpleUserDetails) Enabled() bool               { return true }
+func (u *SimpleUserDetails) AccountNonExpired() bool     { return true }
+func (u *SimpleUserDetails) CredentialsNonExpired() bool { return true }
+func (u *SimpleUserDetails) AccountNonLocked() bool      { return true }

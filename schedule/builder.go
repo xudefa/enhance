@@ -11,6 +11,7 @@ import (
 
 // SchedulerBuilder 调度器构建器，支持链式配置。
 type SchedulerBuilder struct {
+	ctx          context.Context
 	poolSize     int
 	errorHandler func(taskName string, err error)
 	logger       log.Logger
@@ -23,6 +24,12 @@ func NewSchedulerBuilder() *SchedulerBuilder {
 		poolSize: DefaultSchedulePoolSize,
 		tasks:    make([]Task, 0),
 	}
+}
+
+// Context 设置父级 context。
+func (b *SchedulerBuilder) Context(ctx context.Context) *SchedulerBuilder {
+	b.ctx = ctx
+	return b
 }
 
 // PoolSize 设置任务执行池大小。
@@ -78,7 +85,12 @@ func (b *SchedulerBuilder) Build() *DefaultScheduler {
 		opts = append(opts, WithLogger(b.logger))
 	}
 
-	scheduler := NewScheduler(opts...)
+	ctx := b.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	scheduler := NewScheduler(ctx, opts...)
 
 	for _, task := range b.tasks {
 		if err := scheduler.Register(task); err != nil {

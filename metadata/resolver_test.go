@@ -202,6 +202,31 @@ func TestTagAnnotationResolver_Cache(t *testing.T) {
 	}
 }
 
+func TestTagAnnotationResolver_CacheIsolation(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewTagAnnotationResolver("metadata")
+
+	first := resolver.ResolveAnnotations(reflect.TypeOf(TestUser{}))
+	for i := range first {
+		first[i].Name = "corrupted"
+		first[i].Attributes["corrupted"] = true
+	}
+
+	second := resolver.ResolveAnnotations(reflect.TypeOf(TestUser{}))
+	if len(second) == 0 {
+		t.Fatal("expected annotations from cache")
+	}
+	for _, ann := range second {
+		if ann.Name == "corrupted" {
+			t.Error("expected cache not to be corrupted by caller mutation")
+		}
+		if _, ok := ann.Attributes["corrupted"]; ok {
+			t.Error("expected cache attributes not to be corrupted by caller mutation")
+		}
+	}
+}
+
 func TestTagAnnotationResolver_DefaultTagName(t *testing.T) {
 	t.Parallel()
 

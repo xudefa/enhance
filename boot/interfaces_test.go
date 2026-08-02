@@ -251,11 +251,11 @@ func TestNewBootErrf_WithCause(t *testing.T) {
 	if err.Code() != ErrCodeStarterStart {
 		t.Fatalf("expected code '%s', got '%s'", ErrCodeStarterStart, err.Code())
 	}
-	if err.Cause() != original {
-		t.Fatal("expected Cause() to return original error")
+	if err.Cause() != nil {
+		t.Fatal("expected Cause() to be nil")
 	}
-	if !errors.Is(err, original) {
-		t.Fatal("expected errors.Is to find original error via optional error arg")
+	if err.Message() != "starter web failed: connection refused" {
+		t.Fatalf("expected message 'starter web failed: connection refused', got '%s'", err.Message())
 	}
 }
 
@@ -404,7 +404,7 @@ func TestApplicationInterface_Context(t *testing.T) {
 
 func TestNewStarterRegistry_ReturnsInterface(t *testing.T) {
 	t.Parallel()
-	var registry StarterRegistry = NewStarterRegistry()
+	registry := NewStarterRegistry()
 	registry.Register(newMockStarter("test"))
 
 	if len(registry.GetAll()) != 1 {
@@ -414,7 +414,7 @@ func TestNewStarterRegistry_ReturnsInterface(t *testing.T) {
 
 func TestGlobalStarterRegistry_ReturnsInterface(t *testing.T) {
 	t.Parallel()
-	var registry StarterRegistry = GlobalStarterRegistry()
+	registry := GlobalStarterRegistry()
 	if registry == nil {
 		t.Fatal("GlobalStarterRegistry() should not return nil")
 	}

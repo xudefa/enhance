@@ -104,9 +104,11 @@ type Validator interface {
 //
 // 定义配置加载的统一方式,用于支持多种配置源。
 type Loader interface {
+	// Load 加载配置，返回加载后的配置对象。
 	Load(opts ...LoaderOption) (Config, error)
+	// Priority 返回加载器优先级，值越大优先级越高。
 	Priority() int
-	Name() string
+	// SupportsWatch 返回是否支持配置热重载。
 	SupportsWatch() bool
 }
 
@@ -132,7 +134,9 @@ type ConfigData map[string]any
 //
 // 定义远程配置的加载、监听和关闭行为。
 type ConfigCenter interface {
+	// Load 从配置中心加载配置数据。
 	Load() (ConfigData, error)
+	// Watch 监听配置变更，变更时调用回调函数。
 	Watch(key string, callback func(ConfigData)) error
 	Close() error
 }
@@ -186,7 +190,8 @@ type WatchManager struct {
 
 // memoryConfig 内存配置实现（未导出，实现 Config 接口）。
 type memoryConfig struct {
-	data sync.Map
+	mu   sync.RWMutex
+	data map[string]any
 }
 
 // 热重载事件类型常量。

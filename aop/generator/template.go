@@ -14,30 +14,36 @@ import (
 	{{- end}}
 )
 
+var {{.ProxyName}}Container = core.NewContainer()
+
 type {{.ProxyName}} struct {
-	target *{{.TargetName}}
+	Target {{if .IsInterface}}{{.TargetName}}{{else}}*{{.TargetName}}{{end}}
 }
 
-func New{{.ProxyName}}(target *{{.TargetName}}) *{{.ProxyName}} {
-	return &{{.ProxyName}}{target: target}
+func New{{.ProxyName}}(target {{if .IsInterface}}{{.TargetName}}{{else}}*{{.TargetName}}{{end}}) *{{.ProxyName}} {
+	return &{{.ProxyName}}{Target: target}
 }
 
 {{- range .Methods}}
 func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
-	return p.target.{{.Name}}({{.ArgsList}})
+	return p.Target.{{.Name}}({{.ArgsList}})
 }
 {{- end}}
 
 func init() {
-	core.RegisterFactory(globalContainer, func(c core.Container) (*{{.ProxyName}}, error) {
-		target := &{{.TargetName}}{}
-		{{- range .Dependencies}}
-		if dep, err := core.GetByType[{{.}}](c); err == nil {
-			target.{{.}} = dep
-		}
-		{{- end}}
-		return New{{.ProxyName}}(target), nil
-	}, core.Singleton())
+	core.Register[*{{.ProxyName}}]({{.ProxyName}}Container,
+		core.WithFactory[*{{.ProxyName}}](func(c ...any) (any, error) {
+			{{- if .IsInterface}}
+			var target {{.TargetName}}
+			if t, err := core.GetByName[{{.TargetName}}]({{$.ProxyName}}Container, ""); err == nil {
+				target = t
+			}
+			{{- else}}
+			target := &{{.TargetName}}{}
+			{{- end}}
+			return New{{.ProxyName}}(target), nil
+		}),
+	)
 }
 `
 
@@ -53,50 +59,112 @@ import (
 	{{- end}}
 )
 
+var {{.ProxyName}}Container = core.NewContainer()
+
 type {{.ProxyName}} struct {
-	target *{{.TargetName}}
+	Target  *{{.TargetName}}
+	aspects []*aop.AspectMeta
 }
 
 func New{{.ProxyName}}(target *{{.TargetName}}) *{{.ProxyName}} {
-	return &{{.ProxyName}}{target: target}
+	return &{{.ProxyName}}{
+		Target: target,
+		aspects: []*aop.AspectMeta{
+			{{- range .Aspects}}
+			&aop.AspectMeta{
+				PointCut: aop.MatchByName("{{.MethodName}}"),
+				Advice:   aop.{{.AdviceType}}({{.AdviceFunc}}),
+				Order:    {{.Order}},
+			},
+			{{- end}}
+		},
+	}
 }
 
+{{- range uniqueAdviceFuncs .Aspects}}
+{{- if .AspectName}}
+{{- if eq .AdviceType "Before"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp)
+}
+{{- else if eq .AdviceType "After"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp)
+}
+{{- else if eq .AdviceType "Around"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, proceed func() any) any {
+	aspect := &{{.AspectName}}{}
+	return aspect.{{.AspectMethodName}}(jp, aop.ProceedFunc(func(args ...any) any { return proceed() }))
+}
+{{- else if eq .AdviceType "AfterReturning"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, result any) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, result)
+}
+{{- else if eq .AdviceType "AfterThrowing"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, err error) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, err)
+}
+{{- end}}
+{{- end}}
+{{- end}}
+
 {{- range .Methods}}
-{{- $method := .}}
 func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 {{- if .HasAspects}}
-{{- if .HasBeforeAdvices}}
-{{- range .BeforeAdvices}}
-	{{.AdviceFunc}}(p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
-{{- end}}
-{{- end}}
-{{- if .HasReturnValue}}
-	return p.target.{{.Name}}({{.ArgsList}})
-{{- else}}
-	p.target.{{.Name}}({{.ArgsList}})
+	jp := &aop.MethodInvocation{
+		MethodName: "{{.Name}}",
+		Func:       p.Target.{{.Name}},
+		Params:     []any{ {{.ArgsList}} },
+		Object:     p.Target,
+	}
+	result := aop.ExecuteChain(jp, p.aspects)
+	{{- if .NoReturn}}
 	return
-{{- end}}
+	{{- else if .HasMultipleReturns}}
+	if tuple, ok := result.([]any); ok {
+		{{- if .HasError}}
+		if len(tuple) > 0 {
+			if err, ok := tuple[len(tuple)-1].(error); ok && err != nil {
+				return {{.ReturnValuesWithError}}
+			}
+		}
+		{{- end}}
+		return {{.ReturnValuesFromTuple}}
+	}
+	panic("aop: unexpected result type for {{.Name}}")
+	{{- else if .HasSingleErrorReturn}}
+	if err, ok := result.(error); ok {
+		return err
+	}
+	return nil
+	{{- else if .HasSingleReturn}}
+	if typed, ok := result.({{.SingleReturnType}}); ok {
+		return typed
+	}
+	panic("aop: unexpected result type for {{.Name}}")
+	{{- end}}
 {{- else}}
-{{- if .HasReturnValue}}
-	return p.target.{{.Name}}({{.ArgsList}})
-{{- else}}
-	p.target.{{.Name}}({{.ArgsList}})
+	{{- if .HasReturnValue}}
+	return p.Target.{{.Name}}({{.ArgsList}})
+	{{- else}}
+	p.Target.{{.Name}}({{.ArgsList}})
 	return
-{{- end}}
+	{{- end}}
 {{- end}}
 }
 {{- end}}
 
 func init() {
-	core.RegisterFactory(globalContainer, func(c core.Container) (*{{.ProxyName}}, error) {
-		target := &{{.TargetName}}{}
-		{{- range .Dependencies}}
-		if dep, err := core.GetByType[{{.}}](c); err == nil {
-			target.{{.}} = dep
-		}
-		{{- end}}
-		return New{{.ProxyName}}(target), nil
-	}, core.Singleton())
+	core.Register[*{{.ProxyName}}]({{.ProxyName}}Container,
+		core.WithFactory[*{{.ProxyName}}](func(c ...any) (any, error) {
+			target := &{{.TargetName}}{}
+			return New{{.ProxyName}}(target), nil
+		}),
+	)
 }
 `
 
@@ -112,72 +180,19 @@ import (
 	{{- end}}
 )
 
-type {{.ProxyName}} struct {
-	target {{.TargetName}}
-}
-
-func New{{.ProxyName}}(target {{.TargetName}}) *{{.ProxyName}} {
-	return &{{.ProxyName}}{target: target}
-}
-
-{{- range .Methods}}
-{{- $method := .}}
-func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
-{{- if .HasAspects}}
-{{- if .HasBeforeAdvices}}
-{{- range .BeforeAdvices}}
-	{{.AdviceFunc}}(p.target{{if $method.HasParams}}, {{$method.ArgsList}}{{end}})
-{{- end}}
-{{- end}}
-{{- if .HasReturnValue}}
-	return p.target.{{.Name}}({{.ArgsList}})
-{{- else}}
-	p.target.{{.Name}}({{.ArgsList}})
-	return
-{{- end}}
-{{- else}}
-{{- if .HasReturnValue}}
-	return p.target.{{.Name}}({{.ArgsList}})
-{{- else}}
-	p.target.{{.Name}}({{.ArgsList}})
-	return
-{{- end}}
-{{- end}}
-}
-{{- end}}
-
-func init() {
-	core.RegisterFactory(globalContainer, func(c core.Container) (*{{.ProxyName}}, error) {
-		var target {{.TargetName}}
-		if t, err := core.GetByType[{{.TargetName}}](c); err == nil {
-			target = t
-		}
-		return New{{.ProxyName}}(target), nil
-	}, core.Singleton())
-}
-`
-
-// aopProxyTemplate AOP 增强代理模板（启用 AOP 时使用）
-const aopProxyTemplate = `// Code generated by goaop. DO NOT EDIT.
-package {{.Package}}
-
-import (
-	{{- range .Imports}}
-	"{{.}}"
-	{{- end}}
-)
+var {{.ProxyName}}Container = core.NewContainer()
 
 type {{.ProxyName}} struct {
-	target  *{{.TargetName}}
+	Target  {{.TargetName}}
 	aspects []*aop.AspectMeta
 }
 
-func New{{.ProxyName}}(target *{{.TargetName}}) *{{.ProxyName}} {
+func New{{.ProxyName}}(target {{.TargetName}}) *{{.ProxyName}} {
 	return &{{.ProxyName}}{
-		target:  target,
+		Target: target,
 		aspects: []*aop.AspectMeta{
 			{{- range .Aspects}}
-			&{
+			&aop.AspectMeta{
 				PointCut: aop.MatchByName("{{.MethodName}}"),
 				Advice:   aop.{{.AdviceType}}({{.AdviceFunc}}),
 				Order:    {{.Order}},
@@ -187,28 +202,47 @@ func New{{.ProxyName}}(target *{{.TargetName}}) *{{.ProxyName}} {
 	}
 }
 
-{{- range .Aspects}}
-func {{.AdviceFunc}}(jp aop.JoinPoint{{if eq .AdviceType "Around"}}, proceed aop.ProceedFunc{{end}}) {{if eq .AdviceType "Around"}}any{{end}} {
+{{- range uniqueAdviceFuncs .Aspects}}
+{{- if .AspectName}}
+{{- if eq .AdviceType "Before"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
 	aspect := &{{.AspectName}}{}
-	{{- if eq .AdviceType "Before"}}
 	aspect.{{.AspectMethodName}}(jp)
-	{{- else if eq .AdviceType "After"}}
-	aspect.{{.AspectMethodName}}(jp)
-	{{- else if eq .AdviceType "Around"}}
-	return aspect.{{.AspectMethodName}}(jp, proceed)
-	{{- end}}
 }
+{{- else if eq .AdviceType "After"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp)
+}
+{{- else if eq .AdviceType "Around"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, proceed func() any) any {
+	aspect := &{{.AspectName}}{}
+	return aspect.{{.AspectMethodName}}(jp, aop.ProceedFunc(func(args ...any) any { return proceed() }))
+}
+{{- else if eq .AdviceType "AfterReturning"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, result any) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, result)
+}
+{{- else if eq .AdviceType "AfterThrowing"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, err error) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, err)
+}
+{{- end}}
+{{- end}}
 {{- end}}
 
 {{- range .Methods}}
 func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
+{{- if .HasAspects}}
 	jp := &aop.MethodInvocation{
 		MethodName: "{{.Name}}",
-		Func:       p.target.{{.Name}},
+		Func:       p.Target.{{.Name}},
 		Params:     []any{ {{.ArgsList}} },
-		Object:     p.target,
+		Object:     p.Target,
 	}
-	result := aop.ExecuteChainWithPtrs(jp, p.aspects)
+	result := aop.ExecuteChain(jp, p.aspects)
 	{{- if .NoReturn}}
 	return
 	{{- else if .HasMultipleReturns}}
@@ -222,7 +256,7 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 		{{- end}}
 		return {{.ReturnValuesFromTuple}}
 	}
-	return {{.ReturnValuesFallback}}
+	panic("aop: unexpected result type for {{.Name}}")
 	{{- else if .HasSingleErrorReturn}}
 	if err, ok := result.(error); ok {
 		return err
@@ -232,21 +266,146 @@ func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
 	if typed, ok := result.({{.SingleReturnType}}); ok {
 		return typed
 	}
+	panic("aop: unexpected result type for {{.Name}}")
+	{{- end}}
+{{- else}}
+	{{- if .HasReturnValue}}
+	return p.Target.{{.Name}}({{.ArgsList}})
+	{{- else}}
+	p.Target.{{.Name}}({{.ArgsList}})
+	return
+	{{- end}}
+{{- end}}
+}
+{{- end}}
+
+func init() {
+	core.Register[*{{.ProxyName}}]({{.ProxyName}}Container,
+		core.WithFactory[*{{.ProxyName}}](func(c ...any) (any, error) {
+			var target {{.TargetName}}
+			if t, err := core.GetByName[{{.TargetName}}]({{.ProxyName}}Container, ""); err == nil {
+				target = t
+			}
+			return New{{.ProxyName}}(target), nil
+		}),
+	)
+}
+`
+
+// aopProxyTemplate AOP 增强代理模板（启用 AOP 时使用）
+const aopProxyTemplate = `// Code generated by goaop. DO NOT EDIT.
+package {{.Package}}
+
+import (
+	{{- range .Imports}}
+	"{{.}}"
+	{{- end}}
+)
+
+var {{.ProxyName}}Container = core.NewContainer()
+
+type {{.ProxyName}} struct {
+	Target  {{if .IsInterface}}{{.TargetName}}{{else}}*{{.TargetName}}{{end}}
+	aspects []*aop.AspectMeta
+}
+
+func New{{.ProxyName}}(target {{if .IsInterface}}{{.TargetName}}{{else}}*{{.TargetName}}{{end}}) *{{.ProxyName}} {
+	return &{{.ProxyName}}{
+		Target: target,
+		aspects: []*aop.AspectMeta{
+			{{- range .Aspects}}
+			&aop.AspectMeta{
+				PointCut: aop.MatchByName("{{.MethodName}}"),
+				Advice:   aop.{{.AdviceType}}({{.AdviceFunc}}),
+				Order:    {{.Order}},
+			},
+			{{- end}}
+		},
+	}
+}
+
+{{- range uniqueAdviceFuncs .Aspects}}
+{{- if .AspectName}}
+{{- if eq .AdviceType "Before"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp)
+}
+{{- else if eq .AdviceType "After"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp)
+}
+{{- else if eq .AdviceType "Around"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, proceed func() any) any {
+	aspect := &{{.AspectName}}{}
+	return aspect.{{.AspectMethodName}}(jp, aop.ProceedFunc(func(args ...any) any { return proceed() }))
+}
+{{- else if eq .AdviceType "AfterReturning"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, result any) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, result)
+}
+{{- else if eq .AdviceType "AfterThrowing"}}
+func {{.AdviceFunc}}(jp aop.JoinPoint, err error) {
+	aspect := &{{.AspectName}}{}
+	aspect.{{.AspectMethodName}}(jp, err)
+}
+{{- end}}
+{{- end}}
+{{- end}}
+
+{{- range .Methods}}
+func (p *{{$.ProxyName}}) {{.Name}}({{.ParamsStr}}) {{.ResultsStr}} {
+	jp := &aop.MethodInvocation{
+		MethodName: "{{.Name}}",
+		Func:       p.Target.{{.Name}},
+		Params:     []any{ {{.ArgsList}} },
+		Object:     p.Target,
+	}
+	result := aop.ExecuteChain(jp, p.aspects)
+	{{- if .NoReturn}}
+	return
+	{{- else if .HasMultipleReturns}}
+	if tuple, ok := result.([]any); ok {
+		{{- if .HasError}}
+		if len(tuple) > 0 {
+			if err, ok := tuple[len(tuple)-1].(error); ok && err != nil {
+				return {{.ReturnValuesWithError}}
+			}
+		}
+		{{- end}}
+		return {{.ReturnValuesFromTuple}}
+	}
+	panic("aop: unexpected result type for {{.Name}}")
+	{{- else if .HasSingleErrorReturn}}
+	if err, ok := result.(error); ok {
+		return err
+	}
 	return nil
+	{{- else if .HasSingleReturn}}
+	if typed, ok := result.({{.SingleReturnType}}); ok {
+		return typed
+	}
+	panic("aop: unexpected result type for {{.Name}}")
 	{{- end}}
 }
 {{- end}}
 
 func init() {
-	core.RegisterFactory(globalContainer, func(c core.Container) (*{{.ProxyName}}, error) {
-		target := &{{.TargetName}}{}
-		{{- range .Dependencies}}
-		if dep, err := core.GetByType[{{.}}](c); err == nil {
-			target.{{.}} = dep
-		}
-		{{- end}}
-		return New{{.ProxyName}}(target), nil
-	}, core.Singleton())
+	core.Register[*{{.ProxyName}}]({{.ProxyName}}Container,
+		core.WithFactory[*{{.ProxyName}}](func(c ...any) (any, error) {
+			{{- if .IsInterface}}
+			var target {{.TargetName}}
+			if t, err := core.GetByName[{{.TargetName}}]({{$.ProxyName}}Container, ""); err == nil {
+				target = t
+			}
+			{{- else}}
+			target := &{{.TargetName}}{}
+			{{- end}}
+			return New{{.ProxyName}}(target), nil
+		}),
+	)
 }
 `
 

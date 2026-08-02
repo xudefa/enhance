@@ -1,0 +1,9 @@
+{
+  "swagger": {
+    "enabled": true,
+    "host": "localhost:8080",
+    "port": 8080,
+    "url": "/swagger/doc.json",
+    "title": "Enhance API Documentation"
+  }
+}

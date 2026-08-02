@@ -94,9 +94,15 @@ type TenantManager interface {
 	GetTenant(tenantID string) (*Tenant, error)
 
 	// SetCurrentTenant 设置当前租户。
+	//
+	// 注意：当前租户是进程级共享状态，并发请求会互相覆盖。
+	// 多请求场景请使用 context（SetTenantToContext / TenantFromContext）传递租户。
 	SetCurrentTenant(tenantID string) error
 
 	// GetCurrentTenant 获取当前租户。
+	//
+	// 注意：当前租户是进程级共享状态，并发请求之间可能互相覆盖。
+	// 请优先使用 TenantFromContext 从请求 context 中获取租户。
 	GetCurrentTenant() *Tenant
 
 	// ClearCurrentTenant 清除当前租户。

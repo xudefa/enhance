@@ -239,6 +239,77 @@ func TestHotReloader_DetectFileDeletion(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestHotReloader_StopWaitsForCallbacks(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "config.json")
+
+	if err := os.WriteFile(testFile, []byte(`{"key": "value"}`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	reloader := NewHotReloader(
+		WithWatchDirs(tmpDir),
+		WithExtensions(".json"),
+		WithInterval(20*time.Millisecond),
+	)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+
+	var startOnce sync.Once
+	reloader.OnReload(func(event ReloadEvent) {
+		startOnce.Do(func() { close(started) })
+		<-release
+		close(done)
+	})
+
+	if err := reloader.Start(); err != nil {
+		t.Fatalf("Failed to start reloader: %v", err)
+	}
+
+	// 等待初始扫描
+	time.Sleep(100 * time.Millisecond)
+
+	if err := os.WriteFile(testFile, []byte(`{"key": "value2"}`), 0644); err != nil {
+		t.Fatalf("Failed to modify test file: %v", err)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for reload callback to start")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		reloader.Stop()
+		close(stopDone)
+	}()
+
+	// Stop 必须等待正在执行的回调完成，而不是立即返回
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned while callbacks were still running")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Callback did not complete after release")
+	}
+
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after callbacks completed")
+	}
+}
+
 func TestHotReloader_MultipleCallbacks(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -455,6 +526,69 @@ func TestFileWatcher_Basic(t *testing.T) {
 	defer watcher.Stop()
 }
 
+func TestFileWatcher_StopWaitsForCallbacks(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "config.json")
+
+	watcher := NewFileWatcher([]string{tmpDir}, ".json")
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+
+	var startOnce sync.Once
+	watcher.OnChange(func(event ReloadEvent) {
+		startOnce.Do(func() { close(started) })
+		<-release
+		close(done)
+	})
+
+	if err := watcher.Start(); err != nil {
+		t.Fatalf("Failed to start watcher: %v", err)
+	}
+
+	// 等待初始扫描完成
+	time.Sleep(1200 * time.Millisecond)
+
+	if err := os.WriteFile(testFile, []byte(`{"key": "value"}`), 0644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for watcher callback to start")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		watcher.Stop()
+		close(stopDone)
+	}()
+
+	// Stop 必须等待正在执行的回调完成，而不是立即返回
+	select {
+	case <-stopDone:
+		t.Fatal("Stop returned while callbacks were still running")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(release)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Callback did not complete after release")
+	}
+
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after callbacks completed")
+	}
+}
+
 func TestCalculateFileHash(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
@@ -510,9 +644,12 @@ func TestLiveReloadServer_Basic(t *testing.T) {
 		WithInterval(100*time.Millisecond),
 	)
 
-	server := NewLiveReloadServer(35729, reloader)
+	server, err := NewLiveReloadServer(35729, reloader)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
 
-	err := server.Start()
+	err = server.Start()
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
@@ -532,9 +669,12 @@ func TestLiveReloadServer_DoubleStart(t *testing.T) {
 		WithWatchDirs(tmpDir),
 	)
 
-	server := NewLiveReloadServer(35729, reloader)
+	server, err := NewLiveReloadServer(35729, reloader)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
 
-	err := server.Start()
+	err = server.Start()
 	if err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}

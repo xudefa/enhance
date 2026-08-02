@@ -3,8 +3,10 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -16,23 +18,40 @@ import (
 	"github.com/xudefa/enhance/log"
 )
 
+var redisAutoConfig = &RedisAutoConfiguration{}
+
 func init() {
-	boot.RegisterAutoConfigWith(&RedisAutoConfiguration{},
+	boot.RegisterAutoConfigWith(redisAutoConfig,
 		boot.WithConditions(
 			condition.OnProperty(RedisEnabled, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)),
 	)
+	// 注册为 Starter，使其 Start/Stop 生命周期方法被自动调用
+	boot.RegisterStarter(redisAutoConfig)
 }
 
 // RedisAutoConfiguration Redis 自动配置类。
 type RedisAutoConfiguration struct {
-	logger log.Logger
-	client *redis.Client
+	logger     log.Logger
+	client     *redis.Client
+	mu         sync.Mutex
+	configured bool            // 标记是否已配置，防止同一应用上下文重复配置
+	ctx        context.Context // 应用上下文
 }
 
 // Configure 配置 Redis 连接。
 func (c *RedisAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.ctx == ctx.Context() {
+		return nil
+	}
+	// 新应用上下文（应用重启）时重新配置，更新 client/ctx 等状态
+	c.configured = false
+
 	env := ctx.Environment()
 
 	if logger, err := core.GetByName[log.Logger](ctx.Container(), ""); err == nil {
@@ -43,7 +62,7 @@ func (c *RedisAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Redis 配置失败: %w", err)
+		return fmt.Errorf("failed to load Redis config: %w", err)
 	}
 
 	c.client = redis.NewClient(&redis.Options{
@@ -53,37 +72,61 @@ func (c *RedisAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		PoolSize: cfg.PoolSize,
 	})
 
-	redisCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	redisCtx, cancel := context.WithTimeout(ctx.Context(), 5*time.Second)
 	defer cancel()
 
 	if err := c.client.Ping(redisCtx).Err(); err != nil {
-		return fmt.Errorf("Redis 连接失败: %w", err)
+		_ = c.client.Close()
+		return fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
 	redisCache := NewRedisCache(c.client, cfg.Prefix)
 
 	if err := ctx.Container().RegisterInstance(c.client, reflect.TypeFor[*redis.Client]()); err != nil {
-		return fmt.Errorf("注册 Redis Client 失败: %w", err)
+		return fmt.Errorf("failed to register Redis Client: %w", err)
 	}
 
 	if err := ctx.Container().RegisterInstance(redisCache, reflect.TypeFor[cache.Cache]()); err != nil {
-		return fmt.Errorf("注册 Redis Cache 失败: %w", err)
+		return fmt.Errorf("failed to register Redis Cache: %w", err)
 	}
 
-	c.logger.Info(context.Background(), "Redis 连接成功",
+	c.logger.Info(ctx.Context(), "Redis connected successfully",
 		log.KeyValue{Key: "host", Value: cfg.Host},
 		log.KeyValue{Key: "port", Value: cfg.Port},
 	)
 
+	c.configured = true
+	c.ctx = ctx.Context()
+
+	return nil
+}
+
+// Start 启动阶段调用，无需额外操作。
+func (c *RedisAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	return nil
 }
 
 // Stop 关闭 Redis 连接。
-func (c *RedisAutoConfiguration) Stop() error {
+func (c *RedisAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.client != nil {
 		return c.client.Close()
 	}
 	return nil
+}
+
+// Name 返回启动器名称。
+func (c *RedisAutoConfiguration) Name() string {
+	return "RedisStarter"
+}
+
+// Dependencies 返回依赖的其他启动器名称。
+func (c *RedisAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+// GetCondition 返回启动器条件。
+func (c *RedisAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnProperty(RedisEnabled, ConditionTrue)
 }
 
 // RedisConfig Redis 配置。
@@ -111,7 +154,7 @@ func NewRedisCache(client *redis.Client, prefix string) *RedisCache {
 // Get 获取缓存值。
 func (r *RedisCache) Get(ctx context.Context, key string) (any, error) {
 	val, err := r.client.Get(ctx, r.prefix+key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return nil, cache.ErrNotFound
 	}
 	if err != nil {
@@ -149,7 +192,7 @@ func (r *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 // TTL 获取键的剩余过期时间。
 func (r *RedisCache) TTL(ctx context.Context, key string) (time.Duration, error) {
 	ttl, err := r.client.TTL(ctx, r.prefix+key).Result()
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return 0, cache.ErrNotFound
 	}
 	if err != nil {
@@ -190,7 +233,7 @@ func (c *RedisAutoConfiguration) loadConfig(env *environment.Environment) (*Redi
 	}
 
 	if err := env.BindPrefix("redis", cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Redis 配置失败: %w", err)
+		return nil, fmt.Errorf("failed to bind Redis config: %w", err)
 	}
 
 	return cfg, nil

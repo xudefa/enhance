@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -59,7 +60,7 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Chi 配置失败: %w", err)
+		return fmt.Errorf("failed to load Chi config: %w", err)
 	}
 
 	c.config = cfg
@@ -67,7 +68,7 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 尝试从容器获取已存在的 Router 实例，如果不存在则创建默认的
 	if router, err := core.GetByName[*chi.Mux](container, ""); err == nil {
 		c.router = router
-		c.logger.Info(context.Background(), "使用容器中已存在的 Chi Router 实例")
+		c.logger.Info(ctx.Context(), "using existing Chi Router instance from container")
 	} else {
 		c.router = chi.NewRouter()
 		if cfg.EnableRecover {
@@ -88,7 +89,7 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.router.Use(TracingMiddleware(tracer))
-		c.logger.Info(context.Background(), "Chi Tracing 中间件已启用")
+		c.logger.Info(ctx.Context(), "Chi tracing middleware enabled")
 	}
 
 	c.server = &http.Server{
@@ -103,29 +104,29 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*ChiConfig]()); err != nil {
-		return fmt.Errorf("注册 Chi Config 失败: %w", err)
+		return fmt.Errorf("failed to register Chi Config: %w", err)
 	}
 
 	// 如果 Router 已存在，跳过注册
 	if !routerAlreadyRegistered {
 		if err := container.RegisterInstance(c.router, reflect.TypeFor[*chi.Mux]()); err != nil {
-			return fmt.Errorf("注册 Chi Router 失败: %w", err)
+			return fmt.Errorf("failed to register Chi Router: %w", err)
 		}
 	}
 
 	if err := container.RegisterInstance(c.server, reflect.TypeFor[*http.Server]()); err != nil {
-		return fmt.Errorf("注册 HTTP Server 失败: %w", err)
+		return fmt.Errorf("failed to register HTTP Server: %w", err)
 	}
 
 	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点到 Chi
 	endpointRegistry := NewChiEndpointRegistry(c.router)
 	if err := container.RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-		c.logger.Warn(context.Background(), "注册 HttpEndpointRegistry 失败,Actuator 端点将无法自动挂载",
+		c.logger.Warn(ctx.Context(), "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
 
-	c.logger.Info(context.Background(), "Chi HTTP 路由器已配置",
+	c.logger.Info(ctx.Context(), "Chi HTTP router configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "host", Value: cfg.Host},
 	)
@@ -137,16 +138,16 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 // Start 启动 HTTP 服务器。
 func (c *ChiAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.server == nil {
-		return fmt.Errorf("Chi HTTP Server 未初始化")
+		return fmt.Errorf("Chi HTTP Server not initialized")
 	}
-	c.logger.Info(context.Background(), "Chi HTTP 服务器启动中",
+	c.logger.Info(ctx.Context(), "Chi HTTP server starting",
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
 
 	// 在后台启动服务器，避免阻塞
 	go func() {
 		if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(context.Background(), "Chi HTTP 服务器错误",
+			c.logger.Error(ctx.Context(), "Chi HTTP server error",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -160,7 +161,9 @@ func (c *ChiAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.server == nil {
 		return nil
 	}
-	return c.server.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
+	defer cancel()
+	return c.server.Shutdown(shutdownCtx)
 }
 
 // Name 返回启动器名称。
@@ -190,13 +193,13 @@ func GetServer(container core.Container) (*http.Server, error) {
 
 // ChiConfig Chi HTTP 路由器配置。
 type ChiConfig struct {
-	Enabled         bool   `json:"enabled" value:"${chi.enabled:false}"`
-	Host            string `json:"host" value:"${chi.host:0.0.0.0}"`
-	Port            int    `json:"port" value:"${chi.port:8080}"`
-	EnableRecover   bool   `json:"enable_recover" value:"${chi.enable_recover:true}"`
-	EnableLogger    bool   `json:"enable_logger" value:"${chi.enable_logger:true}"`
-	EnableRequestID bool   `json:"enable_request_id" value:"${chi.enable_request_id:true}"`
-	EnableRealIP    bool   `json:"enable_real_ip" value:"${chi.enable_real_ip:false}"`
+	Enabled         bool   `json:"enabled" mapstructure:"enabled"`
+	Host            string `json:"host" mapstructure:"host"`
+	Port            int    `json:"port" mapstructure:"port"`
+	EnableRecover   bool   `json:"enable_recover" mapstructure:"enable_recover"`
+	EnableLogger    bool   `json:"enable_logger" mapstructure:"enable_logger"`
+	EnableRequestID bool   `json:"enable_request_id" mapstructure:"enable_request_id"`
+	EnableRealIP    bool   `json:"enable_real_ip" mapstructure:"enable_real_ip"`
 }
 
 // 配置常量。
@@ -209,8 +212,8 @@ const (
 func (c *ChiAutoConfiguration) loadConfig(env *environment.Environment) (*ChiConfig, error) {
 	cfg := &ChiConfig{}
 
-	if err := env.BindProperties(cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Chi 配置失败: %w", err)
+	if err := env.BindPrefix("chi", cfg); err != nil {
+		return nil, fmt.Errorf("failed to bind Chi config: %w", err)
 	}
 
 	return cfg, nil

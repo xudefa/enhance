@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -57,7 +58,7 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
-		return fmt.Errorf("加载 Echo 配置失败: %w", err)
+		return fmt.Errorf("failed to load Echo config: %w", err)
 	}
 
 	c.config = cfg
@@ -65,7 +66,7 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 尝试从容器获取已存在的 Echo 实例，如果不存在则创建默认的
 	if server, err := core.GetByName[*echo.Echo](container, ""); err == nil {
 		c.server = server
-		c.logger.Info(context.Background(), "使用容器中已存在的 Echo Server 实例")
+		c.logger.Info(ctx.Context(), "using existing Echo Server instance from container")
 	} else {
 		c.server = echo.New()
 		c.server.HideBanner = cfg.HideBanner
@@ -87,7 +88,7 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.server.Use(TracingMiddleware(tracer))
-		c.logger.Info(context.Background(), "Echo Tracing 中间件已启用")
+		c.logger.Info(ctx.Context(), "Echo tracing middleware enabled")
 	}
 
 	// 检查 Server 是否已注册（由外部传入）
@@ -97,25 +98,25 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*EchoConfig]()); err != nil {
-		return fmt.Errorf("注册 Echo Config 失败: %w", err)
+		return fmt.Errorf("failed to register Echo Config: %w", err)
 	}
 
 	// 如果 Server 已存在，跳过注册
 	if !serverAlreadyRegistered {
 		if err := container.RegisterInstance(c.server, reflect.TypeFor[*echo.Echo]()); err != nil {
-			return fmt.Errorf("注册 Echo Server 失败: %w", err)
+			return fmt.Errorf("failed to register Echo Server: %w", err)
 		}
 	}
 
 	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点到 Echo
 	endpointRegistry := NewEchoEndpointRegistry(c.server)
 	if err := container.RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-		c.logger.Warn(context.Background(), "注册 HttpEndpointRegistry 失败,Actuator 端点将无法自动挂载",
+		c.logger.Warn(ctx.Context(), "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
 
-	c.logger.Info(context.Background(), "Echo Web 服务器已配置",
+	c.logger.Info(ctx.Context(), "Echo Web server configured",
 		log.KeyValue{Key: "port", Value: cfg.Port},
 		log.KeyValue{Key: "host", Value: cfg.Host},
 	)
@@ -127,17 +128,17 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 // Start 启动 Echo Web 服务器。
 func (c *EchoAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.server == nil || c.config == nil {
-		return fmt.Errorf("Echo Web Server 未初始化")
+		return fmt.Errorf("Echo Web Server not initialized")
 	}
 	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
-	c.logger.Info(context.Background(), "Echo Web 服务器启动中",
+	c.logger.Info(ctx.Context(), "Echo Web server starting",
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
 	// 在后台启动服务器，避免阻塞
 	go func() {
 		if err := c.server.Start(addr); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(context.Background(), "Echo Web 服务器错误",
+			c.logger.Error(ctx.Context(), "Echo Web server error",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
 		}
@@ -151,7 +152,9 @@ func (c *EchoAutoConfiguration) Stop(ctx boot.ApplicationContext) error {
 	if c.server == nil {
 		return nil
 	}
-	return c.server.Shutdown(context.Background())
+	shutdownCtx, cancel := context.WithTimeout(ctx.Context(), 30*time.Second)
+	defer cancel()
+	return c.server.Shutdown(shutdownCtx)
 }
 
 // Name 返回启动器名称。
@@ -176,14 +179,14 @@ func GetServer(container core.Container) (*echo.Echo, error) {
 
 // EchoConfig Echo Web 服务器配置。
 type EchoConfig struct {
-	Enabled       bool   `json:"enabled" value:"${echo.enabled:false}"`
-	Host          string `json:"host" value:"${echo.host:0.0.0.0}"`
-	Port          int    `json:"port" value:"${echo.port:8080}"`
-	HideBanner    bool   `json:"hide_banner" value:"${echo.hide_banner:false}"`
-	HidePort      bool   `json:"hide_port" value:"${echo.hide_port:false}"`
-	EnableRecover bool   `json:"enable_recover" value:"${echo.enable_recover:true}"`
-	EnableLogger  bool   `json:"enable_logger" value:"${echo.enable_logger:true}"`
-	EnableCORS    bool   `json:"enable_cors" value:"${echo.enable_cors:false}"`
+	Enabled       bool   `json:"enabled" mapstructure:"enabled"`
+	Host          string `json:"host" mapstructure:"host"`
+	Port          int    `json:"port" mapstructure:"port"`
+	HideBanner    bool   `json:"hide_banner" mapstructure:"hide_banner"`
+	HidePort      bool   `json:"hide_port" mapstructure:"hide_port"`
+	EnableRecover bool   `json:"enable_recover" mapstructure:"enable_recover"`
+	EnableLogger  bool   `json:"enable_logger" mapstructure:"enable_logger"`
+	EnableCORS    bool   `json:"enable_cors" mapstructure:"enable_cors"`
 }
 
 // 配置常量。
@@ -196,8 +199,8 @@ const (
 func (c *EchoAutoConfiguration) loadConfig(env *environment.Environment) (*EchoConfig, error) {
 	cfg := &EchoConfig{}
 
-	if err := env.BindProperties(cfg); err != nil {
-		return nil, fmt.Errorf("绑定 Echo 配置失败: %w", err)
+	if err := env.BindPrefix("echo", cfg); err != nil {
+		return nil, fmt.Errorf("failed to bind Echo config: %w", err)
 	}
 
 	return cfg, nil

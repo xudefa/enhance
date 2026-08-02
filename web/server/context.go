@@ -81,7 +81,7 @@ func (c *DefaultContext) Header(key string) string {
 // BindJSON 解析 JSON 请求体
 func (c *DefaultContext) BindJSON(target any) error {
 	defer func() { _ = c.request.Body.Close() }()
-	body, err := io.ReadAll(c.request.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(c.writer, c.request.Body, 10<<20)) // 10 MB
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
 	}
@@ -104,8 +104,16 @@ func (c *DefaultContext) SetHeader(key, value string) {
 // JSON 返回 JSON 响应
 func (c *DefaultContext) JSON(code int, data any) error {
 	c.writer.Header().Set("Content-Type", "application/json")
+	body, err := json.Marshal(data)
+	if err != nil {
+		// 序列化失败时直接返回 500，避免客户端收到空的 200 响应
+		c.writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = c.writer.Write([]byte(`{"error": "json marshal failed"}`))
+		return err
+	}
 	c.writer.WriteHeader(code)
-	return json.NewEncoder(c.writer).Encode(data)
+	_, _ = c.writer.Write(body)
+	return nil
 }
 
 // String 返回字符串响应
@@ -153,6 +161,11 @@ func (c *DefaultContext) IsAborted() bool {
 // Context 获取请求上下文
 func (c *DefaultContext) Context() context.Context {
 	return c.request.Context()
+}
+
+// Request 获取底层 HTTP 请求
+func (c *DefaultContext) Request() *http.Request {
+	return c.request
 }
 
 // SetContext 设置请求上下文

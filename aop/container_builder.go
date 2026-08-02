@@ -80,7 +80,7 @@ func (b *AopContainerBuilder) WithBeanWithAspects(beanID string, beanType reflec
 // Build 构建AOP容器
 func (b *AopContainerBuilder) Build() (*AopContainer, error) {
 	container := NewAopContainer(b.baseContainer)
-	container.integration.manager.config = b.config
+	container.integration.config = b.config
 
 	// 注册切面
 	container.RegisterAspects(b.aspects...)
@@ -126,17 +126,18 @@ func CreateAopContainer() *AopContainer {
 // CreateAopContainerWithConfig 创建AOP容器（指定配置）
 func CreateAopContainerWithConfig(config *AopConfig) *AopContainer {
 	container := NewAopContainer(nil)
-	container.integration.manager.config = config
+	container.integration.config = config
 	return container
 }
 
 // RegisterAopBeanToGlobal 注册AOP Bean到全局容器
 func RegisterAopBeanToGlobal(beanID string, beanType reflect.Type, target any) error {
-	container := CreateAopContainer()
-	return container.RegisterAopBeanWithID(beanID, beanType, target)
+	beanDef := NewAopBeanDefinition(beanID, beanType)
+	_, err := GlobalAopBeanFactory.CreateBean(beanID, beanDef, target)
+	return err
 }
 
 // RegisterAspectToGlobalContainer 注册切面到全局容器
 func RegisterAspectToGlobalContainer(aspect *AspectMeta) {
-	GlobalAopIntegration.RegisterAspect(aspect)
+	GetGlobalAopIntegration().RegisterAspect(aspect)
 }

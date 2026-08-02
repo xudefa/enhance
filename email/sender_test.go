@@ -141,8 +141,8 @@ func TestSmtpSender_Send_DefaultFrom(t *testing.T) {
 		t.Logf("发送失败（SMTP 服务器不可用时）: %v", err)
 	}
 
-	if msg.From != "default@test.com" {
-		t.Errorf("期望 From 设置为 default@test.com, 得到 %s", msg.From)
+	if msg.From != "" {
+		t.Errorf("期望 Send 不修改调用方的 Message.From, 得到 %s", msg.From)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestBuildMessage_PlainText(t *testing.T) {
 		Body:    "Test Body",
 	}
 
-	result := impl.buildMessage(msg)
+	result := impl.buildMessage(msg, msg.From)
 
 	if !containsLine(result, "From: sender@test.com") {
 		t.Error("期望消息中包含 From 头")
@@ -197,7 +197,7 @@ func TestBuildMessage_HTML(t *testing.T) {
 		HTML:    "<h1>Hello</h1>",
 	}
 
-	result := impl.buildMessage(msg)
+	result := impl.buildMessage(msg, msg.From)
 
 	if !containsLine(result, "Content-Type: text/html; charset=UTF-8") {
 		t.Error("期望 HTML内容为 text/html 类型")
@@ -220,7 +220,7 @@ func TestBuildMessage_MultipleRecipients(t *testing.T) {
 		Body:    "Body",
 	}
 
-	result := impl.buildMessage(msg)
+	result := impl.buildMessage(msg, msg.From)
 
 	if !containsLine(result, "To: user1@example.com, user2@example.com") {
 		t.Errorf("期望 To 头包含多个收件人, 得到:\n%s", result)
@@ -242,7 +242,7 @@ func TestBuildMessage_CustomHeaders(t *testing.T) {
 		},
 	}
 
-	result := impl.buildMessage(msg)
+	result := impl.buildMessage(msg, msg.From)
 
 	if !containsLine(result, "X-Custom-Header: custom-value") {
 		t.Error("期望消息中包含自定义头")

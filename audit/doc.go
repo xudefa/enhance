@@ -56,6 +56,7 @@
 package audit
 
 import (
+	"errors"
 	"time"
 )
 
@@ -191,10 +192,10 @@ type AuditLogger interface {
 // AuditorOption 审计器选项函数。
 type AuditorOption func(auditor Auditor)
 
-// Audit errors.
+// 审计模块错误变量。
 var (
-	// ErrWriterClosed indicates the writer is closed.
-	ErrWriterClosed error
-	// ErrChannelFull indicates the event channel is full.
-	ErrChannelFull error
+	// ErrWriterClosed 表示写入器已关闭。
+	ErrWriterClosed = errors.New("audit writer is closed")
+	// ErrChannelFull 表示事件通道已满。
+	ErrChannelFull = errors.New("audit event channel is full")
 )

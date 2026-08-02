@@ -90,6 +90,10 @@ func (b *AsyncPublisherBuilder) Build() (*AsyncPublisher, error) {
 		return nil, fmt.Errorf("event bus cannot be nil")
 	}
 
+	if b.workerCount <= 0 {
+		return nil, fmt.Errorf("worker count must be positive, got %d", b.workerCount)
+	}
+
 	publisher := NewAsyncPublisher(b.bus,
 		WithWorkerCount(b.workerCount),
 		WithErrorHandler(b.errHandler),
@@ -169,5 +173,3 @@ func ContextRefreshedEvent() *BaseEventBuilder {
 func EnvironmentPreparedEvent() *BaseEventBuilder {
 	return NewBaseEventBuilder().Type(EventEnvironmentPrepared).Now()
 }
-
-
