@@ -3,7 +3,7 @@ module github.com/xudefa/enhance/starter/micro
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.4
+	github.com/xudefa/enhance v0.0.5
 	go-micro.dev/v5 v5.0.0
 )
 
