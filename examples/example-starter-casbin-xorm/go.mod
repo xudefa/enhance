@@ -4,9 +4,9 @@ go 1.25.12
 
 require (
 	github.com/casbin/casbin/v2 v2.123.0
-	github.com/xudefa/enhance v0.0.4
-	github.com/xudefa/enhance/starter/casbin-xorm v0.0.4
-	github.com/xudefa/enhance/starter/xorm v0.0.4
+	github.com/xudefa/enhance v0.0.5
+	github.com/xudefa/enhance/starter/casbin-xorm v0.0.5
+	github.com/xudefa/enhance/starter/xorm v0.0.5
 )
 
 require (

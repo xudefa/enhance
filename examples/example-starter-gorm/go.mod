@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-gorm
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.4
-	github.com/xudefa/enhance/starter/gorm v0.0.4
+	github.com/xudefa/enhance v0.0.5
+	github.com/xudefa/enhance/starter/gorm v0.0.5
 	gorm.io/gorm v1.31.2
 )
 

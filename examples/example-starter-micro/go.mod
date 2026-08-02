@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-micro
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.4
-	github.com/xudefa/enhance/starter/micro v0.0.4
+	github.com/xudefa/enhance v0.0.5
+	github.com/xudefa/enhance/starter/micro v0.0.5
 )
 
 require (

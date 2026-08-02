@@ -1,6 +1,6 @@
 github.com/go-chi/chi/v5 v5.0.12 h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=
 github.com/go-chi/chi/v5 v5.0.12/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
-github.com/xudefa/enhance v0.0.3 h1:T5vZLtOFaRQkGm8vncIB8tlXlfBTfhjdtk9gd3bMT0Q=
-github.com/xudefa/enhance v0.0.3/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
-github.com/xudefa/enhance/starter/chi v0.0.3 h1:WZYRppA8r4YiJwp0OywRVEPGJaUOBIO9+SOdSsJ79DU=
-github.com/xudefa/enhance/starter/chi v0.0.3/go.mod h1:VbQL55gu0Z+dymrkO3H73TpHOT/nQF7HPr7ZyH6oHow=
+github.com/xudefa/enhance v0.0.5 h1:6xf7V+t51DBGAdKUSKiodnGr5mCYGHkwyLDBcsQjfiU=
+github.com/xudefa/enhance v0.0.5/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance/starter/chi v0.0.5 h1:XNO83EGfHVxJlSo0Xe4EdUDVHe0HSFitpX0wIdtrMTA=
+github.com/xudefa/enhance/starter/chi v0.0.5/go.mod h1:ew7DegQ1wrmOoKWDiz/YBFJKTPMLurwa1BG7EbkxrAA=

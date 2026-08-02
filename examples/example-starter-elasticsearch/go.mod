@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/elastic/go-elasticsearch/v8 v8.13.0
-	github.com/xudefa/enhance v0.0.4
-	github.com/xudefa/enhance/starter/elasticsearch v0.0.4
+	github.com/xudefa/enhance v0.0.5
+	github.com/xudefa/enhance/starter/elasticsearch v0.0.5
 )
 
 require (

@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/spf13/viper v1.18.2
-	github.com/xudefa/enhance v0.0.4
-	github.com/xudefa/enhance/starter/viper v0.0.4
+	github.com/xudefa/enhance v0.0.5
+	github.com/xudefa/enhance/starter/viper v0.0.5
 )
 
 require (
