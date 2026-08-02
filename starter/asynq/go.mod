@@ -14,7 +14,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
-	github.com/xudefa/enhance v0.0.3
+	github.com/xudefa/enhance v0.0.4
 	go.uber.org/goleak v1.3.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
