@@ -145,15 +145,15 @@ release: _backup-gowork _phase1-main _phase2-sub _phase3-examples _push-code _re
 _backup-gowork: ## [内部] 备份 go.work 文件
 	@echo "=== 备份 go.work ==="
 	@if [ -f "go.work" ]; then \
-		cp go.work go.work.bak && echo "  [备份] go.work -> go.work.bak"; \
+		cp go.work go.work.back && echo "  [备份] go.work -> go.work.back"; \
 	else \
 		echo "  [跳过] go.work 不存在"; \
 	fi
 
 _restore-gowork: ## [内部] 恢复 go.work 文件
 	@echo "=== 恢复 go.work ==="
-	@if [ -f "go.work.bak" ]; then \
-		mv go.work.bak go.work && echo "  [恢复] go.work.bak -> go.work"; \
+	@if [ -f "go.work.back" ]; then \
+		mv go.work.back go.work && echo "  [恢复] go.work.back -> go.work"; \
 	else \
 		echo "  [跳过] 无备份文件"; \
 	fi
@@ -170,7 +170,7 @@ _commit-main: ## [内部] 提交主模块代码
 	@echo "=== 阶段1: 提交主模块代码 ==="
 	@git add go.mod *.go
 	@test -f go.sum && git add go.sum || true
-	@git commit -m "release: main module $(VERSION)" || echo "  [跳过] 主模块无变更"
+	@git commit -m "release: main module $(VERSION)" || { echo "⚠️  [跳过] 主模块无变更"; }
 
 _create-main-tag: ## [内部] 创建主模块 tag
 	@echo "=== 创建主模块 tag: $(VERSION) ==="
@@ -182,7 +182,7 @@ _create-main-tag: ## [内部] 创建主模块 tag
 
 _push-main-tag: ## [内部] 推送主模块 tag
 	@echo "=== 推送主模块 tag: $(VERSION) ==="
-	@git push $(REMOTE) "$(VERSION)" && echo "  [推送] ✅" || echo "  [失败]"
+	@git push $(REMOTE) "$(VERSION)" && echo "  [推送] ✅" || { echo "❌ [错误] 推送主模块 tag 失败，流程已中断"; echo "请手动执行: git push $(REMOTE) $(VERSION)"; exit 1; }
 
 # ============================================================================
 # Phase 2: 子模块发布
@@ -212,7 +212,7 @@ _tidy-sub-modules: ## [内部] 子模块 go mod tidy
 _commit-sub-modules: ## [内部] 提交子模块代码
 	@echo "=== 提交子模块代码 ==="
 	@git add starter/*/go.mod starter/*/go.sum
-	@git commit -m "release: sub modules depend on main $(VERSION)" || echo "  [跳过] 子模块无变更"
+	@git commit -m "release: sub modules depend on main $(VERSION)" || { echo "⚠️  [跳过] 子模块无变更"; }
 
 _create-sub-tags: ## [内部] 创建子模块 tags
 	@echo "=== 创建子模块 tags ==="
@@ -228,12 +228,21 @@ _create-sub-tags: ## [内部] 创建子模块 tags
 
 _push-sub-tags: ## [内部] 推送子模块 tags
 	@echo "=== 推送子模块 tags ==="
-	@for dir in $(STARTER_MODULES); do \
+	@failed=""; \
+	for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
-			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || echo "  [失败] $$tag"; \
+			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || { echo "  [失败] $$tag"; failed="$$failed $$tag"; }; \
 		fi; \
-	done
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo "❌ [错误] 以下子模块 tags 推送失败:$$failed"; \
+		echo "流程已中断，请手动执行:"; \
+		for tag in $$failed; do \
+			echo "  git push $(REMOTE) $$tag"; \
+		done; \
+		exit 1; \
+	fi
 
 # ============================================================================
 # Phase 3: Examples 更新
@@ -270,7 +279,7 @@ _tidy-example-modules: ## [内部] examples go mod tidy
 _commit-examples: ## [内部] 提交 examples 变更
 	@echo "=== 提交 examples 变更 ==="
 	@git add examples/*/go.mod examples/*/go.sum
-	@git commit -m "release: update examples dependencies to $(VERSION)" || echo "  [跳过] examples 无变更"
+	@git commit -m "release: update examples dependencies to $(VERSION)" || { echo "⚠️  [跳过] examples 无变更"; }
 
 # ============================================================================
 # Tag Management
@@ -315,21 +324,33 @@ delete-tags: ## 删除本地 git tags
 
 push-tags: ## 推送 tags 到远端
 	@echo "=== 推送 tags 到 $(REMOTE) ==="
-	@if git rev-parse "$(VERSION)" >/dev/null 2>&1; then \
-		git push $(REMOTE) "$(VERSION)" && echo "  [推送] $(VERSION) ✅" || echo "  [失败] $(VERSION)"; \
-	fi
-	@for dir in $(STARTER_MODULES); do \
+	@failed=""; \
+	if git rev-parse "$(VERSION)" >/dev/null 2>&1; then \
+		git push $(REMOTE) "$(VERSION)" && echo "  [推送] $(VERSION) ✅" || { echo "  [失败] $(VERSION)"; failed="$(VERSION)"; }; \
+	fi; \
+	for dir in $(STARTER_MODULES); do \
 		tag="$${dir#./}/$(VERSION)"; \
 		if git rev-parse "$$tag" >/dev/null 2>&1; then \
-			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || echo "  [失败] $$tag"; \
+			git push $(REMOTE) "$$tag" 2>/dev/null && echo "  [推送] $$tag ✅" || { echo "  [失败] $$tag"; failed="$$failed $$tag"; }; \
 		fi; \
-	done
+	done; \
+	if [ -n "$$failed" ]; then \
+		echo "❌ [错误] 以下 tags 推送失败:$$failed"; \
+		echo "请手动执行:"; \
+		for tag in $$failed; do \
+			echo "  git push $(REMOTE) $$tag"; \
+		done; \
+		exit 1; \
+	fi
 	@echo "✅ Tags 推送完成"
+
+_push-code: ## [内部] 推送代码到远端
+	@echo "=== 推送代码到 $(REMOTE) ==="
+	@git push $(REMOTE) main && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败，流程已中断"; echo "请手动执行: git push $(REMOTE) main"; exit 1; }
 
 push-code: ## 推送代码到远端
 	@echo "=== 推送代码到 $(REMOTE) ==="
-	@git push $(REMOTE) main
-	@echo "✅ 代码推送完成"
+	@git push $(REMOTE) main && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败"; echo "请手动执行: git push $(REMOTE) main"; exit 1; }
 
 create-remote-tags: create-tags push-tags ## 创建并推送 tags
 
