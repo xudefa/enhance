@@ -32,7 +32,13 @@ func NewThresholdSampler(threshold int64) *ThresholdSampler {
 
 // ShouldSample 判断是否采样
 func (s *ThresholdSampler) ShouldSample() bool {
-	return s.counter.Add(1)%s.threshold == 0
+	count := s.counter.Add(1)
+	// 防止计数器溢出
+	if count < 0 {
+		s.counter.Store(0)
+		return true
+	}
+	return count%s.threshold == 0
 }
 
 // NewSampledLogger 创建带采样的日志器
@@ -110,6 +116,7 @@ func (l *SampledLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 }
 
 var _ Logger = (*SampledLogger)(nil)
+var _ LoggerFatal = (*SampledLogger)(nil)
 
 // randomFloat 生成 0.0-1.0 之间的随机数。
 func randomFloat() float64 {

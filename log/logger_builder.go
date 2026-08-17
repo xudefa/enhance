@@ -78,6 +78,7 @@ func (b *LoggerBuilder) Build() Logger {
 	}
 
 	if b.name != "" {
+		// 使用 context.Background() 添加 logger 名称字段
 		logger = logger.With(context.Background(), KeyValue{Key: "logger", Value: b.name})
 	}
 

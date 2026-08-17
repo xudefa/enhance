@@ -131,6 +131,13 @@ type LoggerWithLevel interface {
 	Log(ctx context.Context, level Level, msg string, keys ...KeyValue)
 }
 
+// LoggerLevelChecker 支持日志级别检查。
+// 用于在记录日志前快速检查级别是否启用，避免不必要的内存分配。
+type LoggerLevelChecker interface {
+	// IsLevelEnabled 检查指定级别是否启用
+	IsLevelEnabled(level Level) bool
+}
+
 // LoggerWithName 支持日志命名。
 type LoggerWithName interface {
 	Logger

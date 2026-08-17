@@ -24,10 +24,11 @@ func WithFormat(format string) Option {
 	}
 }
 
-// WithTimeFormat 设置时间格式
+// WithTimeFormat 设置时间格式（已废弃，slog 使用自己的时间格式）
+// Deprecated: slog 使用自己的时间格式，此选项无效
 func WithTimeFormat(timeFormat string) Option {
 	return func(l *SlogLogger) {
-		l.timeFormat = timeFormat
+		// 保留以保持 API 兼容性，但不再使用
 	}
 }
 
@@ -52,11 +53,23 @@ func WithOutputPath(path string) Option {
 		if err != nil {
 			return
 		}
-		l.output = f
-		if l.file != nil && l.file != os.Stdout {
+		// 关闭旧文件句柄（如果存在）
+		if l.file != nil {
 			_ = l.file.Close()
 		}
+		l.output = f
 		l.file = f
+		// 重新创建 handler 和 logger 以使用新的输出
+		l.slogLevel = l.toSlogLevel(l.level)
+		handlerOptions := &slog.HandlerOptions{
+			Level:     l.slogLevel,
+			AddSource: l.addSource,
+		}
+		if l.format == "text" {
+			l.logger = slog.New(slog.NewTextHandler(l.output, handlerOptions))
+		} else {
+			l.logger = slog.New(slog.NewJSONHandler(l.output, handlerOptions))
+		}
 	}
 }
 
@@ -64,12 +77,12 @@ func WithOutputPath(path string) Option {
 type SlogLogger struct {
 	logger      *slog.Logger
 	level       Level
-	format      string
-	timeFormat  string
-	addSource   bool
-	output      io.Writer
-	file        *os.File
-	development bool // 开发模式标志，DPanic 在开发模式下会 panic
+	slogLevel   slog.Level // 预计算的 slog 级别，避免重复转换
+	format      string     // 仅用于初始化时配置，With 方法不复制
+	addSource   bool       // 仅用于初始化时配置，With 方法不复制
+	output      io.Writer  // 仅用于初始化时配置，With 方法不复制
+	file        *os.File   // 仅用于初始化和 Close 方法
+	development bool       // 开发模式标志，DPanic 在开发模式下会 panic
 }
 
 // WithDevelopment 设置开发模式
@@ -82,20 +95,22 @@ func WithDevelopment(development bool) Option {
 // NewSlogLogger 创建 slog 日志适配器
 func NewSlogLogger(opts ...Option) *SlogLogger {
 	l := &SlogLogger{
-		level:      InfoLevel,
-		format:     "json",
-		timeFormat: "2006-01-02 15:04:05",
-		addSource:  false,
-		output:     os.Stdout,
+		level:     InfoLevel,
+		format:    "json",
+		addSource: false,
+		output:    os.Stdout,
 	}
 
 	for _, opt := range opts {
 		opt(l)
 	}
 
+	// 预计算 slog 级别
+	l.slogLevel = l.toSlogLevel(l.level)
+
 	var handler slog.Handler
 	handlerOptions := &slog.HandlerOptions{
-		Level:     l.toSlogLevel(l.level),
+		Level:     l.slogLevel,
 		AddSource: l.addSource,
 	}
 
@@ -140,41 +155,60 @@ func (l *SlogLogger) toSlogLevel(level Level) slog.Level {
 
 // log 记录日志
 func (l *SlogLogger) log(ctx context.Context, level Level, msg string, keys []KeyValue) {
-	slogLevel := l.toSlogLevel(level)
 	attrs := make([]any, 0, len(keys)*2)
 
 	for _, kv := range keys {
 		attrs = append(attrs, kv.Key, kv.Value)
 	}
-	l.logger.Log(ctx, slogLevel, msg, attrs...)
+	l.logger.Log(ctx, l.toSlogLevel(level), msg, attrs...)
+}
+
+// logEnabled 快速检查日志级别是否启用
+func (l *SlogLogger) logEnabled(level Level) bool {
+	return level >= l.level
+}
+
+// IsLevelEnabled 检查指定级别是否启用（实现 LoggerLevelChecker 接口）
+func (l *SlogLogger) IsLevelEnabled(level Level) bool {
+	return l.logEnabled(level)
 }
 
 // Debug 记录调试日志
 func (l *SlogLogger) Debug(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, DebugLevel, msg, keys)
+	if l.logEnabled(DebugLevel) {
+		l.log(ctx, DebugLevel, msg, keys)
+	}
 }
 
 // Info 记录信息日志
 func (l *SlogLogger) Info(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, InfoLevel, msg, keys)
+	if l.logEnabled(InfoLevel) {
+		l.log(ctx, InfoLevel, msg, keys)
+	}
 }
 
 // Warn 记录警告日志
 func (l *SlogLogger) Warn(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, WarnLevel, msg, keys)
+	if l.logEnabled(WarnLevel) {
+		l.log(ctx, WarnLevel, msg, keys)
+	}
 }
 
 // Error 记录错误日志
 func (l *SlogLogger) Error(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, ErrorLevel, msg, keys)
+	if l.logEnabled(ErrorLevel) {
+		l.log(ctx, ErrorLevel, msg, keys)
+	}
 }
 
 // DPanic 记录致命错误日志
 //
-// 在开发模式下会 panic，在生产模式下仅记录 Error 级别日志。
+// 在开发模式下会 panic，在生产模式下仅记录错误级别日志。
 // 这符合 DPanic 的标准语义：用于检测不应发生的编程错误。
 func (l *SlogLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, DPanicLevel, msg, keys)
+	if l.logEnabled(DPanicLevel) {
+		l.log(ctx, DPanicLevel, msg, keys)
+	}
 	if l.development {
 		panic(msg)
 	}
@@ -182,7 +216,9 @@ func (l *SlogLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
 
 // Panic 记录日志并 panic
 func (l *SlogLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, PanicLevel, msg, keys)
+	if l.logEnabled(PanicLevel) {
+		l.log(ctx, PanicLevel, msg, keys)
+	}
 	panic(msg)
 }
 
@@ -191,7 +227,9 @@ func (l *SlogLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
 // 注意：与标准 log.Fatal 不同，此方法仅记录日志，不会调用 os.Exit(1)。
 // 如需退出程序，调用方需自行处理。
 func (l *SlogLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
-	l.log(ctx, FatalLevel, msg, keys)
+	if l.logEnabled(FatalLevel) {
+		l.log(ctx, FatalLevel, msg, keys)
+	}
 }
 
 // Sync 同步日志缓冲区
@@ -201,7 +239,7 @@ func (l *SlogLogger) Sync() error {
 
 // Close 关闭日志文件句柄
 func (l *SlogLogger) Close() error {
-	if l.file != nil && l.file != os.Stdout {
+	if l.file != nil {
 		return l.file.Close()
 	}
 	return nil
@@ -216,13 +254,10 @@ func (l *SlogLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 	return &SlogLogger{
 		logger:      l.logger.With(attrs...),
 		level:       l.level,
-		format:      l.format,
-		timeFormat:  l.timeFormat,
-		addSource:   l.addSource,
-		output:      l.output,
-		file:        l.file,
+		slogLevel:   l.slogLevel, // 继承预计算的 slog 级别
 		development: l.development,
 	}
 }
 
 var _ Logger = (*SlogLogger)(nil)
+var _ LoggerFatal = (*SlogLogger)(nil)

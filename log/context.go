@@ -58,24 +58,44 @@ func NewContextLogger(logger Logger) *ContextLogger {
 
 // Debug 记录调试日志
 func (l *ContextLogger) Debug(ctx context.Context, msg string, keys ...KeyValue) {
+	if checker, ok := l.logger.(LoggerLevelChecker); ok {
+		if !checker.IsLevelEnabled(DebugLevel) {
+			return
+		}
+	}
 	keys = appendContextKeys(ctx, keys)
 	l.logger.Debug(ctx, msg, keys...)
 }
 
 // Info 记录信息日志
 func (l *ContextLogger) Info(ctx context.Context, msg string, keys ...KeyValue) {
+	if checker, ok := l.logger.(LoggerLevelChecker); ok {
+		if !checker.IsLevelEnabled(InfoLevel) {
+			return
+		}
+	}
 	keys = appendContextKeys(ctx, keys)
 	l.logger.Info(ctx, msg, keys...)
 }
 
 // Warn 记录警告日志
 func (l *ContextLogger) Warn(ctx context.Context, msg string, keys ...KeyValue) {
+	if checker, ok := l.logger.(LoggerLevelChecker); ok {
+		if !checker.IsLevelEnabled(WarnLevel) {
+			return
+		}
+	}
 	keys = appendContextKeys(ctx, keys)
 	l.logger.Warn(ctx, msg, keys...)
 }
 
 // Error 记录错误日志
 func (l *ContextLogger) Error(ctx context.Context, msg string, keys ...KeyValue) {
+	if checker, ok := l.logger.(LoggerLevelChecker); ok {
+		if !checker.IsLevelEnabled(ErrorLevel) {
+			return
+		}
+	}
 	keys = appendContextKeys(ctx, keys)
 	l.logger.Error(ctx, msg, keys...)
 }
@@ -123,11 +143,21 @@ func (l *ContextLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 }
 
 // appendContextKeys 从上下文提取键值对
+//
+// 注意：当需要追加 trace_id 时分配新切片，避免与调用方共享底层数组
+// （直接 append 会污染调用方切片预留容量）。
 func appendContextKeys(ctx context.Context, keys []KeyValue) []KeyValue {
-	if traceID := GetTraceID(ctx); traceID != "" {
-		keys = append(keys, KeyValue{Key: "trace_id", Value: traceID})
+	traceID := GetTraceID(ctx)
+	if traceID == "" {
+		return keys
 	}
-	return keys
+
+	// 如果 keys 的容量足够且没有共享底层数组，可以直接 append
+	// 但为了安全起见，始终创建新切片避免污染调用方
+	result := make([]KeyValue, len(keys)+1)
+	copy(result, keys)
+	result[len(keys)] = KeyValue{Key: "trace_id", Value: traceID}
+	return result
 }
 
 var _ Logger = (*ContextLogger)(nil)
@@ -175,7 +205,12 @@ func (d *DynamicLevelLogger) GetLevel() Level {
 
 // shouldLog 判断是否应该记录指定级别的日志
 func (d *DynamicLevelLogger) shouldLog(level Level) bool {
-	return level >= Level(d.level.Load())
+	return int32(level) >= d.level.Load()
+}
+
+// IsLevelEnabled 检查指定级别是否启用（实现 LoggerLevelChecker 接口）
+func (d *DynamicLevelLogger) IsLevelEnabled(level Level) bool {
+	return d.shouldLog(level)
 }
 
 // Debug 记录调试日志
@@ -208,29 +243,35 @@ func (d *DynamicLevelLogger) Error(ctx context.Context, msg string, keys ...KeyV
 
 // DPanic 记录致命错误日志并 panic
 func (d *DynamicLevelLogger) DPanic(ctx context.Context, msg string, keys ...KeyValue) {
-	if fl, ok := d.logger.(LoggerFatal); ok {
-		fl.DPanic(ctx, msg, keys...)
-		return
+	if d.shouldLog(DPanicLevel) {
+		if fl, ok := d.logger.(LoggerFatal); ok {
+			fl.DPanic(ctx, msg, keys...)
+			return
+		}
+		panic(msg)
 	}
-	panic(msg)
 }
 
 // Panic 记录日志并 panic
 func (d *DynamicLevelLogger) Panic(ctx context.Context, msg string, keys ...KeyValue) {
-	if fl, ok := d.logger.(LoggerFatal); ok {
-		fl.Panic(ctx, msg, keys...)
-		return
+	if d.shouldLog(PanicLevel) {
+		if fl, ok := d.logger.(LoggerFatal); ok {
+			fl.Panic(ctx, msg, keys...)
+			return
+		}
+		panic(msg)
 	}
-	panic(msg)
 }
 
 // Fatal 记录致命级别日志
 func (d *DynamicLevelLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue) {
-	if fl, ok := d.logger.(LoggerFatal); ok {
-		fl.Fatal(ctx, msg, keys...)
-		return
+	if d.shouldLog(FatalLevel) {
+		if fl, ok := d.logger.(LoggerFatal); ok {
+			fl.Fatal(ctx, msg, keys...)
+			return
+		}
+		os.Exit(1)
 	}
-	os.Exit(1)
 }
 
 // Sync 同步日志缓冲区
@@ -242,7 +283,7 @@ func (d *DynamicLevelLogger) Sync() error {
 func (d *DynamicLevelLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 	return &DynamicLevelLogger{
 		logger: d.logger.With(ctx, keys...),
-		level:  d.level, // 共享 atomic 指针
+		level:  d.level, // 共享 atomic 指针，子日志器与父日志器级别同步
 	}
 }
 

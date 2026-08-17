@@ -83,7 +83,8 @@ func (s *Sanitizer) Sanitize(key string, value any) any {
 // defaultKeywords 返回默认敏感关键词列表
 func defaultKeywords() []string {
 	return []string{
-		"password", "secret", "token", "api_key", "access_token",
+		"password", "secret", "token", "key", "auth",
+		"credential", "private", "api_key", "access_token",
 		"client_secret", "oauth", "bearer", "jwt",
 	}
 }
