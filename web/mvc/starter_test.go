@@ -2,10 +2,13 @@ package mvc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/xudefa/enhance/log"
 )
 
 // mockServer 模拟 Server 实现
@@ -432,5 +435,273 @@ func TestContextInterface(t *testing.T) {
 
 	if ctx.statusCode != http.StatusBadRequest {
 		t.Errorf("expected status 400, got %d", ctx.statusCode)
+	}
+}
+
+// ==================== mockLogger ====================
+
+type mockLogger struct{}
+
+func (m *mockLogger) Debug(_ context.Context, _ string, _ ...log.KeyValue) {}
+func (m *mockLogger) Info(_ context.Context, _ string, _ ...log.KeyValue)  {}
+func (m *mockLogger) Warn(_ context.Context, _ string, _ ...log.KeyValue)  {}
+func (m *mockLogger) Error(_ context.Context, _ string, _ ...log.KeyValue) {}
+func (m *mockLogger) Sync() error                                         { return nil }
+func (m *mockLogger) With(_ context.Context, _ ...log.KeyValue) log.Logger {
+	return m
+}
+
+// ==================== errorMockServer ====================
+
+type errorMockServer struct {
+	handler any
+}
+
+func (e *errorMockServer) Start() error              { return nil }
+func (e *errorMockServer) Stop(_ context.Context) error {
+	return errors.New("server stop failed")
+}
+func (e *errorMockServer) SetHandler(handler any) { e.handler = handler }
+func (e *errorMockServer) Use(_ any)              {}
+
+// ==================== Option function tests ====================
+
+func TestWithName(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter(WithName("my-app"))
+	if s.name != "my-app" {
+		t.Errorf("expected name 'my-app', got %q", s.name)
+	}
+}
+
+func TestWithLogger(t *testing.T) {
+	t.Parallel()
+	logger := &mockLogger{}
+	s := NewWebStarter(WithLogger(logger))
+	if s.logger != logger {
+		t.Error("expected logger to be set to the provided mockLogger")
+	}
+}
+
+func TestWithHandler(t *testing.T) {
+	t.Parallel()
+	handler := http.NewServeMux()
+	s := NewWebStarter(WithHandler(handler))
+	if s.handler != handler {
+		t.Error("expected handler to be set")
+	}
+}
+
+// ==================== Setter tests ====================
+
+func TestSetRouter(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	router := &mockRouter{}
+	s.SetRouter(router)
+	if s.router != router {
+		t.Error("expected router to be set")
+	}
+}
+
+func TestSetServer(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	server := &mockServer{}
+	s.SetServer(server)
+	if s.server != server {
+		t.Error("expected server to be set")
+	}
+}
+
+func TestSetHandler(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	handler := http.NewServeMux()
+	s.SetHandler(handler)
+	if s.handler != handler {
+		t.Error("expected handler to be set")
+	}
+}
+
+func TestSetMiddlewares(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	mws := []MiddlewareFunc{func(ctx Context) {}, func(ctx Context) {}}
+	s.SetMiddlewares(mws)
+	if len(s.middlewares) != 2 {
+		t.Errorf("expected 2 middlewares, got %d", len(s.middlewares))
+	}
+}
+
+func TestAddMiddleware(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	s.AddMiddleware(func(ctx Context) {})
+	s.AddMiddleware(func(ctx Context) {})
+	if len(s.middlewares) != 2 {
+		t.Errorf("expected 2 middlewares, got %d", len(s.middlewares))
+	}
+}
+
+// ==================== Start with custom handler ====================
+
+func TestStartWithCustomHandler(t *testing.T) {
+	ClearControllers()
+	server := &mockServer{}
+	router := &mockRouter{}
+	handler := http.NewServeMux()
+
+	starter := NewWebStarter(
+		WithServer(server),
+		WithRouter(router),
+		WithHandler(handler),
+	)
+
+	if err := starter.Start(nil); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	server.mu.RLock()
+	got := server.handler
+	server.mu.RUnlock()
+
+	if got != handler {
+		t.Error("server.SetHandler should be called with custom handler, not router")
+	}
+}
+
+// ==================== Start/Stop with nil context ====================
+
+func TestStartWithNilContext(t *testing.T) {
+	ClearControllers()
+	server := &mockServer{}
+	router := &mockRouter{}
+
+	starter := NewWebStarter(
+		WithServer(server),
+		WithRouter(router),
+	)
+
+	if err := starter.Start(nil); err != nil {
+		t.Fatalf("Start(nil) should not panic, got error: %v", err)
+	}
+}
+
+func TestStopWithNilContext(t *testing.T) {
+	ClearControllers()
+	server := &mockServer{}
+	router := &mockRouter{}
+
+	starter := NewWebStarter(
+		WithServer(server),
+		WithRouter(router),
+	)
+
+	if err := starter.Stop(nil); err != nil {
+		t.Fatalf("Stop(nil) should not panic, got error: %v", err)
+	}
+}
+
+// ==================== Stop with error ====================
+
+func TestStopWithError(t *testing.T) {
+	ClearControllers()
+	server := &errorMockServer{}
+	router := &mockRouter{}
+
+	starter := NewWebStarter(
+		WithServer(server),
+		WithRouter(router),
+	)
+
+	err := starter.Stop(nil)
+	if err == nil {
+		t.Fatal("expected error from Stop")
+	}
+	if err.Error() != "server stop failed" {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// ==================== DefaultConfig ====================
+
+func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultConfig()
+
+	if cfg.Port != 8080 {
+		t.Errorf("expected port 8080, got %d", cfg.Port)
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Errorf("expected host '0.0.0.0', got %q", cfg.Host)
+	}
+	if cfg.Timeout != 30*time.Second {
+		t.Errorf("expected timeout 30s, got %v", cfg.Timeout)
+	}
+	if cfg.Logger == nil {
+		t.Error("expected logger to be non-nil")
+	}
+}
+
+// ==================== Chainable config methods ====================
+
+func TestWebStarterWithServerChainable(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	server := &mockServer{}
+	ret := s.WithServer(server)
+	if s.server != server {
+		t.Error("expected server to be set")
+	}
+	if ret != s {
+		t.Error("WithServer should return *WebStarter for chaining")
+	}
+}
+
+func TestWebStarterWithRouterChainable(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	router := &mockRouter{}
+	ret := s.WithRouter(router)
+	if s.router != router {
+		t.Error("expected router to be set")
+	}
+	if ret != s {
+		t.Error("WithRouter should return *WebStarter for chaining")
+	}
+}
+
+func TestWebStarterUseChainable(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	ret := s.Use(func(ctx Context) {})
+	if len(s.middlewares) != 1 {
+		t.Errorf("expected 1 middleware, got %d", len(s.middlewares))
+	}
+	if ret != s {
+		t.Error("Use should return *WebStarter for chaining")
+	}
+}
+
+func TestWebStarterGetRouter(t *testing.T) {
+	t.Parallel()
+	s := NewWebStarter()
+	if s.GetRouter() != nil {
+		t.Error("expected nil router initially")
+	}
+	router := &mockRouter{}
+	s.SetRouter(router)
+	if s.GetRouter() != router {
+		t.Error("expected router to match")
+	}
+}
+
+func TestDefaultWebConfigAlias(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultWebConfig()
+	if cfg.Port != 8080 {
+		t.Errorf("expected port 8080, got %d", cfg.Port)
 	}
 }

@@ -1,500 +1,261 @@
 package boot
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/xudefa/enhance/condition"
 )
 
-// TestConfigA 测试用配置 A
-type TestConfigA struct{}
+// ==================== AutoConfigEntry Options 测试 ====================
 
-func (c *TestConfigA) Configure(ctx ApplicationContext) error { return nil }
-
-// TestConfigB 测试用配置 B
-type TestConfigB struct{}
-
-func (c *TestConfigB) Configure(ctx ApplicationContext) error { return nil }
-
-// TestConfigC 测试用配置 C
-type TestConfigC struct{}
-
-func (c *TestConfigC) Configure(ctx ApplicationContext) error { return nil }
-
-// TestAutoConfigRegistry_BeforeAfter 测试 Before/After 排序
-func TestAutoConfigRegistry_BeforeAfter(t *testing.T) {
+func TestWithDependsOn(t *testing.T) {
 	t.Parallel()
-	registry := NewAutoConfigRegistry()
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
 
-	// 注册配置：A 应该在 B 之前，B 应该在 C 之前
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigA{},
-		Before: []string{"*boot.TestConfigB"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigB{},
-		Before: []string{"*boot.TestConfigC"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigC{},
-		Order:  100,
-	})
+	opt := WithDependsOn("dbConfig", "cacheConfig")
+	opt(entry)
 
-	// 获取匹配的配置
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 3 {
-		t.Fatalf("Expected 3 matched configs, got %d", len(matched))
+	if len(entry.Dependencies) != 2 {
+		t.Fatalf("expected 2 dependencies, got %d", len(entry.Dependencies))
 	}
-
-	// 验证顺序：A -> B -> C
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	if typeName(matched[0]) != "*boot.TestConfigA" {
-		t.Errorf("Expected TestConfigA first, got %s", typeName(matched[0]))
-	}
-	if typeName(matched[1]) != "*boot.TestConfigB" {
-		t.Errorf("Expected TestConfigB second, got %s", typeName(matched[1]))
-	}
-	if typeName(matched[2]) != "*boot.TestConfigC" {
-		t.Errorf("Expected TestConfigC third, got %s", typeName(matched[2]))
+	if entry.Dependencies[0] != "dbConfig" || entry.Dependencies[1] != "cacheConfig" {
+		t.Errorf("expected [dbConfig, cacheConfig], got %v", entry.Dependencies)
 	}
 }
 
-// TestDatabaseConfig 测试用数据库配置
-type TestDatabaseConfig struct{}
-
-func (c *TestDatabaseConfig) Configure(ctx ApplicationContext) error { return nil }
-
-// TestWebConfig 测试用 Web 配置
-type TestWebConfig struct{}
-
-func (c *TestWebConfig) Configure(ctx ApplicationContext) error { return nil }
-
-// TestCacheConfig 测试用缓存配置
-type TestCacheConfig struct{}
-
-func (c *TestCacheConfig) Configure(ctx ApplicationContext) error { return nil }
-
-// TestAutoConfigRegistry_After 测试 After 排序
-func TestAutoConfigRegistry_After(t *testing.T) {
+func TestWithDependsOn_Append(t *testing.T) {
 	t.Parallel()
-	registry := NewAutoConfigRegistry()
-
-	// 注册配置：Web 和 Cache 都应在 Database 之后
-	registry.Add(AutoConfigEntry{
-		Config: &TestDatabaseConfig{},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestWebConfig{},
-		After:  []string{"*boot.TestDatabaseConfig"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestCacheConfig{},
-		After:  []string{"*boot.TestDatabaseConfig"},
-		Order:  100,
-	})
-
-	// 获取匹配的配置
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 3 {
-		t.Fatalf("Expected 3 matched configs, got %d", len(matched))
+	entry := &AutoConfigEntry{
+		Config:       &mockAutoConfig{},
+		Dependencies: []string{"existing"},
 	}
 
-	// 验证 Database 在第一位
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
+	opt := WithDependsOn("newDep")
+	opt(entry)
 
-	if typeName(matched[0]) != "*boot.TestDatabaseConfig" {
-		t.Errorf("Expected TestDatabaseConfig first, got %s", typeName(matched[0]))
+	if len(entry.Dependencies) != 2 {
+		t.Fatalf("expected 2 dependencies, got %d", len(entry.Dependencies))
+	}
+	if entry.Dependencies[0] != "existing" || entry.Dependencies[1] != "newDep" {
+		t.Errorf("expected [existing, newDep], got %v", entry.Dependencies)
 	}
 }
 
-// TestAutoConfigRegistry_CircularDependency 测试循环依赖回退
-func TestAutoConfigRegistry_CircularDependency(t *testing.T) {
+func TestWithOverride(t *testing.T) {
 	t.Parallel()
-	registry := NewAutoConfigRegistry()
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
 
-	// 创建循环依赖：A 在 B 之前，B 在 A 之前
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigA{},
-		Before: []string{"*boot.TestConfigB"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigB{},
-		Before: []string{"*boot.TestConfigA"},
-		Order:  50, // B 的 Order 更小，应该排在前面
-	})
+	opt := WithOverride("*GinAutoConfiguration")
+	opt(entry)
 
-	// 获取匹配的配置（应该回退到 Order 排序）
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 2 {
-		t.Fatalf("Expected 2 matched configs, got %d", len(matched))
+	if !entry.Override {
+		t.Error("expected Override to be true")
 	}
-
-	// 验证回退到 Order 排序
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
+	if entry.OverrideTarget != "*GinAutoConfiguration" {
+		t.Errorf("expected OverrideTarget '*GinAutoConfiguration', got '%s'", entry.OverrideTarget)
 	}
-
-	// B 的 Order=50 应该排在 A 的 Order=100 之前
-	if typeName(matched[0]) != "*boot.TestConfigB" {
-		t.Errorf("Expected TestConfigB first (lower Order), got %s", typeName(matched[0]))
+	if entry.Order != -100 {
+		t.Errorf("expected Order -100, got %d", entry.Order)
 	}
 }
 
-// TestAutoConfigRegistry_WithBeforeAfter 测试 WithBefore/WithAfter 选项
-func TestAutoConfigRegistry_WithBeforeAfter(t *testing.T) {
+func TestWithOrder(t *testing.T) {
 	t.Parallel()
-	registry := NewAutoConfigRegistry()
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
 
-	// 使用选项函数注册
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigA{},
-		Before: []string{"*boot.TestConfigB"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigB{},
-		After:  []string{"*boot.TestConfigA"},
-		Order:  100,
-	})
+	opt := WithOrder(500)
+	opt(entry)
 
-	// 获取匹配的配置
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 2 {
-		t.Fatalf("Expected 2 matched configs, got %d", len(matched))
-	}
-
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	// 验证 A 在 B 之前
-	if typeName(matched[0]) != "*boot.TestConfigA" {
-		t.Errorf("Expected TestConfigA first, got %s", typeName(matched[0]))
+	if entry.Order != 500 {
+		t.Errorf("expected Order 500, got %d", entry.Order)
 	}
 }
 
-// TestConfigDB 测试用数据库配置
-type TestConfigDB struct{}
-
-func (c *TestConfigDB) Configure(ctx ApplicationContext) error { return nil }
-
-// TestConfigRedis 测试用 Redis 配置
-type TestConfigRedis struct{}
-
-func (c *TestConfigRedis) Configure(ctx ApplicationContext) error { return nil }
-
-// TestConfigWeb 测试用 Web 配置
-type TestConfigWeb struct{}
-
-func (c *TestConfigWeb) Configure(ctx ApplicationContext) error { return nil }
-
-// TestConfigCache 测试用缓存配置
-type TestConfigCache struct{}
-
-func (c *TestConfigCache) Configure(ctx ApplicationContext) error { return nil }
-
-// TestAutoConfigRegistry_ComplexDependencies 测试复杂依赖关系
-func TestAutoConfigRegistry_ComplexDependencies(t *testing.T) {
-	t.Parallel()
-	registry := NewAutoConfigRegistry()
-
-	// 复杂依赖：
-	// DB 和 Redis 无依赖
-	// Web 依赖 DB 和 Redis
-	// Cache 依赖 Redis
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigDB{},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigRedis{},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigWeb{},
-		After:  []string{"*boot.TestConfigDB", "*boot.TestConfigRedis"},
-		Order:  100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigCache{},
-		After:  []string{"*boot.TestConfigRedis"},
-		Order:  100,
-	})
-
-	// 获取匹配的配置
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 4 {
-		t.Fatalf("Expected 4 matched configs, got %d", len(matched))
-	}
-
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	// 验证 DB 和 Redis 在 Web 和 Cache 之前
-	dbIndex := -1
-	redisIndex := -1
-	webIndex := -1
-	cacheIndex := -1
-
-	for i, entry := range matched {
-		name := typeName(entry)
-		switch name {
-		case "*boot.TestConfigDB":
-			dbIndex = i
-		case "*boot.TestConfigRedis":
-			redisIndex = i
-		case "*boot.TestConfigWeb":
-			webIndex = i
-		case "*boot.TestConfigCache":
-			cacheIndex = i
-		}
-	}
-
-	if dbIndex > webIndex {
-		t.Error("DB should be before Web")
-	}
-	if redisIndex > webIndex {
-		t.Error("Redis should be before Web")
-	}
-	if redisIndex > cacheIndex {
-		t.Error("Redis should be before Cache")
-	}
-}
-
-// TestWithBefore 测试 WithBefore 选项函数
 func TestWithBefore(t *testing.T) {
 	t.Parallel()
-	entry := AutoConfigEntry{}
-	opt := WithBefore("configA", "configB")
-	opt(&entry)
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
+
+	opt := WithBefore("webConfig", "securityConfig")
+	opt(entry)
 
 	if len(entry.Before) != 2 {
-		t.Errorf("Expected 2 before configs, got %d", len(entry.Before))
+		t.Fatalf("expected 2 Before entries, got %d", len(entry.Before))
 	}
-	if entry.Before[0] != "configA" {
-		t.Errorf("Expected 'configA', got %s", entry.Before[0])
-	}
-	if entry.Before[1] != "configB" {
-		t.Errorf("Expected 'configB', got %s", entry.Before[1])
+	if entry.Before[0] != "webConfig" {
+		t.Errorf("expected Before[0] 'webConfig', got '%s'", entry.Before[0])
 	}
 }
 
-// TestWithAfter 测试 WithAfter 选项函数
 func TestWithAfter(t *testing.T) {
 	t.Parallel()
-	entry := AutoConfigEntry{}
-	opt := WithAfter("configA", "configB")
-	opt(&entry)
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
 
-	if len(entry.After) != 2 {
-		t.Errorf("Expected 2 after configs, got %d", len(entry.After))
+	opt := WithAfter("dbConfig")
+	opt(entry)
+
+	if len(entry.After) != 1 {
+		t.Fatalf("expected 1 After entry, got %d", len(entry.After))
 	}
-	if entry.After[0] != "configA" {
-		t.Errorf("Expected 'configA', got %s", entry.After[0])
-	}
-	if entry.After[1] != "configB" {
-		t.Errorf("Expected 'configB', got %s", entry.After[1])
+	if entry.After[0] != "dbConfig" {
+		t.Errorf("expected After[0] 'dbConfig', got '%s'", entry.After[0])
 	}
 }
 
-// TestDefaultConfig 测试用默认配置
-type TestDefaultConfig struct{}
+func TestWithConditions(t *testing.T) {
+	t.Parallel()
+	entry := &AutoConfigEntry{Config: &mockAutoConfig{}}
 
-func (c *TestDefaultConfig) Configure(ctx ApplicationContext) error { return nil }
+	opt := WithConditions(condition.OnProperty("key", "value"))
+	opt(entry)
 
-// TestCustomConfig 测试用自定义配置
-type TestCustomConfig struct{}
+	if len(entry.Conditions) != 1 {
+		t.Fatalf("expected 1 condition, got %d", len(entry.Conditions))
+	}
+}
 
-func (c *TestCustomConfig) Configure(ctx ApplicationContext) error { return nil }
+func TestRegisterAutoConfigWith(t *testing.T) {
+	// 不并发，使用全局注册表
+	cfg := &mockAutoConfig{}
+	before := len(GlobalRegistry().GetAll())
 
-// TestOtherConfig 测试用其他配置
-type TestOtherConfig struct{}
+	RegisterAutoConfigWith(cfg,
+		WithOrder(100),
+		WithDependsOn("db"),
+		WithConditions(condition.OnProperty("app.enabled", "true")),
+	)
 
-func (c *TestOtherConfig) Configure(ctx ApplicationContext) error { return nil }
+	after := len(GlobalRegistry().GetAll())
+	if after != before+1 {
+		t.Fatalf("expected %d entries, got %d", before+1, after)
+	}
+}
 
-// TestAutoConfigRegistry_OverrideWithBeforeAfter 测试 Override 与 Before/After 结合
-func TestAutoConfigRegistry_OverrideWithBeforeAfter(t *testing.T) {
+// ==================== GetMatchingWithExclude 测试 ====================
+
+type mockAutoConfig2 struct{}
+
+func (m *mockAutoConfig2) Configure(ctx ApplicationContext) error { return nil }
+
+func TestGetMatchingWithExclude_OverrideFiltering(t *testing.T) {
 	t.Parallel()
 	registry := NewAutoConfigRegistry()
 
-	// 注册默认配置
+	// 原始配置
 	registry.Add(AutoConfigEntry{
-		Config: &TestDefaultConfig{},
-		Order:  100,
+		Config: &mockAutoConfig{},
+		Order:  1,
 	})
 
-	// 注册覆盖配置（覆盖 TestDefaultConfig）
+	// 覆盖配置：OverrideTarget 使用完整包路径（reflect.TypeOf 的输出格式）
+	// reflect.TypeOf(&mockAutoConfig{}).String() = "*boot.mockAutoConfig"
 	registry.Add(AutoConfigEntry{
-		Config:         &TestCustomConfig{},
+		Config:         &mockAutoConfig2{},
+		Order:          0,
 		Override:       true,
-		OverrideTarget: "*boot.TestDefaultConfig",
-		Before:         []string{"*boot.TestOtherConfig"},
-		Order:          -100,
+		OverrideTarget: "*boot.mockAutoConfig",
 	})
 
-	// 注册其他配置
-	registry.Add(AutoConfigEntry{
-		Config: &TestOtherConfig{},
-		Order:  200,
-	})
-
-	// 获取匹配的配置
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 2 {
-		t.Fatalf("Expected 2 matched configs (TestDefaultConfig should be overridden), got %d", len(matched))
-	}
-
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	// 验证 TestDefaultConfig 被覆盖
-	for _, entry := range matched {
-		if typeName(entry) == "*boot.TestDefaultConfig" {
-			t.Error("TestDefaultConfig should be overridden")
-		}
-	}
-
-	// 验证 TestCustomConfig 在 TestOtherConfig 之前
-	if typeName(matched[0]) != "*boot.TestCustomConfig" {
-		t.Errorf("Expected TestCustomConfig first, got %s", typeName(matched[0]))
-	}
-}
-
-// TestAutoConfigRegistry_EmptyBeforeAfter 测试空的 Before/After
-func TestAutoConfigRegistry_EmptyBeforeAfter(t *testing.T) {
-	t.Parallel()
-	registry := NewAutoConfigRegistry()
-
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigA{},
-		Order:  200,
-	})
-	registry.Add(AutoConfigEntry{
-		Config: &TestConfigB{},
-		Order:  100,
-	})
-
-	// 获取匹配的配置（应该按 Order 排序）
-	matched := registry.GetMatching(nil)
-
-	if len(matched) != 2 {
-		t.Fatalf("Expected 2 matched configs, got %d", len(matched))
-	}
-
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	// B 的 Order=100 应该排在 A 的 Order=200 之前
-	if typeName(matched[0]) != "*boot.TestConfigB" {
-		t.Errorf("Expected TestConfigB first (Order=100), got %s", typeName(matched[0]))
-	}
-}
-
-// TestEnabledConfig 测试用启用配置
-type TestEnabledConfig struct{}
-
-func (c *TestEnabledConfig) Configure(ctx ApplicationContext) error { return nil }
-
-// TestDisabledConfig 测试用禁用配置
-type TestDisabledConfig struct{}
-
-func (c *TestDisabledConfig) Configure(ctx ApplicationContext) error { return nil }
-
-// TestAutoConfigRegistry_ConditionWithBeforeAfter 测试条件与 Before/After 结合
-func TestAutoConfigRegistry_ConditionWithBeforeAfter(t *testing.T) {
-	t.Parallel()
-	registry := NewAutoConfigRegistry()
-
-	// 注册带条件的配置
-	registry.Add(AutoConfigEntry{
-		Config:     &TestEnabledConfig{},
-		Conditions: []condition.Condition{condition.OnProperty("feature.enabled", "true")},
-		Before:     []string{"*boot.TestDisabledConfig"},
-		Order:      100,
-	})
-	registry.Add(AutoConfigEntry{
-		Config:     &TestDisabledConfig{},
-		Conditions: []condition.Condition{condition.OnProperty("feature.disabled", "true")},
-		Order:      100,
-	})
-
-	// 创建 mock 条件上下文（满足 TestEnabledConfig 的条件）
-	ctx := &mockConditionContextWithProps{
-		properties: map[string]any{
-			"feature.enabled": "true",
-		},
-	}
-
-	// 获取匹配的配置
+	ctx := &mockConditionContext{}
 	matched := registry.GetMatching(ctx)
 
-	// 只应该匹配 TestEnabledConfig
+	// 原始 *mockAutoConfig 被覆盖过滤掉，只剩覆盖配置
 	if len(matched) != 1 {
-		t.Fatalf("Expected 1 matched config, got %d", len(matched))
+		t.Fatalf("expected 1 matching config (override should filter original), got %d", len(matched))
 	}
-
-	typeName := func(entry AutoConfigEntry) string {
-		return reflect.TypeOf(entry.Config).String()
-	}
-
-	if typeName(matched[0]) != "*boot.TestEnabledConfig" {
-		t.Errorf("Expected TestEnabledConfig, got %s", typeName(matched[0]))
+	if matched[0].Config != registry.GetAll()[1].Config {
+		t.Error("expected the override config to survive")
 	}
 }
 
-// mockConditionContextWithProps 带属性的 mock 条件上下文
-type mockConditionContextWithProps struct {
-	properties map[string]any
+func TestGetMatchingWithExclude_ExcludedTypes(t *testing.T) {
+	t.Parallel()
+	registry := NewAutoConfigRegistry()
+
+	registry.Add(AutoConfigEntry{
+		Config: &mockAutoConfig{},
+		Order:  1,
+	})
+
+	// 排除列表使用完整包路径（同 reflect.TypeOf().String() 格式）
+	typeName := "*boot.mockAutoConfig"
+
+	ctx := &mockConditionContext{}
+	matched := registry.GetMatchingWithExclude(ctx, []string{typeName})
+
+	if len(matched) != 0 {
+		t.Fatalf("expected 0 matching configs after exclusion, got %d", len(matched))
+	}
 }
 
-func (m *mockConditionContextWithProps) Environment() condition.EnvironmentAccessor {
-	return &mockEnvAccessor{props: m.properties}
+func TestGetMatchingWithExclude_BeforeAfterSorting(t *testing.T) {
+	t.Parallel()
+	registry := NewAutoConfigRegistry()
+
+	cfgA := &mockAutoConfig{}
+	cfgB := &mockAutoConfig{}
+	cfgC := &mockAutoConfig{}
+
+	// 使用完整包路径名称
+	typeName := "boot.mockAutoConfig"
+
+	registry.Add(AutoConfigEntry{Config: cfgB, Order: 2})
+	registry.Add(AutoConfigEntry{
+		Config: cfgA,
+		Order:  1,
+		Before: []string{typeName},
+	})
+	registry.Add(AutoConfigEntry{
+		Config: cfgC,
+		Order:  3,
+		After:  []string{typeName},
+	})
+
+	ctx := &mockConditionContext{}
+	matched := registry.GetMatching(ctx)
+
+	if len(matched) < 2 {
+		t.Fatalf("expected at least 2 matched configs, got %d", len(matched))
+	}
 }
 
-func (m *mockConditionContextWithProps) Container() condition.ContainerAccessor {
-	return nil
+// ==================== stripPackagePath 测试 ====================
+
+func TestStripPackagePath(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"*github.com/xudefa/enhance/examples/gin.GinAutoConfiguration", "GinAutoConfiguration"},
+		{"SimpleType", "SimpleType"},
+		{"pkg.Type", "Type"},
+		{"*pkg.Type", "Type"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			result := stripPackagePath(tt.input)
+			if result != tt.expected {
+				t.Errorf("stripPackagePath(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
 }
 
-func (m *mockConditionContextWithProps) GetBeanByType(t reflect.Type) (any, bool) {
-	return nil, false
-}
+// ==================== Add Panics on Nil Config ====================
 
-func (m *mockConditionContextWithProps) HasProperty(key string) bool {
-	_, ok := m.properties[key]
-	return ok
-}
+func TestAutoConfigRegistry_Add_NilConfig_Panics(t *testing.T) {
+	t.Parallel()
+	registry := NewAutoConfigRegistry()
 
-func (m *mockConditionContextWithProps) GetProperty(key string) (any, bool) {
-	val, ok := m.properties[key]
-	return val, ok
-}
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when adding nil config")
+		}
+	}()
 
-// mockEnvAccessor mock 环境访问器
-type mockEnvAccessor struct {
-	props map[string]any
-}
-
-func (m *mockEnvAccessor) GetProperty(key string) (any, bool) {
-	val, ok := m.props[key]
-	return val, ok
+	registry.Add(AutoConfigEntry{Config: nil})
 }

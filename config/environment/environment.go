@@ -20,6 +20,7 @@ type Environment struct {
 	activeProfiles  []string                  // 当前激活的 Profile 列表
 	configListeners []func(ConfigChangeEvent) // 配置变更监听器
 	wg              sync.WaitGroup            // 跟踪异步通知 goroutine
+	closed          bool                      // 标记是否已关闭
 }
 
 // NewEnvironment 创建环境配置管理器
@@ -208,6 +209,10 @@ func (e *Environment) AddConfigChangeListener(listener func(ConfigChangeEvent)) 
 // notifyConfigChange 通知所有配置变更监听器
 func (e *Environment) notifyConfigChange(event ConfigChangeEvent) {
 	e.mu.RLock()
+	if e.closed {
+		e.mu.RUnlock()
+		return
+	}
 	listeners := make([]func(ConfigChangeEvent), len(e.configListeners))
 	copy(listeners, e.configListeners)
 	e.mu.RUnlock()
@@ -228,5 +233,8 @@ func (e *Environment) notifyConfigChange(event ConfigChangeEvent) {
 
 // Close 等待所有异步通知 goroutine 完成
 func (e *Environment) Close() {
+	e.mu.Lock()
+	e.closed = true
+	e.mu.Unlock()
 	e.wg.Wait()
 }

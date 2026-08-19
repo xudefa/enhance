@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -260,5 +261,279 @@ func TestBindProperties_InvalidTarget(t *testing.T) {
 	err = BindProperties(&str, env)
 	if err == nil {
 		t.Error("expected error for non-struct pointer")
+	}
+}
+
+// ==================== extractSubMap 测试 ====================
+
+func TestExtractSubMap(t *testing.T) {
+	t.Parallel()
+	data := map[string]any{
+		"app.name":  "myapp",
+		"app.port":  8080,
+		"db.host":   "localhost",
+		"db.port":   3306,
+		"unrelated": true,
+	}
+
+	result := extractSubMap(data, "app.")
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(result))
+	}
+	if result["name"] != "myapp" {
+		t.Errorf("expected name=myapp, got %v", result["name"])
+	}
+	if result["port"] != 8080 {
+		t.Errorf("expected port=8080, got %v", result["port"])
+	}
+}
+
+func TestExtractSubMap_Empty(t *testing.T) {
+	t.Parallel()
+	data := map[string]any{"a": 1}
+	result := extractSubMap(data, "nonexistent.")
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got %v", result)
+	}
+}
+
+func TestExtractSubMap_EmptyData(t *testing.T) {
+	t.Parallel()
+	data := map[string]any{}
+	result := extractSubMap(data, "prefix.")
+	if len(result) != 0 {
+		t.Errorf("expected empty result, got %v", result)
+	}
+}
+
+// ==================== AutoEnv / detectEnv / getEnv 测试 ====================
+
+func TestAutoEnv(t *testing.T) {
+	t.Parallel()
+	builder := NewConfigBuilder()
+
+	os.Setenv("APP_ENV", "production")
+	defer os.Unsetenv("APP_ENV")
+
+	result := builder.AutoEnv()
+	if result != builder {
+		t.Error("AutoEnv should return builder for chaining")
+	}
+}
+
+func TestDetectEnv_APP_ENV(t *testing.T) {
+	t.Parallel()
+	os.Setenv("APP_ENV", "staging")
+	defer os.Unsetenv("APP_ENV")
+
+	result := detectEnv()
+	if result != "staging" {
+		t.Errorf("expected 'staging', got '%s'", result)
+	}
+}
+
+func TestDetectEnv_GO_ENV(t *testing.T) {
+	t.Parallel()
+	os.Setenv("GO_ENV", "test")
+	defer os.Unsetenv("GO_ENV")
+	os.Unsetenv("APP_ENV")
+
+	result := detectEnv()
+	if result != "test" {
+		t.Errorf("expected 'test', got '%s'", result)
+	}
+}
+
+func TestDetectEnv_ENV(t *testing.T) {
+	t.Parallel()
+	os.Setenv("ENV", "uat")
+	defer os.Unsetenv("ENV")
+	os.Unsetenv("APP_ENV")
+	os.Unsetenv("GO_ENV")
+
+	result := detectEnv()
+	if result != "uat" {
+		t.Errorf("expected 'uat', got '%s'", result)
+	}
+}
+
+func TestDetectEnv_Default(t *testing.T) {
+	t.Parallel()
+	os.Unsetenv("APP_ENV")
+	os.Unsetenv("GO_ENV")
+	os.Unsetenv("ENV")
+
+	result := detectEnv()
+	if result != "dev" {
+		t.Errorf("expected 'dev', got '%s'", result)
+	}
+}
+
+func TestGetEnv(t *testing.T) {
+	t.Parallel()
+	os.Setenv("TEST_GET_ENV_KEY", "hello")
+	defer os.Unsetenv("TEST_GET_ENV_KEY")
+
+	result := getEnv("TEST_GET_ENV_KEY")
+	if result != "hello" {
+		t.Errorf("expected 'hello', got '%s'", result)
+	}
+}
+
+func TestGetEnv_Empty(t *testing.T) {
+	t.Parallel()
+	result := getEnv("NONEXISTENT_KEY_12345")
+	if result != "" {
+		t.Errorf("expected empty string, got '%s'", result)
+	}
+}
+
+// ==================== PropertyBinder WithPrefix / WithValidator 测试 ====================
+
+func TestPropertyBinder_WithPrefix(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	binder := NewPropertyBinder(env)
+
+	result := binder.WithPrefix("app")
+	if result != binder {
+		t.Error("WithPrefix should return binder for chaining")
+	}
+	if binder.prefix != "app" {
+		t.Errorf("expected prefix 'app', got '%s'", binder.prefix)
+	}
+}
+
+func TestPropertyBinder_WithValidator(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	binder := NewPropertyBinder(env)
+	v := NewValidator()
+
+	result := binder.WithValidator(v)
+	if result != binder {
+		t.Error("WithValidator should return binder for chaining")
+	}
+	if binder.validator != v {
+		t.Error("expected validator to be set")
+	}
+}
+
+// ==================== BindOption WithBindValidator 测试 ====================
+
+func TestWithBindValidator(t *testing.T) {
+	t.Parallel()
+	env := environment.NewEnvironment()
+	binder := NewPropertyBinder(env)
+	v := NewValidator()
+
+	opt := WithBindValidator(v)
+	opt(binder)
+
+	if binder.validator != v {
+		t.Error("expected validator to be set via WithBindValidator")
+	}
+}
+
+// ==================== bindSlice 测试 ====================
+
+func TestPropertyBinder_BindSlice_Any(t *testing.T) {
+	t.Parallel()
+	type Config struct {
+		Tags []string `enhance:"tags"`
+	}
+
+	env := environment.NewEnvironment()
+	source := environment.NewMapPropertySource("test", environment.PriorityNormal,
+		map[string]any{"tags": []any{"a", "b", "c"}},
+	)
+	env.AddPropertySource(source)
+
+	binder := NewPropertyBinder(env)
+	var cfg Config
+	if err := binder.Bind(&cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Tags) != 3 || cfg.Tags[0] != "a" || cfg.Tags[2] != "c" {
+		t.Errorf("expected [a, b, c], got %v", cfg.Tags)
+	}
+}
+
+func TestPropertyBinder_BindSlice_String(t *testing.T) {
+	t.Parallel()
+	type Config struct {
+		Tags []string `enhance:"tags"`
+	}
+
+	env := environment.NewEnvironment()
+	source := environment.NewMapPropertySource("test", environment.PriorityNormal,
+		map[string]any{"tags": "x,y,z"},
+	)
+	env.AddPropertySource(source)
+
+	binder := NewPropertyBinder(env)
+	var cfg Config
+	if err := binder.Bind(&cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Tags) != 3 || cfg.Tags[0] != "x" || cfg.Tags[2] != "z" {
+		t.Errorf("expected [x, y, z], got %v", cfg.Tags)
+	}
+}
+
+func TestPropertyBinder_BindSlice_UnsupportedType(t *testing.T) {
+	t.Parallel()
+	type Config struct {
+		Tags []string `enhance:"tags"`
+	}
+
+	env := environment.NewEnvironment()
+	source := environment.NewMapPropertySource("test", environment.PriorityNormal,
+		map[string]any{"tags": 12345},
+	)
+	env.AddPropertySource(source)
+
+	binder := NewPropertyBinder(env)
+	var cfg Config
+	if err := binder.Bind(&cfg); err == nil {
+		t.Error("expected error for unsupported slice type")
+	}
+}
+
+// ==================== ConfigBuilder Build 测试 ====================
+
+func TestConfigBuilder_Build_WithAutoEnv(t *testing.T) {
+	t.Parallel()
+	os.Setenv("APP_ENV", "test")
+	defer os.Unsetenv("APP_ENV")
+
+	cfg, err := NewConfigBuilder().
+		Name("test").
+		AutoEnv().
+		Build()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Env != "test" {
+		t.Errorf("expected Env 'test', got '%s'", cfg.Env)
+	}
+}
+
+func TestConfigBuilder_Build_WithEnvPrefix(t *testing.T) {
+	t.Parallel()
+	cfg, err := NewConfigBuilder().
+		Name("test").
+		EnvPrefix("MYAPP_").
+		Build()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OptionName != "MYAPP_" {
+		t.Errorf("expected OptionName 'MYAPP_', got '%s'", cfg.OptionName)
 	}
 }
