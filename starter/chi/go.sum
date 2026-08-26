@@ -1,4 +1,4 @@
 github.com/go-chi/chi/v5 v5.0.12 h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=
 github.com/go-chi/chi/v5 v5.0.12/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
-github.com/xudefa/enhance v0.0.5 h1:6xf7V+t51DBGAdKUSKiodnGr5mCYGHkwyLDBcsQjfiU=
-github.com/xudefa/enhance v0.0.5/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
+github.com/xudefa/enhance v0.0.6 h1:Dk957VqJAMcSxCRl2VYkAXHTG+a6yHFA7WkAAiE3uu4=
+github.com/xudefa/enhance v0.0.6/go.mod h1:VOv2ttoc5XsTM316hkrz5cZHof8bvpfXQlDczlhxMhs=
