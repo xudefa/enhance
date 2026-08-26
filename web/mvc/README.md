@@ -97,8 +97,8 @@ HTTP 服务器接口，定义服务器生命周期：
 type Server interface {
     Start() error
     Stop(ctx context.Context) error
-    SetHandler(handler any)
-    Use(middleware any)
+    SetHandler(handler http.Handler)
+    Use(middleware func(http.Handler) http.Handler)
 }
 ```
 

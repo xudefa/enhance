@@ -118,6 +118,9 @@ type Router interface {
 	// PATCH 注册 PATCH 路由。
 	PATCH(path string, handler HandlerFunc)
 
+	// Handle 注册任意 HTTP 方法的路由。
+	Handle(method, path string, handler HandlerFunc)
+
 	// Group 创建路由组。
 	Group(prefix string) Router
 
@@ -136,10 +139,10 @@ type Server interface {
 	Stop(ctx context.Context) error
 
 	// SetHandler 设置 HTTP 处理器。
-	SetHandler(handler any)
+	SetHandler(handler http.Handler)
 
-	// Use 注册全局中间件。
-	Use(middleware any)
+	// Use 注册全局中间件（标准 net/http 中间件风格）。
+	Use(middleware func(http.Handler) http.Handler)
 }
 
 // Controller 控制器接口。

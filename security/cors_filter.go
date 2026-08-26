@@ -113,19 +113,27 @@ func (f *CorsFilter) isOriginAllowed(origin string) bool {
 	if len(f.config.AllowedOrigins) == 0 {
 		return false
 	}
+	origin = strings.TrimSuffix(origin, "/")
 	for _, allowedOrigin := range f.config.AllowedOrigins {
-		if allowedOrigin == "*" || allowedOrigin == origin {
+		if matchOriginPattern(allowedOrigin, origin) {
 			return true
-		}
-		if strings.HasSuffix(allowedOrigin, "*") {
-			prefix := strings.TrimSuffix(allowedOrigin, "*")
-			if strings.HasPrefix(origin, prefix) {
-				rest := origin[len(prefix):]
-				if rest == "" || strings.HasPrefix(rest, "/") {
-					return true
-				}
-			}
 		}
 	}
 	return false
+}
+
+// matchOriginPattern 判断 origin 是否匹配模式。
+// "*" 单独出现时匹配所有来源；通配符也可出现在模式的任意位置（如 http://*.example.com）。
+func matchOriginPattern(pattern, origin string) bool {
+	if pattern == "*" || pattern == origin {
+		return true
+	}
+	star := strings.Index(pattern, "*")
+	if star < 0 {
+		return false
+	}
+	prefix, suffix := pattern[:star], pattern[star+1:]
+	return len(origin) >= len(prefix)+len(suffix) &&
+		strings.HasPrefix(origin, prefix) &&
+		strings.HasSuffix(origin, suffix)
 }

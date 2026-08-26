@@ -10,8 +10,8 @@ import (
 
 // UserController 用户控制器
 type UserController struct {
-	DB     *gorm.DB
-	Logger log.Logger
+	DB     *gorm.DB   `inject:"true"`
+	Logger log.Logger `inject:"true"`
 }
 
 // NewUserController 创建用户控制器

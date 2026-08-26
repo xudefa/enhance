@@ -20,6 +20,7 @@ import (
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/core"
 
+	"github.com/xudefa/enhance/starter/swagger"
 	_ "github.com/xudefa/enhance/starter/swagger"
 )
 
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	// Get Swagger config from container
-	swaggerConfig, err := core.GetByName[*SwaggerConfig](app.Container(), "")
+	swaggerConfig, err := core.GetByName[*swagger.SwaggerConfig](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get swagger config: %v\n", err)
 		return
@@ -73,13 +74,4 @@ func main() {
 
 	// Wait for signal
 	app.WaitForSignal()
-}
-
-// SwaggerConfig represents swagger configuration
-type SwaggerConfig struct {
-	Enabled bool   `json:"enabled"`
-	Host    string `json:"host"`
-	Port    int    `json:"port"`
-	URL     string `json:"url"`
-	Title   string `json:"title"`
 }

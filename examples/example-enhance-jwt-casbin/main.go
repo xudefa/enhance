@@ -6,6 +6,7 @@ import (
 
 	"github.com/xudefa/enhance"
 	"github.com/xudefa/enhance/boot"
+	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/security"
 	"github.com/xudefa/enhance/starter/jwt"
 	"github.com/xudefa/enhance/web/mvc"
@@ -25,6 +26,20 @@ type LoginRequest struct {
 // AuthController 认证控制器。
 type AuthController struct {
 	TokenProvider *jwt.DefaultTokenProvider
+}
+
+// getTokenProvider 获取 TokenProvider，支持延迟注入。
+func (c *AuthController) getTokenProvider() *jwt.DefaultTokenProvider {
+	if c.TokenProvider != nil {
+		return c.TokenProvider
+	}
+	// 尝试从容器获取（支持延迟注入）
+	provider, err := core.GetByName[*jwt.DefaultTokenProvider](globalContainer, "")
+	if err == nil {
+		c.TokenProvider = provider
+		return provider
+	}
+	return nil
 }
 
 // Routes 注册路由。
@@ -62,8 +77,18 @@ func (c *AuthController) Login(ctx mvc.Context) {
 		roles = []string{"ROLE_USER"}
 	}
 
+	// 获取 TokenProvider
+	provider := c.getTokenProvider()
+	if provider == nil {
+		ctx.JSON(http.StatusInternalServerError, map[string]any{
+			"code":    500,
+			"message": "token provider not available",
+		})
+		return
+	}
+
 	// 生成 Token
-	token, err := c.TokenProvider.GenerateToken(ctx.Context(), req.Username, roles)
+	token, err := provider.GenerateToken(ctx.Context(), req.Username, roles)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"code":    500,
@@ -105,7 +130,7 @@ func (c *ProfileController) GetProfile(ctx mvc.Context) {
 		"code":    0,
 		"message": "success",
 		"data": map[string]any{
-			"username":    auth.Principal(),
+			"username":    getUsername(auth),
 			"authorities": auth.Authorities(),
 		},
 	})
@@ -136,10 +161,36 @@ func (c *AdminController) GetUsers(ctx mvc.Context) {
 		"message": "success",
 		"data": map[string]any{
 			"users":       []string{"alice", "bob"},
-			"requestedBy": auth.Principal(),
+			"requestedBy": getUsername(auth),
 		},
 	})
 }
+
+// getUsername 从 Authentication 获取用户名
+func getUsername(auth security.Authentication) string {
+	if auth == nil {
+		return ""
+	}
+	principal := auth.Principal()
+	if principal == nil {
+		return ""
+	}
+	// 尝试直接转换为字符串
+	if s, ok := principal.(string); ok {
+		return s
+	}
+	// 尝试转换为 UserDetails 接口（使用本地接口定义避免包依赖问题）
+	type userDetailsLike interface {
+		Username() string
+	}
+	if ud, ok := principal.(userDetailsLike); ok {
+		return ud.Username()
+	}
+	// 兜底：使用 fmt.Sprintf
+	return fmt.Sprintf("%v", principal)
+}
+
+var globalContainer core.Container
 
 func init() {
 	// 注册控制器

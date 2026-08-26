@@ -115,12 +115,18 @@ func (h *CacheHelper) Clear(ctx context.Context) error {
 
 // Exists 检查键是否存在
 func (h *CacheHelper) Exists(ctx context.Context, key string) (bool, error) {
-	return h.cache.Exists(ctx, key)
+	if inspector, ok := h.cache.(CacheInspector); ok {
+		return inspector.Exists(ctx, key)
+	}
+	return false, fmt.Errorf("cache does not support Exists operation")
 }
 
 // TTL 获取键的剩余过期时间
 func (h *CacheHelper) TTL(ctx context.Context, key string) (time.Duration, error) {
-	return h.cache.TTL(ctx, key)
+	if inspector, ok := h.cache.(CacheInspector); ok {
+		return inspector.TTL(ctx, key)
+	}
+	return 0, fmt.Errorf("cache does not support TTL operation")
 }
 
 // CacheTemplate 缓存模板，提供常用的缓存操作模板
@@ -162,12 +168,18 @@ func (t *CacheTemplate) Del(ctx context.Context, key string) error {
 
 // Exists 检查键是否存在
 func (t *CacheTemplate) Exists(ctx context.Context, key string) (bool, error) {
-	return t.cache.Exists(ctx, t.Key(key))
+	if inspector, ok := t.cache.(CacheInspector); ok {
+		return inspector.Exists(ctx, t.Key(key))
+	}
+	return false, fmt.Errorf("cache does not support Exists operation")
 }
 
 // TTL 获取键的剩余过期时间
 func (t *CacheTemplate) TTL(ctx context.Context, key string) (time.Duration, error) {
-	return t.cache.TTL(ctx, t.Key(key))
+	if inspector, ok := t.cache.(CacheInspector); ok {
+		return inspector.TTL(ctx, t.Key(key))
+	}
+	return 0, fmt.Errorf("cache does not support TTL operation")
 }
 
 // GetOrSet 获取或设置缓存值

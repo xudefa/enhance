@@ -1,10 +1,12 @@
 {
-  "zerolog": {
-    "enabled": true,
-    "level": "info",
-    "format": "console",
-    "output": "stdout",
-    "enable_caller": true,
-    "enable_stacktrace": false
+  "log": {
+    "zerolog": {
+      "enabled": true,
+      "level": "info",
+      "format": "console",
+      "output": "stdout",
+      "enable_caller": true,
+      "enable_stacktrace": false
+    }
   }
 }

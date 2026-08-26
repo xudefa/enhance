@@ -174,28 +174,37 @@ func (e *Environment) sortSources() {
 	})
 }
 
-// sortSourcesIfNeeded 仅在配置源未排序时才执行排序
+// sortSourcesIfNeeded 注册时排序一次
 //
-// 优化：如果新添加的配置源优先级高于所有已有配置源，
-// 则无需全量排序，因为配置源列表已经基本有序。
+// 优化：使用插入排序，假设新添加的配置源优先级通常高于已有配置源，
+// 避免每次全量检查 O(n)，改为 O(n) 插入排序（实际通常接近 O(1)）。
 func (e *Environment) sortSourcesIfNeeded() {
 	if len(e.sources) <= 1 {
 		return
 	}
 
-	// 检查是否已经按优先级升序排列
-	alreadySorted := true
-	for i := 1; i < len(e.sources); i++ {
-		if e.sources[i-1].Priority() > e.sources[i].Priority() {
-			alreadySorted = false
+	// 使用插入排序：将最后一个元素插入到正确位置
+	lastIdx := len(e.sources) - 1
+	lastPriority := e.sources[lastIdx].Priority()
+
+	// 从后往前找插入位置
+	insertIdx := lastIdx
+	for i := lastIdx - 1; i >= 0; i-- {
+		if e.sources[i].Priority() <= lastPriority {
+			insertIdx = i + 1
 			break
+		}
+		if i == 0 {
+			insertIdx = 0
 		}
 	}
 
-	if !alreadySorted {
-		sort.SliceStable(e.sources, func(i, j int) bool {
-			return e.sources[i].Priority() < e.sources[j].Priority()
-		})
+	// 如果需要移动，执行插入
+	if insertIdx != lastIdx {
+		lastSource := e.sources[lastIdx]
+		// 将 insertIdx 到 lastIdx-1 的元素后移
+		copy(e.sources[insertIdx+1:], e.sources[insertIdx:lastIdx])
+		e.sources[insertIdx] = lastSource
 	}
 }
 

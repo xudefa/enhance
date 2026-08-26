@@ -116,7 +116,7 @@ func (b *SecurityBuilder) EnableLogout(url string, successHandler ...LogoutSucce
 }
 
 // Build 构建安全配置
-func (b *SecurityBuilder) Build() SecurityConfig {
+func (b *SecurityBuilder) Build() SecurityConfigurer {
 	return &builtSecurityConfig{builder: b}
 }
 

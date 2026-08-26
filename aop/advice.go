@@ -235,17 +235,26 @@ func After(fn func(JoinPoint)) Advice {
 }
 
 // Around 创建环绕通知（便捷函数）。
-func Around(fn func(JoinPoint, func() any) any) Advice {
+//
+// fn 接收 JoinPoint 与 ProceedFunc。ProceedFunc 与 doc.go 中定义一致：
+//   - 无参数调用：继续原方法（无参透传）
+//   - 带参数调用：替换参数执行（proceed(args...)，调用 ProceedWithArgs）
+func Around(fn func(JoinPoint, ProceedFunc) any) Advice {
 	return NewAroundAdvice(func(ctx context.Context, jp JoinPoint, proceed func() (any, error)) (any, error) {
 		var proceedErr error
-		result := fn(jp, func() any {
-			r, err := proceed()
+		result := fn(jp, func(args ...any) any {
+			var r any
+			var err error
+			if len(args) > 0 {
+				r, err = jp.ProceedWithArgs(args)
+			} else {
+				r, err = proceed()
+			}
 			if err != nil {
 				proceedErr = err
 			}
 			return r
 		})
-		// 透传 proceed() 产生的错误，使 AfterThrowing 与调用方能够感知
 		if proceedErr != nil {
 			return result, proceedErr
 		}

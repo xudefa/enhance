@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 func TestNewHTTPServer(t *testing.T) {
@@ -86,7 +86,7 @@ func TestHTTPServer_Start_Stop(t *testing.T) {
 	server := NewHTTPServer(WithHost(":0"))
 
 	router := NewRouter()
-	router.GET("/test", func(ctx mvc.Context) {
+	router.GET("/test", func(ctx core.Context) {
 		ctx.String(http.StatusOK, "OK")
 	})
 
@@ -153,7 +153,7 @@ func TestHTTPServer_WrapRouter(t *testing.T) {
 	server := NewHTTPServer()
 
 	router := NewRouter()
-	router.GET("/test", func(ctx mvc.Context) {
+	router.GET("/test", func(ctx core.Context) {
 		ctx.String(http.StatusOK, "OK")
 	})
 
@@ -173,7 +173,7 @@ func TestHTTPServer_WrapRouter_UnsupportedType(t *testing.T) {
 	t.Parallel()
 	server := NewHTTPServer()
 
-	// 创建一个模拟路由器，实现 mvc.Router 但不实现 http.Handler
+	// 创建一个模拟路由器，实现 core.Router 但不实现 http.Handler
 	router := &mockRouterNoHTTPHandler{}
 
 	wrapped := server.wrapRouter(router)
@@ -188,16 +188,18 @@ func TestHTTPServer_WrapRouter_UnsupportedType(t *testing.T) {
 	}
 }
 
-// mockRouterNoHTTPHandler implements mvc.Router but not http.Handler
+// mockRouterNoHTTPHandler implements core.Router but not http.Handler
 type mockRouterNoHTTPHandler struct{}
 
-func (m *mockRouterNoHTTPHandler) GET(path string, handler mvc.HandlerFunc)    {}
-func (m *mockRouterNoHTTPHandler) POST(path string, handler mvc.HandlerFunc)   {}
-func (m *mockRouterNoHTTPHandler) PUT(path string, handler mvc.HandlerFunc)    {}
-func (m *mockRouterNoHTTPHandler) DELETE(path string, handler mvc.HandlerFunc) {}
-func (m *mockRouterNoHTTPHandler) PATCH(path string, handler mvc.HandlerFunc)  {}
-func (m *mockRouterNoHTTPHandler) Group(prefix string) mvc.Router              { return m }
-func (m *mockRouterNoHTTPHandler) Use(middleware mvc.MiddlewareFunc)           {}
+func (m *mockRouterNoHTTPHandler) GET(path string, handler core.HandlerFunc)    {}
+func (m *mockRouterNoHTTPHandler) POST(path string, handler core.HandlerFunc)   {}
+func (m *mockRouterNoHTTPHandler) PUT(path string, handler core.HandlerFunc)    {}
+func (m *mockRouterNoHTTPHandler) DELETE(path string, handler core.HandlerFunc) {}
+func (m *mockRouterNoHTTPHandler) PATCH(path string, handler core.HandlerFunc)  {}
+func (m *mockRouterNoHTTPHandler) Handle(method, path string, handler core.HandlerFunc) {
+}
+func (m *mockRouterNoHTTPHandler) Group(prefix string) core.Router    { return m }
+func (m *mockRouterNoHTTPHandler) Use(middleware core.MiddlewareFunc) {}
 
 func TestHTTPServer_Start_UnsupportedHandler(t *testing.T) {
 	t.Parallel()

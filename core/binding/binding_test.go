@@ -820,3 +820,52 @@ func TestInjectWithNilInstance(t *testing.T) {
 		t.Error("Expected error for nil instance")
 	}
 }
+
+func TestWithRequired(t *testing.T) {
+	t.Parallel()
+
+	opt := WithRequired()
+	if opt == nil {
+		t.Fatal("expected non-nil option")
+	}
+
+	// 验证选项函数正确设置Required=true
+	cfg := &injectConfig{}
+	opt(cfg)
+	if !cfg.Required {
+		t.Error("expected Required to be true")
+	}
+}
+
+func TestWithOptional(t *testing.T) {
+	t.Parallel()
+
+	opt := WithOptional()
+	if opt == nil {
+		t.Fatal("expected non-nil option")
+	}
+
+	// 验证选项函数正确设置Required=false
+	cfg := &injectConfig{Required: true}
+	opt(cfg)
+	if cfg.Required {
+		t.Error("expected Required to be false")
+	}
+}
+
+func TestInjectOption_Chaining(t *testing.T) {
+	t.Parallel()
+
+	cfg := &injectConfig{}
+
+	// 测试多个选项链式调用
+	opts := []InjectOption{WithRequired(), WithOptional()}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	// 最后一个选项应该覆盖前面的设置
+	if cfg.Required {
+		t.Error("expected Required to be false after chaining")
+	}
+}

@@ -30,6 +30,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 
 	"github.com/robfig/cron/v3"
 
@@ -57,16 +58,29 @@ func init() {
 // CronAutoConfiguration 定时任务自动配置类。
 // 负责初始化 cron.Cron 调度器并注册到 IoC 容器。
 type CronAutoConfiguration struct {
-	logger log.Logger         // 日志记录器
-	cron   *cron.Cron         // Cron 调度器实例
-	config *CronConfig        // Cron 配置信息
-	ctx    context.Context    // 应用上下文
-	cancel context.CancelFunc // 取消函数
+	logger     log.Logger         // 日志记录器
+	cron       *cron.Cron         // Cron 调度器实例
+	config     *CronConfig        // Cron 配置信息
+	appCtx     context.Context    // 应用上下文（用于防重复配置判断）
+	ctx        context.Context    // 可取消的应用上下文
+	cancel     context.CancelFunc // 取消函数
+	mu         sync.Mutex         // 保护 Configure 的并发访问
+	configured bool               // 标记是否已配置，防止同一应用上下文重复配置
 }
 
 // Configure 配置定时任务。
 // 创建 cron.Cron 调度器实例，配置日志和恢复机制，并注册到 IoC 容器。
 func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.appCtx == ctx.Context() {
+		return nil
+	}
+	// 新应用上下文（应用重启）时重新配置
+	c.configured = false
+
 	env := ctx.Environment()
 
 	// 获取日志记录器，如果不存在则使用默认日志器
@@ -95,6 +109,7 @@ func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	// 存储应用上下文
+	c.appCtx = ctx.Context()
 	c.ctx, c.cancel = context.WithCancel(ctx.Context())
 
 	// 创建 Cron 调度器实例
@@ -106,6 +121,8 @@ func (c *CronAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	c.logger.Info(ctx.Context(), "Cron scheduler configured")
+
+	c.configured = true
 
 	return nil
 }

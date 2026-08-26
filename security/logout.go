@@ -26,17 +26,25 @@ type LogoutFilter struct {
 //
 // 返回:
 //   - *LogoutFilter: 登出过滤器实例
-//
-// panic: logoutUrl 为空时触发 panic
-func NewLogoutFilter(logoutUrl string, handlers []LogoutHandler) *LogoutFilter {
+//   - error: 参数错误
+func NewLogoutFilter(logoutUrl string, handlers []LogoutHandler) (*LogoutFilter, error) {
 	if logoutUrl == "" {
-		panic("logout: logoutUrl must not be empty")
+		return nil, fmt.Errorf("logout: logoutUrl must not be empty")
 	}
 	return &LogoutFilter{
 		logoutUrl:   logoutUrl,
 		handlers:    handlers,
 		httpMethods: []string{"POST", "DELETE"},
+	}, nil
+}
+
+// MustNewLogoutFilter 创建登出过滤器，失败则 panic。
+func MustNewLogoutFilter(logoutUrl string, handlers []LogoutHandler) *LogoutFilter {
+	filter, err := NewLogoutFilter(logoutUrl, handlers)
+	if err != nil {
+		panic(err)
 	}
+	return filter
 }
 
 func (f *LogoutFilter) AddLogoutHandler(handler LogoutHandler) {

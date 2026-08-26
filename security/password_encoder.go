@@ -87,10 +87,10 @@ type DelegatingPasswordEncoder struct {
 // NewDelegatingPasswordEncoder 创建委托密码编码器
 // idForEncode: 默认使用的编码器ID
 // passwordEncoders: 可用的编码器映射
-func NewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[string]PasswordEncoder) *DelegatingPasswordEncoder {
+func NewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[string]PasswordEncoder) (*DelegatingPasswordEncoder, error) {
 	// 在构造时检查编码器是否存在，避免运行时panic
 	if _, exists := passwordEncoders[idForEncode]; !exists {
-		panic(fmt.Sprintf("encoder not found for id: %s", idForEncode))
+		return nil, fmt.Errorf("encoder not found for id: %s", idForEncode)
 	}
 	encoders := make(map[string]PasswordEncoder, len(passwordEncoders))
 	for k, v := range passwordEncoders {
@@ -99,7 +99,16 @@ func NewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[strin
 	return &DelegatingPasswordEncoder{
 		idForEncode:      idForEncode,
 		passwordEncoders: encoders,
+	}, nil
+}
+
+// MustNewDelegatingPasswordEncoder 创建委托密码编码器，失败则 panic。
+func MustNewDelegatingPasswordEncoder(idForEncode string, passwordEncoders map[string]PasswordEncoder) *DelegatingPasswordEncoder {
+	encoder, err := NewDelegatingPasswordEncoder(idForEncode, passwordEncoders)
+	if err != nil {
+		panic(err)
 	}
+	return encoder
 }
 
 // Encode 使用默认编码器编码密码

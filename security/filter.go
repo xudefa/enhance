@@ -13,7 +13,7 @@ import (
 
 // Security filter order constants
 const (
-	SecurityContextHolderFilterOrder   = -1000
+	AuthContextFilterOrder             = -1000
 	AnonymousAuthenticationFilterOrder = 0
 	ExceptionTranslationFilterOrder    = 0
 	FilterSecurityInterceptorOrder     = 100
@@ -36,155 +36,18 @@ const (
 // filterAppliedKey is the request attribute key used to prevent double filter execution.
 const filterAppliedKey = "FILTER_APPLIED"
 
-// securityFilterChainAdapter 将内部 typed FilterChainProxy 适配为 filter.SecurityFilterChain 接口。
-type securityFilterChainAdapter struct {
-	proxy *FilterChainProxy
-}
-
-func (a *securityFilterChainAdapter) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
-	ctxVal, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("expected context.Context, got %T", ctx)
-	}
-	req, ok := request.(SecurityRequest)
-	if !ok {
-		return fmt.Errorf("expected SecurityRequest, got %T", request)
-	}
-	resp, ok := response.(SecurityResponse)
-	if !ok {
-		return fmt.Errorf("expected SecurityResponse, got %T", response)
-	}
-	return a.proxy.doFilterWithChain(ctxVal, req, resp, &filterChainAdapter{vfc: &VirtualFilterChain{proxy: a.proxy, index: 0}})
-}
-
-func (a *securityFilterChainAdapter) Matches(request interface{}) bool {
-	_, ok := request.(SecurityRequest)
-	return ok
-}
-
-func (a *securityFilterChainAdapter) GetFilters() []filter.Filter {
-	result := make([]filter.Filter, len(a.proxy.filters))
-	copy(result, a.proxy.filters)
-	return result
-}
-
-// filterChainAdapter 将 VirtualFilterChain 适配为 filter.FilterChain 接口。
-type filterChainAdapter struct {
-	vfc *VirtualFilterChain
-}
-
-func (a *filterChainAdapter) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
-	ctxVal, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("expected context.Context, got %T", ctx)
-	}
-	req, ok := request.(SecurityRequest)
-	if !ok {
-		return fmt.Errorf("expected SecurityRequest, got %T", request)
-	}
-	resp, ok := response.(SecurityResponse)
-	if !ok {
-		return fmt.Errorf("expected SecurityResponse, got %T", response)
-	}
-	return a.vfc.DoFilter(ctxVal, req, resp)
-}
-
-func (a *filterChainAdapter) AddFilter(f filter.Filter) {}
-
-func (a *filterChainAdapter) GetFilters() []filter.Filter {
-	return nil
-}
-
-// FilterChainProxy 过滤器链代理
-type FilterChainProxy struct {
-	filters []SecurityFilter
-	chain   SecurityFilterChain
-}
-
-// NewFilterChainProxy 创建过滤器链代理实例。
-//
-// 参数:
-//   - filters: 安全过滤器列表
-//   - chain: 最终的安全过滤器链
-func NewFilterChainProxy(filters []SecurityFilter, chain SecurityFilterChain) *FilterChainProxy {
-	return &FilterChainProxy{
-		filters: filters,
-		chain:   chain,
-	}
-}
-
-// DoFilter 实现 filter.SecurityFilterChain 接口
-func (p *FilterChainProxy) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
-	ctxVal, ok := ctx.(context.Context)
-	if !ok {
-		return fmt.Errorf("expected context.Context, got %T", ctx)
-	}
-	req, ok := request.(SecurityRequest)
-	if !ok {
-		return fmt.Errorf("expected SecurityRequest, got %T", request)
-	}
-	resp, ok := response.(SecurityResponse)
-	if !ok {
-		return fmt.Errorf("expected SecurityResponse, got %T", response)
-	}
-	return p.doFilterWithChain(ctxVal, req, resp, &filterChainAdapter{vfc: &VirtualFilterChain{proxy: p, index: 0}})
-}
-
-// Matches 实现 filter.SecurityFilterChain 接口（FilterChainProxy 匹配所有请求）
-func (p *FilterChainProxy) Matches(request interface{}) bool {
-	return true
-}
-
-// GetFilters 实现 filter.SecurityFilterChain 接口
-func (p *FilterChainProxy) GetFilters() []filter.Filter {
-	result := make([]filter.Filter, len(p.filters))
-	copy(result, p.filters)
-	return result
-}
-
-// doFilterWithChain 以类型安全方式执行过滤器链
-func (p *FilterChainProxy) doFilterWithChain(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
-	if p == nil || chain == nil {
-		return nil
-	}
-	return chain.DoFilter(ctx, request, response)
-}
-
-// doFilterInternal 执行过滤器链中的指定索引过滤器
-func (p *FilterChainProxy) doFilterInternal(ctx context.Context, request SecurityRequest, response SecurityResponse, index int) error {
-	if index >= len(p.filters) {
-		return p.chain.DoFilter(ctx, request, response)
-	}
-
-	nextChain := &filterChainAdapter{
-		vfc: &VirtualFilterChain{proxy: p, index: index + 1},
-	}
-	return p.filters[index].DoFilter(ctx, request, response, nextChain)
-}
-
-// VirtualFilterChain 虚拟过滤器链
-type VirtualFilterChain struct {
-	proxy *FilterChainProxy
-	index int
-}
-
-// DoFilter 执行下一个过滤器
-func (c *VirtualFilterChain) DoFilter(ctx context.Context, request SecurityRequest, response SecurityResponse) error {
-	return c.proxy.doFilterInternal(ctx, request, response, c.index)
-}
-
-// SecurityContextHolderFilter 安全上下文持有者过滤器。
+// AuthContextFilter 认证上下文过滤器。
 //
 // 在过滤器链执行完成后，将最终认证信息保存到请求属性中，
 // 供下游 HTTP 处理器使用。
-type SecurityContextHolderFilter struct{}
+type AuthContextFilter struct{}
 
-func NewSecurityContextHolderFilter() *SecurityContextHolderFilter {
-	return &SecurityContextHolderFilter{}
+func NewAuthContextFilter() *AuthContextFilter {
+	return &AuthContextFilter{}
 }
 
 // DoFilter 实现 filter.Filter 接口
-func (f *SecurityContextHolderFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
+func (f *AuthContextFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
 	ctxVal, ok := ctx.(context.Context)
 	if !ok {
 		return fmt.Errorf("expected context.Context, got %T", ctx)
@@ -200,7 +63,7 @@ func (f *SecurityContextHolderFilter) DoFilter(ctx interface{}, request interfac
 	return f.doFilter(ctxVal, req, resp, chain)
 }
 
-func (f *SecurityContextHolderFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
+func (f *AuthContextFilter) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	err := chain.DoFilter(ctx, request, response)
 
 	if _, exists := request.GetAttribute("security.currentAuthentication"); !exists {
@@ -213,7 +76,7 @@ func (f *SecurityContextHolderFilter) doFilter(ctx context.Context, request Secu
 }
 
 // Order 实现 filter.Filter 接口
-func (f *SecurityContextHolderFilter) Order() int { return SecurityContextHolderFilterOrder }
+func (f *AuthContextFilter) Order() int { return AuthContextFilterOrder }
 
 // AnonymousAuthenticationFilter 匿名认证过滤器
 type AnonymousAuthenticationFilter struct {

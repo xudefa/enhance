@@ -35,17 +35,17 @@
 //
 // 直接使用引擎:
 //
-//	router := stdlib.NewRouter()
+//	router := server.NewRouter()
 //	router.GET("/hello", func(ctx core.Context) {
 //	    ctx.String(200, "Hello, World!")
 //	})
 //
-//	server := stdlib.NewServer(
+//	srv := server.NewServer(
 //	    engine.WithHost("0.0.0.0"),
 //	    engine.WithPort(8080),
 //	)
-//	server.SetHandler(router)
-//	server.Start()
+//	srv.SetHandler(router)
+//	srv.Start()
 //
 // # 支持的引擎
 //

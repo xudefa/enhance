@@ -59,7 +59,7 @@ func TestProceedWithArgs_EffectiveThroughChain(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("Echo"),
-			Advice: Around(func(jp JoinPoint, proceed func() any) any {
+			Advice: Around(func(jp JoinPoint, proceed ProceedFunc) any {
 				jp.ProceedWithArgs([]any{"changed", 99})
 				return nil
 			}),

@@ -137,3 +137,18 @@ func TestMultipleGroups(t *testing.T) {
 		t.Errorf("预期验证成功，得到错误: %v", err)
 	}
 }
+
+// TestRegisterGroup 测试注册验证组
+func TestRegisterGroup(t *testing.T) {
+	t.Parallel()
+	registry := NewValidatorRegistry()
+	validator := NewGroupedValidator(registry)
+
+	// 测试注册组
+	validator.RegisterGroup("custom")
+
+	// 验证组已注册
+	if _, ok := validator.groups["custom"]; !ok {
+		t.Error("expected 'custom' group to be registered")
+	}
+}

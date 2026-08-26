@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/xudefa/enhance/condition"
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/lifecycle"
 )
 
@@ -220,5 +221,82 @@ func TestBoot_Start_RetryAfterFailure(t *testing.T) {
 	// 重试不应是 no-op：若 started 未重置，第二次 Start() 会直接返回 nil
 	if err := boot.Start(); err == nil {
 		t.Fatal("retry Start() should also fail (must not be a no-op after previous failure)")
+	}
+}
+
+func TestBoot_BindConfig(t *testing.T) {
+	t.Parallel()
+
+	type TestConfig struct {
+		Host string `config:"server.host"`
+	}
+
+	boot, err := NewApplication(
+		WithAppName("test-app"),
+	)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+
+	// 添加属性源
+	boot.ctx.Environment().AddPropertySource(environment.NewDefaultPropertySource("test", map[string]any{
+		"server.host": "localhost",
+	}))
+
+	cfg, err := BindConfig[TestConfig](boot)
+	if err != nil {
+		t.Fatalf("BindConfig() error = %v", err)
+	}
+	if cfg.Host != "localhost" {
+		t.Errorf("expected Host 'localhost', got '%s'", cfg.Host)
+	}
+}
+
+func TestBoot_BindConfig_WithPrefix(t *testing.T) {
+	t.Parallel()
+
+	type ServerConfig struct {
+		Port int `config:"port"`
+	}
+
+	boot, err := NewApplication(
+		WithAppName("test-app"),
+	)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+
+	// 设置带前缀的配置
+	boot.ctx.Environment().AddPropertySource(environment.NewDefaultPropertySource("test", map[string]any{
+		"server.port": "8080",
+	}))
+
+	cfg, err := BindConfig[ServerConfig](boot, WithConfigPrefix("server"))
+	if err != nil {
+		t.Fatalf("BindConfig() error = %v", err)
+	}
+	if cfg.Port != 8080 {
+		t.Errorf("expected Port 8080, got %d", cfg.Port)
+	}
+}
+
+func TestWithConfigPrefix(t *testing.T) {
+	t.Parallel()
+
+	opt := WithConfigPrefix("test")
+	if opt == nil {
+		t.Error("expected non-nil option")
+	}
+}
+
+func TestBoot_NewApplicationFromRunOptions(t *testing.T) {
+	t.Parallel()
+
+	app, err := NewApplicationFromRunOptions(WithAppName("test-app"))
+	if err != nil {
+		t.Fatalf("NewApplicationFromRunOptions() error = %v", err)
+	}
+	if app == nil {
+		t.Error("expected non-nil application")
 	}
 }

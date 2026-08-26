@@ -80,7 +80,10 @@ func TestDelegatingPasswordEncoder_FullCycle(t *testing.T) {
 		"noop":   noopEncoder,
 	}
 
-	encoder := NewDelegatingPasswordEncoder("sha256", encoders)
+	encoder, err := NewDelegatingPasswordEncoder("sha256", encoders)
+	if err != nil {
+		t.Fatalf("failed to create DelegatingPasswordEncoder: %v", err)
+	}
 
 	password := "myPassword"
 	encoded := encoder.Encode(password)
@@ -109,7 +112,10 @@ func TestDelegatingPasswordEncoder_UnknownId(t *testing.T) {
 		"sha256": sha256Encoder,
 	}
 
-	encoder := NewDelegatingPasswordEncoder("sha256", encoders)
+	encoder, err := NewDelegatingPasswordEncoder("sha256", encoders)
+	if err != nil {
+		t.Fatalf("failed to create DelegatingPasswordEncoder: %v", err)
+	}
 
 	// 使用未知的编码器 ID 编码的密码
 	encoded := "{unknown}somehash"
@@ -129,7 +135,10 @@ func TestDelegatingPasswordEncoder_InvalidFormat(t *testing.T) {
 		"sha256": sha256Encoder,
 	}
 
-	encoder := NewDelegatingPasswordEncoder("sha256", encoders)
+	encoder, err := NewDelegatingPasswordEncoder("sha256", encoders)
+	if err != nil {
+		t.Fatalf("failed to create DelegatingPasswordEncoder: %v", err)
+	}
 
 	invalidFormats := []string{
 		"",

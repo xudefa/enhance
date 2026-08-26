@@ -5,7 +5,9 @@ import (
 	"reflect"
 
 	"github.com/xudefa/enhance/boot"
+	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/security"
+	"github.com/xudefa/enhance/starter/jwt"
 	"github.com/xudefa/enhance/web/mvc"
 	"github.com/xudefa/enhance/web/server"
 )
@@ -63,6 +65,27 @@ func (c *WebAutoConfig) Configure(ctx boot.ApplicationContext) error {
 			filterChainHandler := security.NewSecurityFilterChainHandler(filterChain, router)
 			webStarter.SetHandler(filterChainHandler)
 			fmt.Println("[Web] SecurityFilterChain 已设置为处理器")
+		}
+	}
+
+	// 保存全局容器引用，供控制器延迟注入使用
+	globalContainer = container
+
+	// 注入 TokenProvider 到 AuthController
+	tokenProvider, err := core.GetByName[*jwt.DefaultTokenProvider](container, "")
+	if err != nil {
+		return fmt.Errorf("获取 TokenProvider 失败: %w", err)
+	}
+	// 遍历所有已注册的控制器，找到 AuthController 并注入 TokenProvider
+	controllers := mvc.GetControllers()
+	fmt.Printf("[Web] 获取到 %d 个控制器\n", len(controllers))
+	for i, ctrl := range controllers {
+		fmt.Printf("[Web] 控制器[%d] 类型: %T\n", i, ctrl)
+		if authCtrl, ok := ctrl.(*AuthController); ok {
+			fmt.Printf("[Web] 找到 AuthController, 当前 TokenProvider=%v\n", authCtrl.TokenProvider)
+			authCtrl.TokenProvider = tokenProvider
+			fmt.Printf("[Web] 设置后 TokenProvider=%v\n", authCtrl.TokenProvider)
+			fmt.Println("[Web] TokenProvider 已注入到 AuthController")
 		}
 	}
 

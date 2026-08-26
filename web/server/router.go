@@ -6,19 +6,19 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 // DefaultRouter 默认路由器实现
 type DefaultRouter struct {
-	middlewares []mvc.MiddlewareFunc
-	handlers    map[string]mvc.HandlerFunc
+	middlewares []core.MiddlewareFunc
+	handlers    map[string]core.HandlerFunc
 	prefix      string
 	mu          *sync.RWMutex // 共享的mutex，父子router共享
 	// 性能优化：缓存路由模式，避免每次请求都遍历
 	routePatterns *[]routePattern
 	// 路由注册时的中间件链（子路由组的中间件在 handle 时绑定到路由）
-	routeMiddleware map[string][]mvc.MiddlewareFunc
+	routeMiddleware map[string][]core.MiddlewareFunc
 }
 
 // routePattern 预编译的路由模式
@@ -27,7 +27,7 @@ type routePattern struct {
 	parts       []string
 	paramNames  []string // 参数名称列表
 	paramIdxs   []int    // 参数在路径中的索引
-	handler     mvc.HandlerFunc
+	handler     core.HandlerFunc
 	hasParams   bool
 	patternPath string // 原始路由模式路径（含 {param}），用于中间件查找
 }
@@ -36,46 +36,51 @@ type routePattern struct {
 func NewRouter() *DefaultRouter {
 	patterns := make([]routePattern, 0)
 	return &DefaultRouter{
-		handlers:        make(map[string]mvc.HandlerFunc),
+		handlers:        make(map[string]core.HandlerFunc),
 		mu:              &sync.RWMutex{},
 		routePatterns:   &patterns,
-		routeMiddleware: make(map[string][]mvc.MiddlewareFunc),
+		routeMiddleware: make(map[string][]core.MiddlewareFunc),
 	}
 }
 
 // GET 注册 GET 路由
-func (r *DefaultRouter) GET(path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) GET(path string, handler core.HandlerFunc) {
 	r.handle(http.MethodGet, path, handler)
 }
 
 // POST 注册 POST 路由
-func (r *DefaultRouter) POST(path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) POST(path string, handler core.HandlerFunc) {
 	r.handle(http.MethodPost, path, handler)
 }
 
 // PUT 注册 PUT 路由
-func (r *DefaultRouter) PUT(path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) PUT(path string, handler core.HandlerFunc) {
 	r.handle(http.MethodPut, path, handler)
 }
 
 // DELETE 注册 DELETE 路由
-func (r *DefaultRouter) DELETE(path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) DELETE(path string, handler core.HandlerFunc) {
 	r.handle(http.MethodDelete, path, handler)
 }
 
 // PATCH 注册 PATCH 路由
-func (r *DefaultRouter) PATCH(path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) PATCH(path string, handler core.HandlerFunc) {
 	r.handle(http.MethodPatch, path, handler)
 }
 
+// Handle 注册任意 HTTP 方法的路由
+func (r *DefaultRouter) Handle(method, path string, handler core.HandlerFunc) {
+	r.handle(method, path, handler)
+}
+
 // Group 创建路由组
-func (r *DefaultRouter) Group(prefix string) mvc.Router {
+func (r *DefaultRouter) Group(prefix string) core.Router {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// 子router与父router共享handlers映射、mutex、routePatterns和routeMiddleware
 	return &DefaultRouter{
-		middlewares:     append([]mvc.MiddlewareFunc{}, r.middlewares...),
+		middlewares:     append([]core.MiddlewareFunc{}, r.middlewares...),
 		handlers:        r.handlers,
 		prefix:          r.prefix + prefix,
 		mu:              r.mu,
@@ -85,7 +90,7 @@ func (r *DefaultRouter) Group(prefix string) mvc.Router {
 }
 
 // Use 注册中间件
-func (r *DefaultRouter) Use(middleware mvc.MiddlewareFunc) {
+func (r *DefaultRouter) Use(middleware core.MiddlewareFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.middlewares = append(r.middlewares, middleware)
@@ -160,7 +165,7 @@ func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 // handle 注册路由
-func (r *DefaultRouter) handle(method, path string, handler mvc.HandlerFunc) {
+func (r *DefaultRouter) handle(method, path string, handler core.HandlerFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -183,11 +188,11 @@ func (r *DefaultRouter) handle(method, path string, handler mvc.HandlerFunc) {
 	*r.routePatterns = append(*r.routePatterns, pattern)
 
 	// 绑定路由注册时的中间件链（组中间件在此成为处理链的一部分）
-	r.routeMiddleware[key] = append([]mvc.MiddlewareFunc{}, r.middlewares...)
+	r.routeMiddleware[key] = append([]core.MiddlewareFunc{}, r.middlewares...)
 }
 
 // compileRoutePattern 预编译路由模式
-func (r *DefaultRouter) compileRoutePattern(method, path string, handler mvc.HandlerFunc) routePattern {
+func (r *DefaultRouter) compileRoutePattern(method, path string, handler core.HandlerFunc) routePattern {
 	parts := strings.Split(path, "/")
 	paramNames := make([]string, 0, len(parts))
 	paramIdxs := make([]int, 0, len(parts))
@@ -214,7 +219,7 @@ func (r *DefaultRouter) compileRoutePattern(method, path string, handler mvc.Han
 }
 
 // findHandlerWithParamsLocked 查找带路径参数的路由（使用预编译模式，调用方须持有读锁）
-func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (mvc.HandlerFunc, map[string]string, bool, string) {
+func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (core.HandlerFunc, map[string]string, bool, string) {
 	pathParts := strings.Split(path, "/")
 
 	// 使用预编译的路由模式进行匹配，避免每次都解析

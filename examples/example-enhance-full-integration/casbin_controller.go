@@ -10,8 +10,8 @@ import (
 
 // CasbinController Casbin 策略管理控制器
 type CasbinController struct {
-	Enforcer security.CasbinEnforcer
-	Logger   log.Logger
+	Enforcer security.CasbinEnforcer `inject:"true"`
+	Logger   log.Logger              `inject:"true"`
 }
 
 func (c *CasbinController) logger() log.Logger {

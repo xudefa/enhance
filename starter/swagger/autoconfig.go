@@ -30,6 +30,7 @@ package swagger
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 
@@ -77,6 +78,11 @@ func (c *SwaggerAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 	}
 
 	c.config = cfg
+
+	// 注册 Swagger 配置到容器
+	if err := ctx.Container().RegisterInstance(cfg, reflect.TypeFor[*SwaggerConfig]()); err != nil {
+		return fmt.Errorf("failed to register SwaggerConfig: %w", err)
+	}
 
 	// 记录配置信息
 	c.logger.Info(ctx.Context(), "Swagger API documentation configured",

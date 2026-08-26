@@ -36,9 +36,26 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// getUsername 从 Principal 中提取用户名字符串
+func getUsername(principal interface{}) string {
+	if principal == nil {
+		return ""
+	}
+	// 如果是 UserDetails 接口，提取用户名
+	if ud, ok := principal.(security.UserDetails); ok {
+		return ud.Username()
+	}
+	// 如果是字符串，直接返回
+	if s, ok := principal.(string); ok {
+		return s
+	}
+	// 其他类型转为字符串
+	return fmt.Sprintf("%v", principal)
+}
+
 // AuthController 认证控制器。
 type AuthController struct {
-	TokenProvider *jwt.DefaultTokenProvider
+	TokenProvider *jwt.DefaultTokenProvider `inject:"true"`
 }
 
 // Routes 注册路由。
@@ -112,11 +129,12 @@ func (c *ProfileController) GetProfile(ctx mvc.Context) {
 		return
 	}
 
+	username := getUsername(auth.Principal())
 	ctx.JSON(http.StatusOK, map[string]any{
 		"code":    0,
 		"message": "success",
 		"data": map[string]any{
-			"username":    auth.Principal(),
+			"username":    username,
 			"authorities": auth.Authorities(),
 		},
 	})
@@ -142,25 +160,23 @@ func (c *AdminController) GetUsers(ctx mvc.Context) {
 		return
 	}
 
+	username := getUsername(auth.Principal())
 	ctx.JSON(http.StatusOK, map[string]any{
 		"code":    0,
 		"message": "success",
 		"data": map[string]any{
 			"users":       []string{"alice", "bob"},
-			"requestedBy": auth.Principal(),
+			"requestedBy": username,
 		},
 	})
 }
 
 func init() {
-	// 注册控制器
-	fmt.Println("[DEBUG] 开始注册控制器...")
 	mvc.RegisterController(&AuthController{})
 	mvc.RegisterController(&ProfileController{})
 	mvc.RegisterController(&AdminController{})
 	mvc.RegisterController(&UserController{})
 	mvc.RegisterController(&CasbinController{})
-	fmt.Println("[DEBUG] 控制器已注册，总数:", len(mvc.GetControllers()))
 }
 
 func main() {

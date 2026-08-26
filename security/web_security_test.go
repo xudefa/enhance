@@ -15,7 +15,7 @@ func TestCsrfFilter(t *testing.T) {
 	ctx := context.Background()
 
 	tokenRepo := NewCookieCsrfTokenRepository()
-	csrfFilter := NewCsrfFilter(tokenRepo)
+	csrfFilter := MustNewCsrfFilter(tokenRepo)
 
 	t.Run("GET request should generate token", func(t *testing.T) {
 		req := &mockSecurityRequest{method: "GET", uri: "/api/test"}
@@ -52,7 +52,7 @@ func TestCsrfFilter(t *testing.T) {
 	})
 
 	t.Run("Exclude path should skip CSRF", func(t *testing.T) {
-		csrfFilterWithExclude := NewCsrfFilter(tokenRepo)
+		csrfFilterWithExclude := MustNewCsrfFilter(tokenRepo)
 		_ = csrfFilterWithExclude.AddExcludePath("/public")
 
 		req := &mockSecurityRequest{method: "POST", uri: "/public/api"}
@@ -127,7 +127,7 @@ func TestLogoutFilter(t *testing.T) {
 		resp := &mockSecurityResponse{}
 		chain := &mockSecurityFilterChain{}
 
-		logoutFilter := NewLogoutFilter("/logout", []LogoutHandler{NewSecurityContextLogoutHandler()})
+		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{NewSecurityContextLogoutHandler()})
 
 		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
 		if err != nil {
@@ -144,7 +144,7 @@ func TestLogoutFilter(t *testing.T) {
 		resp := &mockSecurityResponse{}
 		chain := &mockSecurityFilterChain{}
 
-		logoutFilter := NewLogoutFilter("/logout", []LogoutHandler{})
+		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{})
 
 		err := logoutFilter.DoFilter(ctx, req, resp, chain)
 		if err != nil {
@@ -164,7 +164,7 @@ func TestLogoutFilter(t *testing.T) {
 		chain := &mockSecurityFilterChain{}
 
 		customHandler := &mockLogoutSuccessHandler{targetCalled: "/custom"}
-		logoutFilter := NewLogoutFilter("/logout", []LogoutHandler{})
+		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{})
 		logoutFilter.SetSuccessHandler(customHandler)
 
 		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
@@ -618,12 +618,92 @@ func TestSecurityContextLogoutHandler(t *testing.T) {
 
 type mockLogoutSuccessHandler struct {
 	targetCalled string
+	called       bool
 }
 
 func (h *mockLogoutSuccessHandler) OnLogoutSuccess(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
+	h.called = true
 	response.SetStatusCode(302)
 	response.SetHeader("Location", h.targetCalled)
 }
+
+type mockSecurityRequest struct {
+	uri        string
+	method     string
+	headers    map[string]string
+	attributes map[string]any
+	remoteAddr string
+}
+
+func (r *mockSecurityRequest) GetMethod() string { return r.method }
+func (r *mockSecurityRequest) GetURI() string    { return r.uri }
+func (r *mockSecurityRequest) GetHeader(key string) string {
+	if r.headers == nil {
+		return ""
+	}
+	return r.headers[key]
+}
+func (r *mockSecurityRequest) RemoteAddress() string {
+	if r.remoteAddr != "" {
+		return r.remoteAddr
+	}
+	return "127.0.0.1:8080"
+}
+func (r *mockSecurityRequest) SetHeader(key, value string) {
+	if r.headers == nil {
+		r.headers = make(map[string]string)
+	}
+	r.headers[key] = value
+}
+func (r *mockSecurityRequest) SetAttribute(key string, value any) {
+	if r.headers == nil {
+		r.headers = make(map[string]string)
+	}
+	if r.attributes == nil {
+		r.attributes = make(map[string]any)
+	}
+	r.attributes[key] = value
+}
+func (r *mockSecurityRequest) GetAttribute(key string) (any, bool) {
+	val, ok := r.attributes[key]
+	return val, ok
+}
+
+func newMockSecurityRequest(method, uri string, headers map[string]string) *mockSecurityRequest {
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	return &mockSecurityRequest{
+		method:  method,
+		uri:     uri,
+		headers: headers,
+	}
+}
+
+func newMockSecurityResponse() *mockSecurityResponse {
+	return &mockSecurityResponse{headers: make(map[string]string)}
+}
+
+type mockSecurityResponse struct {
+	statusCode int
+	headers    map[string]string
+}
+
+func (r *mockSecurityResponse) StatusCode() int        { return r.statusCode }
+func (r *mockSecurityResponse) SetStatusCode(code int) { r.statusCode = code }
+func (r *mockSecurityResponse) Header(name string) string {
+	if r.headers == nil {
+		return ""
+	}
+	return r.headers[name]
+}
+func (r *mockSecurityResponse) SetHeader(name, value string) {
+	if r.headers == nil {
+		r.headers = make(map[string]string)
+	}
+	r.headers[name] = value
+}
+func (r *mockSecurityResponse) Write(data []byte) error { return nil }
 
 type mockSecurityFilterChain struct {
 	called bool

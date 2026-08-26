@@ -150,7 +150,10 @@ func TestStickySession(t *testing.T) {
 func TestHealthAware(t *testing.T) {
 	t.Parallel()
 	inner := NewRoundRobin()
-	lb := NewHealthAware(inner)
+	lb, err := NewHealthAware(inner)
+	if err != nil {
+		t.Fatalf("failed to create HealthAware: %v", err)
+	}
 
 	backends := []*ServiceInstance{
 		{ID: "1", URL: "http://localhost:8081", Health: HealthDown},

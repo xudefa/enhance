@@ -162,40 +162,32 @@ func (s *UserService) DeleteUser(id int) error {
 
 ### 2. 创建切面
 
-使用流式 API 创建切面：
+使用通知器创建切面：
 
 ```go
 // 前置通知
-aop.NewAspectBuilder().
-    MatchInterface((*IUserService)(nil)).
-    Before(func(jp aop.JoinPoint) {
-        fmt.Printf("[Before] Method: %v, Args: %v\n", jp.Method(), jp.Args())
-    }).
-    Order(1).
-    BuildAndRegister()
+pointCut := aop.MatchInterface((*IUserService)(nil))
+beforeAdvice := aop.Before(func(jp aop.JoinPoint) {
+    fmt.Printf("[Before] Method: %v, Args: %v\n", jp.Method(), jp.Args())
+})
+advisor := aop.NewAdvisor(beforeAdvice, pointCut, 1)
 
 // 后置通知
-aop.NewAspectBuilder().
-    MatchInterface((*IUserService)(nil)).
-    After(func(jp aop.JoinPoint) {
-        fmt.Printf("[After] Method: %v\n", jp.Method())
-    }).
-    Order(2).
-    BuildAndRegister()
+afterAdvice := aop.After(func(jp aop.JoinPoint) {
+    fmt.Printf("[After] Method: %v\n", jp.Method())
+})
+advisor2 := aop.NewAdvisor(afterAdvice, pointCut, 2)
 
 // 环绕通知
-aop.NewAspectBuilder().
-    MatchInterface((*IUserService)(nil)).
-    Around(func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
-        start := time.Now()
-        fmt.Printf("[Around] Before: %v\n", jp.Method())
-        result := proceed(jp.Args()...)
-        elapsed := time.Since(start)
-        fmt.Printf("[Around] After: %v, Elapsed: %v\n", jp.Method(), elapsed)
-        return result
-    }).
-    Order(3).
-    BuildAndRegister()
+aroundAdvice := aop.Around(func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
+    start := time.Now()
+    fmt.Printf("[Around] Before: %v\n", jp.Method())
+    result := proceed(jp.Args()...)
+    elapsed := time.Since(start)
+    fmt.Printf("[Around] After: %v, Elapsed: %v\n", jp.Method(), elapsed)
+    return result
+})
+advisor3 := aop.NewAdvisor(aroundAdvice, pointCut, 3)
 ```
 
 ### 3. 使用 AOP 容器
@@ -253,45 +245,41 @@ if proxySvc, ok := proxy.(IUserService); ok {
 ### 按方法名匹配
 
 ```go
-aop.NewAspectBuilder().
-    MatchByName("GetUser").
-    Before(func(jp aop.JoinPoint) {
-        fmt.Println("Before GetUser")
-    }).
-    BuildAndRegister()
+pointCut := aop.MatchByName("GetUser")
+advice := aop.Before(func(jp aop.JoinPoint) {
+    fmt.Println("Before GetUser")
+})
+advisor := aop.NewAdvisor(advice, pointCut, 0)
 ```
 
 ### 按接口匹配
 
 ```go
-aop.NewAspectBuilder().
-    MatchInterface((*IUserService)(nil)).
-    Before(func(jp aop.JoinPoint) {
-        fmt.Println("Before any IUserService method")
-    }).
-    BuildAndRegister()
+pointCut := aop.MatchInterface((*IUserService)(nil))
+advice := aop.Before(func(jp aop.JoinPoint) {
+    fmt.Println("Before any IUserService method")
+})
+advisor := aop.NewAdvisor(advice, pointCut, 0)
 ```
 
 ### 按正则表达式匹配
 
 ```go
-aop.NewAspectBuilder().
-    MatchByRegex("^Get.*").
-    Before(func(jp aop.JoinPoint) {
-        fmt.Println("Before any Get method")
-    }).
-    BuildAndRegister()
+pointCut := aop.MatchByRegex("^Get.*")
+advice := aop.Before(func(jp aop.JoinPoint) {
+    fmt.Println("Before any Get method")
+})
+advisor := aop.NewAdvisor(advice, pointCut, 0)
 ```
 
 ### 匹配所有方法
 
 ```go
-aop.NewAspectBuilder().
-    MatchAll().
-    Before(func(jp aop.JoinPoint) {
-        fmt.Println("Before any method")
-    }).
-    BuildAndRegister()
+pointCut := aop.MatchAll()
+advice := aop.Before(func(jp aop.JoinPoint) {
+    fmt.Println("Before any method")
+})
+advisor := aop.NewAdvisor(advice, pointCut, 0)
 ```
 
 ---
@@ -346,32 +334,35 @@ aop.AfterThrowing(func(jp aop.JoinPoint, err error) {
 
 ## 性能监控
 
-```go
-// 获取 AOP 指标
-metrics := aop.GetGlobalAopMetrics()
-for key, value := range metrics {
-    fmt.Printf("%s: %v\n", key, value)
-}
+使用环绕通知记录方法执行时间和性能指标：
 
-// 输出示例：
-// total_proxies: 10
-// generated_proxies: 8
-// runtime_proxies: 2
-// total_aspects: 15
-// total_interceptions: 1000
-// average_latency: 0.5ms
+```go
+// 创建性能监控切面
+pointCut := aop.MatchAll()
+slowThreshold := 100 * time.Millisecond
+
+advice := aop.Around(func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
+    start := time.Now()
+    result := proceed(jp.Args()...)
+    elapsed := time.Since(start)
+    
+    if elapsed > slowThreshold {
+        log.Printf("[PERF] Slow method: %s, elapsed: %v", jp.Method(), elapsed)
+    }
+    
+    return result
+})
+
+advisor := aop.NewAdvisor(advice, pointCut, 0)
 ```
 
-### AOP 指标说明
+### 性能指标说明
 
-| 指标 | 说明 |
+| 指标 | 获取方式 |
 |------|------|
-| `total_proxies` | 总代理数量 |
-| `generated_proxies` | 代码生成代理数量 |
-| `runtime_proxies` | 运行时代理数量 |
-| `total_aspects` | 总切面数量 |
-| `total_interceptions` | 总拦截次数 |
-| `average_latency` | 平均延迟 |
+| 方法执行时间 | 使用 `time.Since(start)` 计算 |
+| 慢方法检测 | 设置阈值，超过阈值时记录日志 |
+| 拦截次数统计 | 在通知中维护计数器 |
 
 ---
 
@@ -420,11 +411,18 @@ AOP 会增加系统复杂度，只在需要横切关注点时使用。
 
 ### 5. 监控性能
 
-使用 AOP 指标监控性能，及时发现性能问题。
+使用环绕通知记录方法执行时间，及时发现性能问题。
 
 ```go
-metrics := aop.GetGlobalAopMetrics()
-fmt.Printf("Average latency: %v\n", metrics["average_latency"])
+advice := aop.Around(func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
+    start := time.Now()
+    result := proceed(jp.Args()...)
+    elapsed := time.Since(start)
+    if elapsed > 100*time.Millisecond {
+        log.Printf("Slow method: %s, elapsed: %v", jp.Method(), elapsed)
+    }
+    return result
+})
 ```
 
 ---

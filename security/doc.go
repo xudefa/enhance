@@ -38,7 +38,20 @@
 //
 // # 使用方式
 //
-// 配置安全策略：
+// 函数式选项模式（推荐）：
+//
+//	cfg := security.NewSecurityConfig(
+//	    security.WithAuthenticationManager(authManager),
+//	    security.WithFormLogin("/login", "/dashboard"),
+//	    security.WithCsrf(),
+//	    security.WithAuthorizeRequests(func(authz security.AuthorizeRequests) {
+//	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
+//	        authz.AnyRequest().Authenticated()
+//	    }),
+//	)
+//	chain, err := cfg.Build()
+//
+// 链式 API（便捷层，向后兼容）：
 //
 //	httpSec := security.NewHttpSecurity()
 //	httpSec.FormLogin("/login").
@@ -48,6 +61,7 @@
 //	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
 //	        authz.AnyRequest().Authenticated()
 //	    })
+//	chain, err := httpSec.Build()
 //
 // 认证用户：
 //
@@ -202,25 +216,10 @@ type GrantedAuthority interface {
 	Authority() string
 }
 
-// HttpSecurity HTTP 安全配置接口。
+// Configurer 安全配置器接口（设置类方法）。
 //
-// 提供链式 API 配置 HTTP 安全规则。
-// 支持认证管理器、用户详情服务、过滤器、CSRF、登出等配置。
-//
-// 注意：此接口有 16 个方法，违反小接口原则。
-// 未来版本将拆分为多个独立的 Configurer 接口（CsrfConfigurer、CorsConfigurer 等）。
-//
-// 使用示例：
-//
-//	httpSec := security.NewHttpSecurity()
-//	httpSec.FormLogin("/login").
-//	    Logout("/logout").
-//	    Csrf().
-//	    AuthorizeRequests(func(authz security.AuthorizeRequests) {
-//	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
-//	        authz.AnyRequest().Authenticated()
-//	    })
-type HttpSecurity interface {
+// 将 HttpSecurity 的设置方法独立成小接口，支持部分实现与关注点分离。
+type Configurer interface {
 	// AuthenticationManager 设置认证管理器。
 	AuthenticationManager(authManager AuthenticationManager) HttpSecurity
 	// UserDetailsService 设置用户详情服务。
@@ -231,8 +230,6 @@ type HttpSecurity interface {
 	AccessDecisionManager(manager AccessDecisionManager) HttpSecurity
 	// SecurityMetadataSource 设置安全元数据源。
 	SecurityMetadataSource(source SecurityMetadataSource) HttpSecurity
-	// AuthorizeRequests 配置授权规则。
-	AuthorizeRequests(config func(authorizer AuthorizeRequests)) HttpSecurity
 	// AddFilter 添加过滤器。
 	AddFilter(filter SecurityFilter) HttpSecurity
 	// AddFilterBefore 在指定过滤器之前添加过滤器。
@@ -251,8 +248,34 @@ type HttpSecurity interface {
 	FormLogin(loginProcessingUrl string, defaultSuccessUrl ...string) HttpSecurity
 	// HttpBasic 启用 HTTP Basic 认证。
 	HttpBasic() HttpSecurity
+}
+
+// Builder 安全链构建接口（授权规则 + 构建）。
+type Builder interface {
+	// AuthorizeRequests 配置授权规则。
+	AuthorizeRequests(config func(authorizer AuthorizeRequests)) HttpSecurity
 	// Build 构建安全过滤器链。
 	Build() (SecurityFilterChain, error)
+}
+
+// HttpSecurity HTTP 安全配置接口。
+//
+// 由 Configurer（设置类方法）与 Builder（构建类方法）组合而成。
+// 链式调用与现有用法不变。
+//
+// 使用示例：
+//
+//	httpSec := security.NewHttpSecurity()
+//	httpSec.FormLogin("/login").
+//	    Logout("/logout").
+//	    Csrf().
+//	    AuthorizeRequests(func(authz security.AuthorizeRequests) {
+//	        authz.AntMatchers("/api/**").HasRole("ROLE_API")
+//	        authz.AnyRequest().Authenticated()
+//	    })
+type HttpSecurity interface {
+	Configurer
+	Builder
 }
 
 // AuthorizeRequests 授权请求配置接口。
@@ -285,10 +308,10 @@ type ExpressionInterceptUrlRegistry interface {
 	DenyAll() HttpSecurity
 }
 
-// SecurityConfig 安全配置接口。
+// SecurityConfigurer 安全配置接口（已废弃，使用函数式选项模式替代）。
 //
-// 提供自定义安全配置的入口。
-type SecurityConfig interface {
+// Deprecated: 使用 NewSecurityConfig + WithXxx 选项函数替代。
+type SecurityConfigurer interface {
 	// Configure 配置 HTTP 安全。
 	Configure(http HttpSecurity) error
 }

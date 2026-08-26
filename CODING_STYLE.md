@@ -90,6 +90,23 @@
 - 接口定义文件可单独为 `doc.go`
 - 错误定义文件可单独为 `errors.go`
 
+#### 单测文件命名规则
+
+| 规则 | 说明 | 示例 |
+|------|------|------|
+| 同名后缀 | 单测文件与被测文件同名，以 `_test.go` 为后缀 | `a.go` → `a_test.go` |
+| 一一对应 | 被测文件中的函数或方法对应的单测必须在对应的 `_test.go` 文件中 | `container.go` 中的函数单测必须在 `container_test.go` 中 |
+| 禁止分散 | 禁止将同一文件的单测分散到多个测试文件中 | ❌ `container_test.go` + `container_get_test.go` |
+| doc.go | 可以无doc_test.go | ✅ `doc.go` |
+
+```
+core/
+├── container.go        # 被测文件
+├── container_test.go   # 单测文件（container.go 中所有函数/方法的单测都在这里）
+├── bean_factory.go     # 被测文件
+└── bean_factory_test.go # 单测文件（bean_factory.go 中所有函数/方法的单测都在这里）
+```
+
 ---
 
 ## 3. 代码组织

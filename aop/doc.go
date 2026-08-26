@@ -3,6 +3,13 @@
 // 该模块提供完整的 AOP 实现，包括通知、切点、顾问器、动态代理等功能。
 // 支持静态代理代码生成，提升运行时性能。
 //
+// # 设计原则
+//
+//   - 非侵入式增强：无需修改业务代码即可添加横切关注点（日志、事务、安全等）
+//   - 灵活匹配：支持多种切点匹配模式（方法名、包名、正则、接口等）
+//   - 代码生成：支持 go generate 生成静态代理，避免运行时反射开销
+//   - 零外部依赖：核心实现仅使用 Go 标准库
+//
 // # 架构设计
 //
 //   - Advice: 通知接口（Before/After/AfterReturning/AfterThrowing/Around）
@@ -14,16 +21,26 @@
 //
 // # 使用方式
 //
-// 直接使用：
+// 创建通知和切点：
 //
-//	// 创建切面
-//	aspect := aop.NewAspect("loggingAspect").
-//	    AddAdvice(aop.BeforeAdvice(func(ctx aop.JoinPoint) {
-//	        fmt.Println("Before:", ctx.MethodName())
-//	    }))
+//	// 前置通知
+//	advice := aop.Before(func(jp aop.JoinPoint) {
+//	    fmt.Println("Before:", jp.Method())
+//	})
 //
-//	// 创建代理
-//	proxy := aop.NewProxy(target, aspect)
+//	// 切点定义
+//	pointCut := aop.MatchByName("DoSomething")
+//
+//	// 创建通知器
+//	advisor := aop.NewAdvisor(advice, pointCut, 0)
+//
+// 创建代理：
+//
+//	factory := aop.NewProxyFactory(&UserService{})
+//	factory.SetAspects([]*aop.AspectMeta{
+//	    {PointCut: pointCut, Advice: advice, Order: 0},
+//	})
+//	proxy := factory.GetProxy()
 //
 // # 代码生成
 //
@@ -117,6 +134,24 @@ const (
 	// 如果方法正常返回，此通知不会执行。
 	AdviceTypeAfterThrowing
 )
+
+// String 返回通知类型的字符串表示。
+func (a AdviceType) String() string {
+	switch a {
+	case AdviceTypeBefore:
+		return "before"
+	case AdviceTypeAfter:
+		return "after"
+	case AdviceTypeAround:
+		return "around"
+	case AdviceTypeAfterReturning:
+		return "after_returning"
+	case AdviceTypeAfterThrowing:
+		return "after_throwing"
+	default:
+		return "unknown"
+	}
+}
 
 // PointCut 切点接口。
 //

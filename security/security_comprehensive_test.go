@@ -286,7 +286,7 @@ func TestCsrfFilterEdgeCases(t *testing.T) {
 	t.Run("POST with valid token via header", func(t *testing.T) {
 		t.Parallel()
 		tokenRepo := NewCookieCsrfTokenRepository()
-		csrfFilter := NewCsrfFilter(tokenRepo)
+		csrfFilter := MustNewCsrfFilter(tokenRepo)
 
 		req := &mockSecurityRequest{method: "GET", uri: "/api/test"}
 		resp := &mockSecurityResponse{headers: map[string]string{}}
@@ -552,9 +552,9 @@ func TestSecurityRequestResponseMock(t *testing.T) {
 func TestFilterChainProxy(t *testing.T) {
 	t.Parallel()
 
-	t.Run("SecurityFilterChainAdapter adapts FilterChainProxy", func(t *testing.T) {
+	t.Run("SecurityFilterChainAdapter adapts filterChainProxy", func(t *testing.T) {
 		t.Parallel()
-		chain := NewFilterChainProxy([]SecurityFilter{}, &DefaultSecurityFilterChain{})
+		chain := newFilterChainProxy([]SecurityFilter{}, &DefaultSecurityFilterChain{})
 		adapter := securityFilterChainAdapter{proxy: chain}
 
 		filters := adapter.GetFilters()
@@ -568,14 +568,12 @@ func TestLogoutFilterEdgeCases(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	t.Run("empty logout URL causes panic", func(t *testing.T) {
+	t.Run("empty logout URL returns error", func(t *testing.T) {
 		t.Parallel()
-		defer func() {
-			if r := recover(); r == nil {
-				t.Error("expected panic for empty logout URL")
-			}
-		}()
-		NewLogoutFilter("", []LogoutHandler{})
+		_, err := NewLogoutFilter("", []LogoutHandler{})
+		if err == nil {
+			t.Error("expected error for empty logout URL")
+		}
 	})
 
 	t.Run("GET to logout URL does not logout", func(t *testing.T) {
@@ -584,7 +582,7 @@ func TestLogoutFilterEdgeCases(t *testing.T) {
 		resp := &mockSecurityResponse{headers: map[string]string{}}
 		chain := &mockSecurityFilterChain{}
 
-		filter := NewLogoutFilter("/logout", []LogoutHandler{})
+		filter := MustNewLogoutFilter("/logout", []LogoutHandler{})
 		err := filter.DoFilter(ctx, req, resp, chain)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

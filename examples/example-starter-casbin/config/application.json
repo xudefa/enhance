@@ -3,12 +3,12 @@
     "enabled": true,
     "casbin": {
       "enabled": true,
-      "model_type": "file",
-      "model_path": "./config/casbin_model.conf",
-      "policy_type": "file",
-      "policy_path": "./config/casbin_policy.csv",
-      "auto_load": false,
-      "auto_load_interval": 5
+      "model-type": "file",
+      "model-path": "./config/casbin_model.conf",
+      "policy-type": "file",
+      "policy-path": "./config/casbin_policy.csv",
+      "auto-load": false,
+      "auto-load-interval": 5
     }
   }
 }

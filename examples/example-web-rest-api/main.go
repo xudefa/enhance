@@ -16,6 +16,7 @@ import (
 	"github.com/xudefa/enhance/web/core"
 	"github.com/xudefa/enhance/web/engine"
 	"github.com/xudefa/enhance/web/engine/stdlib"
+	"github.com/xudefa/enhance/web/server"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	fmt.Println()
 
 	// ---- 1. Create router ----
-	router := stdlib.NewRouter()
+	router := server.NewRouter()
 
 	// ---- 2. Add global middleware ----
 	router.Use(func(ctx core.Context) {
@@ -125,18 +126,18 @@ func main() {
 	})
 
 	// ---- 4. Create server ----
-	server := stdlib.NewServer(
+	srv := stdlib.NewServer(
 		engine.WithHost("127.0.0.1"),
 		engine.WithPort(9999),
 		engine.WithReadTimeout(10),
 		engine.WithWriteTimeout(10),
 	)
-	server.SetHandler(router)
+	srv.SetHandler(router)
 
 	// ---- 5. Start server in background ----
 	go func() {
 		fmt.Println("  Server starting on http://127.0.0.1:9999")
-		if err := server.Start(); err != nil && err != http.ErrServerClosed {
+		if err := srv.Start(); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		}
 	}()
@@ -162,7 +163,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := server.Stop(ctx); err != nil {
+	if err := srv.Stop(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "  Shutdown error: %v\n", err)
 	}
 	fmt.Println("  Server stopped gracefully")

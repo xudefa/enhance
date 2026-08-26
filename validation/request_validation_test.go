@@ -364,3 +364,55 @@ func TestValidateQuery(t *testing.T) {
 func intPtr(i int) *int {
 	return &i
 }
+
+func TestRequestValidator_GetConfig(t *testing.T) {
+	t.Parallel()
+	config := ValidationConfig{
+		Rules: []ValidationRule{
+			{Field: "name", Type: "required"},
+		},
+		Source: "query",
+	}
+
+	validator, err := NewRequestValidator(config)
+	if err != nil {
+		t.Fatalf("Failed to create validator: %v", err)
+	}
+
+	retrievedConfig := validator.GetConfig()
+	if retrievedConfig.Source != "query" {
+		t.Errorf("expected source 'query', got %s", retrievedConfig.Source)
+	}
+	if len(retrievedConfig.Rules) != 1 {
+		t.Errorf("expected 1 rule, got %d", len(retrievedConfig.Rules))
+	}
+}
+
+func TestFormatValueToString(t *testing.T) {
+	t.Parallel()
+
+	// 测试字符串
+	if formatValueToString("test") != "test" {
+		t.Error("expected 'test' for string input")
+	}
+
+	// 测试浮点数
+	if formatValueToString(3.14) != "3.14" {
+		t.Errorf("expected '3.14' for float input, got %s", formatValueToString(3.14))
+	}
+
+	// 测试布尔值
+	if formatValueToString(true) != "true" {
+		t.Error("expected 'true' for boolean input")
+	}
+
+	// 测试nil
+	if formatValueToString(nil) != "" {
+		t.Error("expected empty string for nil input")
+	}
+
+	// 测试整数（通过default分支）
+	if formatValueToString(42) != "42" {
+		t.Errorf("expected '42' for int input, got %s", formatValueToString(42))
+	}
+}

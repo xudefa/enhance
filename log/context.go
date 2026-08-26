@@ -132,14 +132,21 @@ func (l *ContextLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue)
 
 // Sync 同步日志缓冲区
 func (l *ContextLogger) Sync() error {
-	return l.logger.Sync()
+	if syncer, ok := l.logger.(LoggerWithSync); ok {
+		return syncer.Sync()
+	}
+	return nil
 }
 
 // With 返回带有额外字段的日志记录器
 func (l *ContextLogger) With(ctx context.Context, keys ...KeyValue) Logger {
-	return &ContextLogger{
-		logger: l.logger.With(ctx, keys...),
+	if withFields, ok := l.logger.(LoggerWithFields); ok {
+		return &ContextLogger{
+			logger: withFields.With(ctx, keys...),
+		}
 	}
+	// 如果不支持 With，返回自身
+	return l
 }
 
 // appendContextKeys 从上下文提取键值对
@@ -276,15 +283,22 @@ func (d *DynamicLevelLogger) Fatal(ctx context.Context, msg string, keys ...KeyV
 
 // Sync 同步日志缓冲区
 func (d *DynamicLevelLogger) Sync() error {
-	return d.logger.Sync()
+	if syncer, ok := d.logger.(LoggerWithSync); ok {
+		return syncer.Sync()
+	}
+	return nil
 }
 
 // With 返回带有额外字段的日志记录器
 func (d *DynamicLevelLogger) With(ctx context.Context, keys ...KeyValue) Logger {
-	return &DynamicLevelLogger{
-		logger: d.logger.With(ctx, keys...),
-		level:  d.level, // 共享 atomic 指针，子日志器与父日志器级别同步
+	if withFields, ok := d.logger.(LoggerWithFields); ok {
+		return &DynamicLevelLogger{
+			logger: withFields.With(ctx, keys...),
+			level:  d.level, // 共享 atomic 指针，子日志器与父日志器级别同步
+		}
 	}
+	// 如果不支持 With，返回自身
+	return d
 }
 
 var _ Logger = (*DynamicLevelLogger)(nil)

@@ -1,7 +1,9 @@
 package validation
 
 import (
+	"reflect"
 	"testing"
+	"time"
 )
 
 // TestFieldMatch 测试字段匹配验证
@@ -228,5 +230,410 @@ func TestCombinedCrossField(t *testing.T) {
 	err = validator.Validate(user)
 	if err == nil {
 		t.Error("预期因密码不匹配而验证失败")
+	}
+}
+
+func TestCompareFieldValue_Int(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Min int
+		Max int
+	}
+
+	cfg := Config{Min: 10, Max: 20}
+	if !validator.compareFieldValue(cfg, "Max", "15", ">") {
+		t.Error("expected Max > 15 to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Max", "20", ">=") {
+		t.Error("expected Max >= 20 to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Min", "15", "<") {
+		t.Error("expected Min < 15 to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Min", "10", "<=") {
+		t.Error("expected Min <= 10 to be true")
+	}
+}
+
+func TestCompareFieldValue_Float(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Price float64
+	}
+
+	cfg := Config{Price: 19.99}
+	if !validator.compareFieldValue(cfg, "Price", "15.0", ">") {
+		t.Error("expected Price > 15.0 to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Price", "20.0", "<") {
+		t.Error("expected Price < 20.0 to be true")
+	}
+}
+
+func TestCompareFieldValue_String(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Name string
+	}
+
+	cfg := Config{Name: "hello"}
+	if !validator.compareFieldValue(cfg, "Name", "hi", ">") {
+		t.Error("expected 'hello' length > 'hi' length to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Name", "hello world", "<") {
+		t.Error("expected 'hello' length < 'hello world' length to be true")
+	}
+}
+
+func TestCompareFieldValue_Uint(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Count uint
+	}
+
+	cfg := Config{Count: 100}
+	if !validator.compareFieldValue(cfg, "Count", "50", ">") {
+		t.Error("expected Count > 50 to be true")
+	}
+	if !validator.compareFieldValue(cfg, "Count", "200", "<") {
+		t.Error("expected Count < 200 to be true")
+	}
+}
+
+func TestCompareFieldValue_InvalidType(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Data time.Time
+	}
+
+	cfg := Config{Data: time.Now()}
+	if validator.compareFieldValue(cfg, "Data", "2024-01-01", ">") {
+		t.Error("expected time.Time comparison to return false")
+	}
+}
+
+func TestCompareFieldValue_InvalidValue(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Count int
+	}
+
+	cfg := Config{Count: 10}
+	if validator.compareFieldValue(cfg, "Count", "not_a_number", ">") {
+		t.Error("expected invalid number parsing to return false")
+	}
+}
+
+func TestCompareFieldValue_NilValue(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Name *string
+	}
+
+	cfg := Config{Name: nil}
+	if validator.compareFieldValue(cfg, "Name", "test", ">") {
+		t.Error("expected nil value comparison to return false")
+	}
+}
+
+func TestEvaluateCondition_Equal(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Type string
+	}
+
+	user := User{Type: "admin"}
+	if !validator.evaluateCondition("Type==admin", user) {
+		t.Error("expected Type==admin to be true")
+	}
+	if validator.evaluateCondition("Type==user", user) {
+		t.Error("expected Type==user to be false")
+	}
+}
+
+func TestEvaluateCondition_NotEqual(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Status string
+	}
+
+	user := User{Status: "active"}
+	if validator.evaluateCondition("Status!=active", user) {
+		t.Error("expected Status!=active to be false")
+	}
+	if !validator.evaluateCondition("Status!=inactive", user) {
+		t.Error("expected Status!=inactive to be true")
+	}
+}
+
+func TestEvaluateCondition_LessThan(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Age int
+	}
+
+	user := User{Age: 15}
+	if !validator.evaluateCondition("Age<18", user) {
+		t.Error("expected Age<18 to be true")
+	}
+	if validator.evaluateCondition("Age<10", user) {
+		t.Error("expected Age<10 to be false")
+	}
+}
+
+func TestEvaluateCondition_GreaterThan(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Score int
+	}
+
+	user := User{Score: 85}
+	if !validator.evaluateCondition("Score>80", user) {
+		t.Error("expected Score>80 to be true")
+	}
+	if validator.evaluateCondition("Score>90", user) {
+		t.Error("expected Score>90 to be false")
+	}
+}
+
+func TestEvaluateCondition_LessThanOrEqual(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Age int
+	}
+
+	user := User{Age: 18}
+	if !validator.evaluateCondition("Age<=18", user) {
+		t.Error("expected Age<=18 to be true")
+	}
+	if validator.evaluateCondition("Age<=15", user) {
+		t.Error("expected Age<=15 to be false")
+	}
+}
+
+func TestEvaluateCondition_GreaterThanOrEqual(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Score int
+	}
+
+	user := User{Score: 80}
+	if !validator.evaluateCondition("Score>=80", user) {
+		t.Error("expected Score>=80 to be true")
+	}
+	if validator.evaluateCondition("Score>=90", user) {
+		t.Error("expected Score>=90 to be false")
+	}
+}
+
+func TestEvaluateCondition_InvalidCondition(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := User{Name: "test"}
+	if validator.evaluateCondition("InvalidCondition", user) {
+		t.Error("expected invalid condition to return false")
+	}
+}
+
+func TestGetFieldValue_ValidField(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := User{Name: "John"}
+	val := validator.getFieldValue(user, "Name")
+	if val != "John" {
+		t.Errorf("expected 'John', got %v", val)
+	}
+}
+
+func TestGetFieldValue_InvalidField(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := User{Name: "John"}
+	val := validator.getFieldValue(user, "NonExistent")
+	if val != nil {
+		t.Errorf("expected nil for non-existent field, got %v", val)
+	}
+}
+
+func TestGetFieldValue_Pointer(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := &User{Name: "Jane"}
+	val := validator.getFieldValue(user, "Name")
+	if val != "Jane" {
+		t.Errorf("expected 'Jane', got %v", val)
+	}
+}
+
+func TestFieldsEqual_DifferentTypes(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	v1 := reflect.ValueOf("test")
+	v2 := reflect.ValueOf(123)
+
+	if validator.fieldsEqual(v1, v2) {
+		t.Error("expected different types to not be equal")
+	}
+}
+
+func TestFieldGreaterThan_UnsupportedType(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type Config struct {
+		Data []int
+	}
+
+	cfg := Config{Data: []int{1, 2, 3}}
+	v1 := reflect.ValueOf(cfg.Data)
+	v2 := reflect.ValueOf([]int{4, 5})
+
+	if validator.fieldGreaterThan(v1, v2) {
+		t.Error("expected slice comparison to return false")
+	}
+}
+
+func TestFieldLessThanOrEqual_String(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	v1 := reflect.ValueOf("hi")
+	v2 := reflect.ValueOf("hello")
+
+	if !validator.fieldLessThanOrEqual(v1, v2) {
+		t.Error("expected 'hi' length <= 'hello' length")
+	}
+}
+
+func TestValidateCrossField_InvalidRule(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Password        string
+		ConfirmPassword string
+	}
+
+	user := User{Password: "123", ConfirmPassword: "456"}
+	err := validator.validateCrossField(reflect.ValueOf(user.ConfirmPassword), "invalidrule", "ConfirmPassword", user)
+	if err == nil {
+		t.Error("expected error for invalid rule format")
+	}
+}
+
+func TestValidateCrossField_NonExistentField(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Password string
+	}
+
+	user := User{Password: "123"}
+	err := validator.validateCrossField(reflect.ValueOf(""), "fieldmatch=NonExistent", "Password", user)
+	if err == nil {
+		t.Error("expected error for non-existent field")
+	}
+}
+
+func TestValidateWhenCondition_InvalidRule(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := User{Name: "test"}
+	errors := validator.validateWhenCondition(reflect.ValueOf(user.Name), "invalid", "Name", user)
+	if len(errors) > 0 {
+		t.Errorf("expected no errors for invalid rule, got %v", errors)
+	}
+}
+
+func TestValidateWhenCondition_InvalidConditionFormat(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type User struct {
+		Name string
+	}
+
+	user := User{Name: "test"}
+	errors := validator.validateWhenCondition(reflect.ValueOf(user.Name), "when=condition", "Name", user)
+	if len(errors) > 0 {
+		t.Errorf("expected no errors for invalid condition format, got %v", errors)
+	}
+}
+
+func TestInterfaceOrNil_CanInterface(t *testing.T) {
+	t.Parallel()
+
+	v := reflect.ValueOf("test")
+	result := interfaceOrNil(v)
+	if result != "test" {
+		t.Errorf("expected 'test', got %v", result)
+	}
+}
+
+func TestInterfaceOrNil_CannotInterface(t *testing.T) {
+	t.Parallel()
+
+	type internal struct {
+		unexported string
+	}
+
+	obj := internal{unexported: "secret"}
+	v := reflect.ValueOf(obj).FieldByName("unexported")
+	result := interfaceOrNil(v)
+	if result != nil {
+		t.Errorf("expected nil for unexported field, got %v", result)
 	}
 }

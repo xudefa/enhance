@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 // ScopeContextKey 是 RequestScope 在 context 中的键
@@ -65,8 +65,8 @@ func MustGetRequestScope(ctx context.Context) *RequestScope {
 // RequestScopeMiddlewareFunc 返回 MiddlewareFunc 版本的请求级别作用域中间件
 //
 // 适用于使用 enhance 中间件体系的场景。
-func RequestScopeMiddlewareFunc() mvc.MiddlewareFunc {
-	return func(ctx mvc.Context) {
+func RequestScopeMiddlewareFunc() core.MiddlewareFunc {
+	return func(ctx core.Context) {
 		scope := NewRequestScope()
 		newCtx := context.WithValue(ctx.Context(), ScopeContextKey{}, scope)
 		ctx.SetContext(newCtx)

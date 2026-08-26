@@ -684,3 +684,86 @@ func TestTraceFromContext_Empty(t *testing.T) {
 		t.Error("expected empty trace ID")
 	}
 }
+
+func TestTracer_WithSampler(t *testing.T) {
+	t.Parallel()
+
+	sampler := &AlwaysOnSampler{}
+	tracer := NewTracer(WithSampler(sampler))
+
+	if tracer.sampler != sampler {
+		t.Error("expected sampler to be set")
+	}
+}
+
+func TestExporter_ExportSpans_Error(t *testing.T) {
+	t.Parallel()
+
+	exporter := &errorExporter{}
+	tracer := NewTracer(WithExporter(exporter))
+
+	span := tracer.StartSpan("test")
+	span.End()
+
+	err := tracer.Export()
+	if err == nil {
+		t.Error("expected error from exporter")
+	}
+}
+
+// errorExporter 模拟导出失败的导出器
+type errorExporter struct{}
+
+func (e *errorExporter) ExportSpans(spans []*Span) error {
+	return errors.New("export failed")
+}
+
+func TestSpan_Duration_NotEnded(t *testing.T) {
+	t.Parallel()
+
+	tracer := NewTracer()
+	span := tracer.StartSpan("test")
+
+	// 未结束的span应该返回从开始到现在的时长（应该>0）
+	duration := span.Duration()
+	if duration < 0 {
+		t.Errorf("expected positive duration for non-ended span, got %d", duration)
+	}
+
+	// 结束span后再检查
+	span.End()
+	endedDuration := span.Duration()
+	if endedDuration < 0 {
+		t.Errorf("expected positive duration for ended span, got %d", endedDuration)
+	}
+}
+
+func TestTracer_Extract_EmptyHeaders(t *testing.T) {
+	t.Parallel()
+
+	tracer := NewTracer()
+	headers := map[string]string{}
+
+	ctx := tracer.Extract(headers)
+
+	if ctx.TraceID != "" {
+		t.Errorf("expected empty trace ID, got %s", ctx.TraceID)
+	}
+}
+
+func TestSpan_SetTag_NilTags(t *testing.T) {
+	t.Parallel()
+
+	tracer := NewTracer()
+	span := tracer.StartSpan("test")
+
+	// 确保Tags已初始化
+	if span.Tags == nil {
+		t.Error("expected Tags to be initialized")
+	}
+
+	span.SetTag("key", "value")
+	if span.Tags["key"] != "value" {
+		t.Errorf("expected tag value 'value', got %v", span.Tags["key"])
+	}
+}

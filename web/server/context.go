@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 // DefaultContext 默认的 HTTP 上下文实现
@@ -16,8 +16,8 @@ type DefaultContext struct {
 	request *http.Request
 	params  map[string]string
 	index   int
-	mw      []mvc.MiddlewareFunc
-	handler mvc.HandlerFunc
+	mw      []core.MiddlewareFunc
+	handler core.HandlerFunc
 	aborted bool
 }
 
@@ -38,7 +38,7 @@ func (c *DefaultContext) WithParams(params map[string]string) *DefaultContext {
 }
 
 // WithMiddleware 设置中间件链
-func (c *DefaultContext) WithMiddleware(mw []mvc.MiddlewareFunc, handler mvc.HandlerFunc) *DefaultContext {
+func (c *DefaultContext) WithMiddleware(mw []core.MiddlewareFunc, handler core.HandlerFunc) *DefaultContext {
 	c.mw = mw
 	c.handler = handler
 	return c

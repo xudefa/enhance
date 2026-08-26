@@ -5,13 +5,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 // BenchmarkRouter_ServeHTTP_StaticRoute 测试静态路由匹配性能
 func BenchmarkRouter_ServeHTTP_StaticRoute(b *testing.B) {
 	router := NewRouter()
-	router.GET("/api/users", func(ctx mvc.Context) {
+	router.GET("/api/users", func(ctx core.Context) {
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
@@ -28,7 +28,7 @@ func BenchmarkRouter_ServeHTTP_StaticRoute(b *testing.B) {
 // BenchmarkRouter_ServeHTTP_PathParams 测试路径参数提取性能
 func BenchmarkRouter_ServeHTTP_PathParams(b *testing.B) {
 	router := NewRouter()
-	router.GET("/api/users/{id}/posts/{postId}", func(ctx mvc.Context) {
+	router.GET("/api/users/{id}/posts/{postId}", func(ctx core.Context) {
 		_ = ctx.PathParam("id")
 		_ = ctx.PathParam("postId")
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
@@ -51,13 +51,13 @@ func BenchmarkRouter_ServeHTTP_MultipleRoutes(b *testing.B) {
 	// 注册 50 个路由
 	for i := 0; i < 50; i++ {
 		path := "/api/resource" + string(rune('0'+i/10)) + string(rune('0'+i%10))
-		router.GET(path, func(ctx mvc.Context) {
+		router.GET(path, func(ctx core.Context) {
 			_ = ctx.JSON(200, map[string]string{"status": "ok"})
 		})
 	}
 
 	// 添加带参数的路由
-	router.GET("/api/users/{id}", func(ctx mvc.Context) {
+	router.GET("/api/users/{id}", func(ctx core.Context) {
 		_ = ctx.PathParam("id")
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
@@ -77,14 +77,14 @@ func BenchmarkRouter_RegisterRoute(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		router := NewRouter()
-		router.GET("/api/test", func(ctx mvc.Context) {})
+		router.GET("/api/test", func(ctx core.Context) {})
 	}
 }
 
 // BenchmarkRouter_Group 测试路由组创建性能
 func BenchmarkRouter_Group(b *testing.B) {
 	router := NewRouter()
-	router.Use(func(ctx mvc.Context) { ctx.Next() })
+	router.Use(func(ctx core.Context) { ctx.Next() })
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -98,10 +98,10 @@ func BenchmarkRouter_MiddlewareChain(b *testing.B) {
 
 	// 添加 10 个中间件
 	for i := 0; i < 10; i++ {
-		router.Use(func(ctx mvc.Context) { ctx.Next() })
+		router.Use(func(ctx core.Context) { ctx.Next() })
 	}
 
-	router.GET("/api/test", func(ctx mvc.Context) {
+	router.GET("/api/test", func(ctx core.Context) {
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
@@ -118,7 +118,7 @@ func BenchmarkRouter_MiddlewareChain(b *testing.B) {
 // BenchmarkRouter_ConcurrentRequests 测试并发请求性能
 func BenchmarkRouter_ConcurrentRequests(b *testing.B) {
 	router := NewRouter()
-	router.GET("/api/users/{id}", func(ctx mvc.Context) {
+	router.GET("/api/users/{id}", func(ctx core.Context) {
 		_ = ctx.PathParam("id")
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})

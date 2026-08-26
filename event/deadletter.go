@@ -5,21 +5,23 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/xudefa/enhance/retry"
 )
 
 var dlqKeyCounter atomic.Uint64
 
-// BackoffStrategy 退避策略类型
-type BackoffStrategy string
+// BackoffStrategy 退避策略类型（保留向后兼容，委托给 retry 包）
+type BackoffStrategy = retry.BackoffStrategy
 
 const (
-	BackoffNone        BackoffStrategy = "none"        // 无退避，立即重试
-	BackoffFixed       BackoffStrategy = "fixed"       // 固定间隔退避
-	BackoffExponential BackoffStrategy = "exponential" // 指数退避
-	BackoffLinear      BackoffStrategy = "linear"      // 线性退避
+	BackoffNone        = retry.BackoffNone
+	BackoffFixed       = retry.BackoffFixed
+	BackoffExponential = retry.BackoffExponential
+	BackoffLinear      = retry.BackoffLinear
 )
 
-// RetryPolicy 重试策略配置
+// RetryPolicy 重试策略配置（保留向后兼容，委托给 retry 包）
 type RetryPolicy struct {
 	MaxRetries   int             // 最大重试次数，0 表示不重试
 	Strategy     BackoffStrategy // 退避策略
@@ -46,39 +48,16 @@ func NoRetryPolicy() RetryPolicy {
 	}
 }
 
-// CalculateDelay 计算当前重试次数对应的延迟
+// CalculateDelay 计算当前重试次数对应的延迟（委托给 retry 包）
 func (p RetryPolicy) CalculateDelay(attempt int) time.Duration {
-	if p.Strategy == BackoffNone || p.MaxRetries == 0 {
-		return 0
+	rp := retry.RetryPolicy{
+		MaxAttempts:  p.MaxRetries + 1,
+		Strategy:     p.Strategy,
+		InitialDelay: p.InitialDelay,
+		MaxDelay:     p.MaxDelay,
+		Multiplier:   p.Multiplier,
 	}
-
-	var delay time.Duration
-	switch p.Strategy {
-	case BackoffFixed:
-		delay = p.InitialDelay
-	case BackoffLinear:
-		delay = p.InitialDelay * time.Duration(attempt+1)
-	case BackoffExponential:
-		shift := attempt
-		if shift > 62 {
-			shift = 62
-		}
-		delay = p.InitialDelay * time.Duration(float64(int64(1)<<uint(shift))*p.Multiplier)
-	default:
-		delay = p.InitialDelay
-	}
-
-	// 限制最大延迟为 24 小时，防止整数溢出导致负数延迟
-	const maxDuration = 24 * time.Hour
-	if delay < 0 || delay > maxDuration {
-		delay = maxDuration
-	}
-
-	if p.MaxDelay > 0 && delay > p.MaxDelay {
-		delay = p.MaxDelay
-	}
-
-	return delay
+	return rp.CalculateDelay(attempt)
 }
 
 // FailedEvent 失败事件记录

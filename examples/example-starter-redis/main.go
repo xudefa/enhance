@@ -55,6 +55,12 @@ func main() {
 		return
 	}
 
+	// 尝试获取 CacheInspector 接口（支持 Exists 操作）
+	cacheInspector, ok := redisCache.(cache.CacheInspector)
+	if !ok {
+		fmt.Println("Warning: cache does not support Exists operation")
+	}
+
 	// Demonstrate cache operations
 	fmt.Println("--- Cache Operations ---")
 
@@ -78,12 +84,14 @@ func main() {
 	fmt.Printf("Got value: %v\n", retrieved)
 
 	// Check if key exists
-	exists, err := redisCache.Exists(ctx, key)
-	if err != nil {
-		fmt.Printf("Exists failed: %v\n", err)
-		return
+	if cacheInspector != nil {
+		exists, err := cacheInspector.Exists(ctx, key)
+		if err != nil {
+			fmt.Printf("Exists failed: %v\n", err)
+			return
+		}
+		fmt.Printf("Key exists: %v\n", exists)
 	}
-	fmt.Printf("Key exists: %v\n", exists)
 
 	// Set multiple values
 	fmt.Println("\n--- Multiple Values ---")
@@ -120,12 +128,14 @@ func main() {
 	fmt.Println("Deleted: user:1")
 
 	// Verify deletion
-	exists, err = redisCache.Exists(ctx, "user:1")
-	if err != nil {
-		fmt.Printf("Exists check failed: %v\n", err)
-		return
+	if cacheInspector != nil {
+		exists, err := cacheInspector.Exists(ctx, "user:1")
+		if err != nil {
+			fmt.Printf("Exists check failed: %v\n", err)
+			return
+		}
+		fmt.Printf("user:1 exists after deletion: %v\n", exists)
 	}
-	fmt.Printf("user:1 exists after deletion: %v\n", exists)
 
 	fmt.Println("\n=== Example completed successfully ===")
 }

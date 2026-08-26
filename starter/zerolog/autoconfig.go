@@ -51,7 +51,7 @@ func (c *ZerologAutoConfiguration) Configure(ctx boot.ApplicationContext) error 
 
 	// 注册 Zerolog 适配器到 IoC 容器（标记为 Primary，确保其他组件优先获取到 zerolog）
 	// 使用 Register 泛型函数确保 ConcreteType 是 log.Logger 接口类型，而不是 *ZerologLogger 具体类型
-	if err := ctx.Container().RegisterInstance(zerologLogger, reflect.TypeOf(zerologLogger)); err != nil {
+	if err := ctx.Container().RegisterInstance(zerologLogger, reflect.TypeFor[log.Logger]()); err != nil {
 		return fmt.Errorf("failed to register Zerolog Logger: %w", err)
 	}
 

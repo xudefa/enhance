@@ -502,11 +502,18 @@ func (p *UserServiceProxy) GetUser(id int) (*User, error) {
 
 ### 3. 性能监控
 
-使用 AOP 指标监控性能，及时发现性能问题。
+使用环绕通知记录方法执行时间，及时发现性能问题。
 
 ```go
-metrics := aop.GetGlobalAopMetrics()
-fmt.Printf("Average latency: %v\n", metrics["average_latency"])
+advice := aop.Around(func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
+    start := time.Now()
+    result := proceed(jp.Args()...)
+    elapsed := time.Since(start)
+    if elapsed > 100*time.Millisecond {
+        log.Printf("Slow method: %s, elapsed: %v", jp.Method(), elapsed)
+    }
+    return result
+})
 ```
 
 ### 4. 错误处理

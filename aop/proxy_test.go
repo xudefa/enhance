@@ -20,7 +20,7 @@ func TestProxyFactory_SetAspects(t *testing.T) {
 	aspects := []*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed() }),
 			Order:    1,
 		},
 	}
@@ -85,12 +85,12 @@ func TestProxyFactory_filterAspects(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    1,
 		},
 		{
 			PointCut: MatchByName("DoAnother"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    2,
 		},
 	})
@@ -109,17 +109,17 @@ func TestProxyFactory_filterAspects_SortedByOrder(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    10,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    1,
 		},
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    5,
 		},
 	})
@@ -141,11 +141,11 @@ func TestProxyFactory_buildAdviceChain(t *testing.T) {
 	callOrder := []int{}
 
 	advices := []Advice{
-		Around(func(jp JoinPoint, proceed func() any) any {
+		Around(func(jp JoinPoint, proceed ProceedFunc) any {
 			callOrder = append(callOrder, 1)
 			return proceed()
 		}),
-		Around(func(jp JoinPoint, proceed func() any) any {
+		Around(func(jp JoinPoint, proceed ProceedFunc) any {
 			callOrder = append(callOrder, 2)
 			return proceed()
 		}),
@@ -180,7 +180,7 @@ func TestProxyFactory_filterAspects_NoMatch(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -199,7 +199,7 @@ func TestProxyFactory_SetAspects_ClearsMethodCache(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -214,7 +214,7 @@ func TestProxyFactory_SetAspects_ClearsMethodCache(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoAnother"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return nil }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return nil }),
 			Order:    1,
 		},
 	})
@@ -286,3 +286,167 @@ func (m *mockJoinPointForProxyTest) GetResult() any     { return nil }
 func (m *mockJoinPointForProxyTest) GetError() error    { return nil }
 func (m *mockJoinPointForProxyTest) SetResult(v any)    {}
 func (m *mockJoinPointForProxyTest) SetError(err error) {}
+
+func TestProxyFactory_SetExecutor(t *testing.T) {
+	t.Parallel()
+
+	factory := NewProxyFactory(&TestUserService{})
+	mockExec := &mockChainExecutorForProxyTest{}
+	factory.SetExecutor(mockExec)
+
+	if factory.executor == nil {
+		t.Error("expected executor to be set")
+	}
+}
+
+func TestReflectiveAopProxy_SetExecutor(t *testing.T) {
+	t.Parallel()
+
+	proxy := &ReflectiveAopProxy{
+		target:      &TestUserService{},
+		targetType:  reflect.TypeOf(&TestUserService{}),
+		methodCache: make(map[string][]*AspectMeta),
+	}
+
+	mockExec := &mockChainExecutorForProxyTest{}
+	proxy.SetExecutor(mockExec)
+
+	if proxy.executor == nil {
+		t.Error("expected executor to be set")
+	}
+}
+
+func TestReflectiveAopProxy_Target(t *testing.T) {
+	t.Parallel()
+
+	target := &TestUserService{}
+	proxy := &ReflectiveAopProxy{
+		target:      target,
+		targetType:  reflect.TypeOf(&TestUserService{}),
+		methodCache: make(map[string][]*AspectMeta),
+	}
+
+	if proxy.Target() != target {
+		t.Error("expected Target() to return original target")
+	}
+}
+
+func TestReflectiveAopProxy_MustCall(t *testing.T) {
+	t.Parallel()
+
+	target := &TestUserService{}
+	proxy := &ReflectiveAopProxy{
+		target:      target,
+		targetType:  reflect.TypeOf(&TestUserService{}),
+		methodCache: make(map[string][]*AspectMeta),
+	}
+
+	// MustCall should panic when method doesn't exist
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected MustCall to panic for non-existent method")
+		}
+	}()
+
+	proxy.MustCall("NonExistentMethod")
+}
+
+func TestIsReflectiveProxy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("proxy object", func(t *testing.T) {
+		t.Parallel()
+		proxy := &ReflectiveAopProxy{
+			target:      &TestUserService{},
+			targetType:  reflect.TypeOf(&TestUserService{}),
+			methodCache: make(map[string][]*AspectMeta),
+		}
+
+		if !IsReflectiveProxy(proxy) {
+			t.Error("expected IsReflectiveProxy to return true for proxy")
+		}
+	})
+
+	t.Run("non-proxy object", func(t *testing.T) {
+		t.Parallel()
+		target := &TestUserService{}
+
+		if IsReflectiveProxy(target) {
+			t.Error("expected IsReflectiveProxy to return false for non-proxy")
+		}
+	})
+}
+
+func TestAsReflectiveProxy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("proxy object", func(t *testing.T) {
+		t.Parallel()
+		proxy := &ReflectiveAopProxy{
+			target:      &TestUserService{},
+			targetType:  reflect.TypeOf(&TestUserService{}),
+			methodCache: make(map[string][]*AspectMeta),
+		}
+
+		result, ok := AsReflectiveProxy(proxy)
+		if !ok {
+			t.Error("expected AsReflectiveProxy to return true for proxy")
+		}
+		if result != proxy {
+			t.Error("expected result to be same proxy")
+		}
+	})
+
+	t.Run("non-proxy object", func(t *testing.T) {
+		t.Parallel()
+		target := &TestUserService{}
+
+		result, ok := AsReflectiveProxy(target)
+		if ok {
+			t.Error("expected AsReflectiveProxy to return false for non-proxy")
+		}
+		if result != nil {
+			t.Error("expected result to be nil for non-proxy")
+		}
+	})
+}
+
+func TestInterfaceProxyWrapper_Methods(t *testing.T) {
+	t.Parallel()
+
+	target := &TestUserService{}
+	advisors := []*AspectMeta{}
+	iface := reflect.TypeOf((*TestServiceInterface)(nil)).Elem()
+
+	wrapper := NewInterfaceProxyWrapper(target, advisors, iface)
+
+	t.Run("GetTarget", func(t *testing.T) {
+		t.Parallel()
+		if wrapper.GetTarget() != target {
+			t.Error("expected GetTarget to return original target")
+		}
+	})
+
+	t.Run("GetAdvisors", func(t *testing.T) {
+		t.Parallel()
+		if len(wrapper.GetAdvisors()) != 0 {
+			t.Errorf("expected 0 advisors, got %d", len(wrapper.GetAdvisors()))
+		}
+	})
+
+	t.Run("SetExecutor", func(t *testing.T) {
+		t.Parallel()
+		mockExec := &mockChainExecutorForProxyTest{}
+		wrapper.SetExecutor(mockExec)
+		if wrapper.executor == nil {
+			t.Error("expected executor to be set")
+		}
+	})
+}
+
+// mockChainExecutorForProxyTest 用于测试的 mock ChainExecutor
+type mockChainExecutorForProxyTest struct{}
+
+func (m *mockChainExecutorForProxyTest) Execute(inv Invocation, advisors []*AspectMeta, fallback func(...any) any) any {
+	return nil
+}

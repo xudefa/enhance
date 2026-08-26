@@ -1,0 +1,8 @@
+{
+  "viper": {
+    "enabled": true,
+    "config-name": "app-config",
+    "config-type": "yaml",
+    "config-path": "config"
+  }
+}

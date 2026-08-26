@@ -138,7 +138,7 @@ HTTP请求 → SecurityFilterChainHandler → 过滤器链 → 业务Handler →
 
 **阶段3：各过滤器执行（按配置顺序）**
 
-7. **SecurityContextHolderFilter** - 安全上下文处理
+7. **AuthContextFilter** - 安全上下文处理
    - `DoFilter()` - 保存并清除全局认证信息
    - 执行后续过滤器链
    - 请求结束后恢复认证信息并清理
@@ -288,7 +288,7 @@ AccessDecisionManager.Decide(auth, request, attributes)
 #### 过滤器执行顺序示例
 
 默认过滤器链顺序（从上到下执行）：
-1. `SecurityContextHolderFilter` - 安全上下文管理
+1. `AuthContextFilter` - 安全上下文管理
 2. `AnonymousAuthenticationFilter` - 匿名认证
 3. `CsrfFilter`（如启用）- CSRF防护
 4. `LogoutFilter`（如配置）- 登出处理
@@ -334,7 +334,7 @@ AccessDecisionManager.Decide(auth, request, attributes)
 | 过滤器 | 说明 |
 |--------|------|
 | `FilterChainProxy` | 过滤器链代理 |
-| `SecurityContextHolderFilter` | 安全上下文持有者过滤器 |
+| `AuthContextFilter` | 安全上下文过滤器 |
 | `AnonymousAuthenticationFilter` | 匿名认证过滤器 |
 | `ExceptionTranslationFilter` | 异常转换过滤器 |
 | `FilterSecurityInterceptor` | 过滤器安全拦截器 |
@@ -346,7 +346,7 @@ AccessDecisionManager.Decide(auth, request, attributes)
 1. CORS 过滤器（如启用）
 2. 限流过滤器（如启用）
 3. JWT 认证过滤器（如启用 jwt 模块）
-4. SecurityContextHolder 过滤器
+4. AuthContext 过滤器
 5. Anonymous 认证过滤器
 6. ExceptionTranslation 过滤器
 7. FilterSecurityInterceptor

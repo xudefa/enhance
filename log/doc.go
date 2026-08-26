@@ -106,8 +106,18 @@ type Logger interface {
 	Warn(ctx context.Context, msg string, keys ...KeyValue)
 	// Error 记录错误日志。
 	Error(ctx context.Context, msg string, keys ...KeyValue)
+}
+
+// LoggerWithSync 支持日志同步。
+type LoggerWithSync interface {
+	Logger
 	// Sync 同步日志缓冲区，确保日志写入完成。
 	Sync() error
+}
+
+// LoggerWithFields 支持添加额外字段。
+type LoggerWithFields interface {
+	Logger
 	// With 返回带有额外字段的日志记录器。
 	With(ctx context.Context, keys ...KeyValue) Logger
 }

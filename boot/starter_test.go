@@ -37,6 +37,17 @@ func TestStarterRegistry_Add(t *testing.T) {
 	}
 }
 
+func TestStarterRegistry_AddMethod(t *testing.T) {
+	t.Parallel()
+	registry := newStarterRegistryImpl()
+	s := newMockStarter("test")
+
+	registry.Add(s)
+	if len(registry.starters) != 1 {
+		t.Fatal("expected 1 starter in registry")
+	}
+}
+
 func TestStarterRegistry_GetAll(t *testing.T) {
 	t.Parallel()
 	registry := NewStarterRegistry()
@@ -94,6 +105,7 @@ func TestStarterRegistry_Empty(t *testing.T) {
 }
 
 func TestRegisterStarterGlobal(t *testing.T) {
+	// NOTE: 此测试修改全局状态，不能使用 t.Parallel()
 	orig := globalStarterRegistry.Load()
 	testReg := newStarterRegistryImpl()
 	globalStarterRegistry.Store(testReg)

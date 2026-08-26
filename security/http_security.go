@@ -10,16 +10,16 @@ import (
 
 // httpSecurity HTTP安全配置实现
 type httpSecurity struct {
-	authenticationManager       AuthenticationManager
-	userDetailsService          UserDetailsService
-	passwordEncoder             PasswordEncoder
-	accessDecisionManager       AccessDecisionManager
-	securityMetadataSource      SecurityMetadataSource
-	filters                     []SecurityFilter
-	anonymousFilter             *AnonymousAuthenticationFilter
-	exceptionTranslationFilter  *ExceptionTranslationFilter
-	filterSecurityInterceptor   *FilterSecurityInterceptor
-	securityContextHolderFilter *SecurityContextHolderFilter
+	authenticationManager      AuthenticationManager
+	userDetailsService         UserDetailsService
+	passwordEncoder            PasswordEncoder
+	accessDecisionManager      AccessDecisionManager
+	securityMetadataSource     SecurityMetadataSource
+	filters                    []SecurityFilter
+	anonymousFilter            *AnonymousAuthenticationFilter
+	exceptionTranslationFilter *ExceptionTranslationFilter
+	filterSecurityInterceptor  *FilterSecurityInterceptor
+	authContextFilter          *AuthContextFilter
 
 	csrfEnabled         bool
 	csrfTokenRepository CsrfTokenRepository
@@ -236,7 +236,7 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 		h.accessDecisionManager = NewAffirmativeBased(webExpressionVoter, authenticatedVoter, roleVoter)
 	}
 
-	h.securityContextHolderFilter = NewSecurityContextHolderFilter()
+	h.authContextFilter = NewAuthContextFilter()
 
 	if h.anonymousFilter == nil {
 		h.anonymousFilter = NewAnonymousAuthenticationFilter()
@@ -255,17 +255,23 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	}
 
 	defaultFilters := []SecurityFilter{
-		h.securityContextHolderFilter,
+		h.authContextFilter,
 		h.anonymousFilter,
 	}
 
 	if h.csrfEnabled {
-		csrfFilter := NewCsrfFilter(h.csrfTokenRepository)
+		csrfFilter, err := NewCsrfFilter(h.csrfTokenRepository)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create CSRF filter: %w", err)
+		}
 		defaultFilters = append(defaultFilters, csrfFilter)
 	}
 
 	if h.logoutUrl != "" {
-		logoutFilter := NewLogoutFilter(h.logoutUrl, h.logoutHandlers)
+		logoutFilter, err := NewLogoutFilter(h.logoutUrl, h.logoutHandlers)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create logout filter: %w", err)
+		}
 		if h.logoutSuccessHandler != nil {
 			logoutFilter.SetSuccessHandler(h.logoutSuccessHandler)
 		}
@@ -298,7 +304,7 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 		return allFilters[i].Order() < allFilters[j].Order()
 	})
 
-	proxy := NewFilterChainProxy(allFilters, &DefaultSecurityFilterChain{})
+	proxy := newFilterChainProxy(allFilters, &DefaultSecurityFilterChain{})
 	return &securityFilterChainAdapter{proxy: proxy}, nil
 }
 

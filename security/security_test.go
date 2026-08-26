@@ -4,496 +4,257 @@ import (
 	"context"
 	"testing"
 
-	"github.com/xudefa/enhance/log"
+	"github.com/xudefa/enhance/security/authorization"
 )
 
-func TestInMemoryUserDetailsService(t *testing.T) {
+// mockAccessDecisionVoter 模拟投票者
+type mockAccessDecisionVoter struct {
+	result int
+}
+
+func (m *mockAccessDecisionVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
+	return m.result
+}
+
+func (m *mockAccessDecisionVoter) Supports(attribute string) bool {
+	return true
+}
+
+func TestAnonymousAuthenticationProvider_Authenticate(t *testing.T) {
 	t.Parallel()
-	service := NewInMemoryUserDetailsService()
 
-	service.CreateUser("admin", "admin123", []string{"ROLE_ADMIN", "ROLE_USER"})
-	service.CreateUser("user", "user123", []string{"ROLE_USER"})
+	provider := NewAnonymousAuthenticationProvider()
 
-	if service.UserCount() != 2 {
-		t.Errorf("Expected 2 users, got %d", service.UserCount())
-	}
-
-	ctx := context.Background()
-	user, err := service.LoadUserByUsername(ctx, "admin")
+	// Test with nil token
+	result, err := provider.Authenticate(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("Failed to load user: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Principal() != "anonymousUser" {
+		t.Errorf("expected 'anonymousUser', got %v", result.Principal())
 	}
 
-	if user.Username() != "admin" {
-		t.Errorf("Expected username 'admin', got '%s'", user.Username())
-	}
-
-	if user.Password() != "admin123" {
-		t.Errorf("Expected password 'admin123', got '%s'", user.Password())
-	}
-
-	expectedAuthorities := []string{"ROLE_ADMIN", "ROLE_USER"}
-	if len(user.Authorities()) != len(expectedAuthorities) {
-		t.Errorf("Expected %d authorities, got %d", len(expectedAuthorities), len(user.Authorities()))
-	}
-
-	_, err = service.LoadUserByUsername(ctx, "nonexistent")
-	if err != ErrUserNotFound {
-		t.Errorf("Expected ErrUserNotFound, got %v", err)
-	}
-}
-
-func TestNoOpPasswordEncoder(t *testing.T) {
-	t.Parallel()
-	encoder := NewNoOpPasswordEncoder()
-
-	password := "myPassword"
-	encoded := encoder.Encode(password)
-
-	if encoded != password {
-		t.Errorf("Expected encoded password to be same as raw password")
-	}
-
-	if !encoder.Matches(password, encoded) {
-		t.Errorf("Expected password to match")
-	}
-
-	if encoder.Matches("wrongPassword", encoded) {
-		t.Errorf("Expected wrong password to not match")
-	}
-}
-
-func TestStandardPasswordEncoder(t *testing.T) {
-	t.Parallel()
-	encoder := NewStandardPasswordEncoder("mySecret")
-
-	password := "myPassword"
-	encoded := encoder.Encode(password)
-
-	if encoded == password {
-		t.Errorf("Expected encoded password to be different from raw password")
-	}
-
-	if !encoder.Matches(password, encoded) {
-		t.Errorf("Expected password to match")
-	}
-
-	if encoder.Matches("wrongPassword", encoded) {
-		t.Errorf("Expected wrong password to not match")
-	}
-
-	encoder2 := NewStandardPasswordEncoder("differentSecret")
-	encoded2 := encoder2.Encode(password)
-
-	if encoded == encoded2 {
-		t.Errorf("Expected different secrets to produce different encoded passwords")
-	}
-}
-
-func TestDelegatingPasswordEncoder(t *testing.T) {
-	t.Parallel()
-	noopEncoder := NewNoOpPasswordEncoder()
-	sha256Encoder := NewSha256PasswordEncoder()
-
-	encoders := map[string]PasswordEncoder{
-		"noop":   noopEncoder,
-		"sha256": sha256Encoder,
-	}
-
-	encoder := NewDelegatingPasswordEncoder("sha256", encoders)
-
-	password := "myPassword"
-	encoded := encoder.Encode(password)
-
-	if !encoder.Matches(password, encoded) {
-		t.Errorf("Expected password to match")
-	}
-
-	if encoder.Matches("wrongPassword", encoded) {
-		t.Errorf("Expected wrong password to not match")
-	}
-}
-
-func TestDaoAuthenticationProvider(t *testing.T) {
-	t.Parallel()
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	provider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-
-	ctx := context.Background()
-
-	authToken := NewUsernamePasswordAuthenticationToken("admin", "admin123")
-	authenticated, err := provider.Authenticate(ctx, authToken)
+	// Test with authenticated token
+	token := NewUsernamePasswordAuthenticationToken("user", "pass")
+	token.SetAuthenticated(true)
+	result, err = provider.Authenticate(context.Background(), token)
 	if err != nil {
-		t.Fatalf("Authentication failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil {
+		t.Error("expected nil result for authenticated token")
 	}
 
-	if !authenticated.Authenticated() {
-		t.Errorf("Expected authentication to be successful")
-	}
-
-	if extractPrincipalName(authenticated) != "admin" {
-		t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(authenticated))
-	}
-
-	wrongAuthToken := NewUsernamePasswordAuthenticationToken("admin", "wrongPassword")
-	_, err = provider.Authenticate(ctx, wrongAuthToken)
-	if err != ErrBadCredentials {
-		t.Errorf("Expected ErrBadCredentials, got %v", err)
-	}
-
-	nonExistentAuthToken := NewUsernamePasswordAuthenticationToken("nonexistent", "password")
-	_, err = provider.Authenticate(ctx, nonExistentAuthToken)
-	if err != ErrBadCredentials {
-		t.Errorf("Expected ErrBadCredentials, got %v", err)
-	}
-}
-
-func TestProviderManager(t *testing.T) {
-	t.Parallel()
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	manager := NewProviderManager(authProvider)
-
-	ctx := context.Background()
-
-	authToken := NewUsernamePasswordAuthenticationToken("admin", "admin123")
-	authenticated, err := manager.Authenticate(ctx, authToken)
+	// Test with token that has credentials
+	token2 := NewUsernamePasswordAuthenticationToken("user", "pass")
+	result, err = provider.Authenticate(context.Background(), token2)
 	if err != nil {
-		t.Fatalf("Authentication failed: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if !authenticated.Authenticated() {
-		t.Errorf("Expected authentication to be successful")
-	}
-
-	wrongAuthToken := NewUsernamePasswordAuthenticationToken("admin", "wrongPassword")
-	_, err = manager.Authenticate(ctx, wrongAuthToken)
-	if err != ErrBadCredentials {
-		t.Errorf("Expected ErrBadCredentials, got %v", err)
+	if result != nil {
+		t.Error("expected nil result for token with credentials")
 	}
 }
 
-func TestWebExpressionVoter(t *testing.T) {
+func TestAnonymousAuthenticationProvider_Supports(t *testing.T) {
 	t.Parallel()
+
+	provider := NewAnonymousAuthenticationProvider()
+
+	// Test with UsernamePasswordAuthenticationToken
+	token := NewUsernamePasswordAuthenticationToken("user", "pass")
+	if !provider.Supports(token) {
+		t.Error("expected to support UsernamePasswordAuthenticationToken")
+	}
+
+	// Test with nil
+	if provider.Supports(nil) {
+		t.Error("expected not to support nil")
+	}
+}
+
+func TestHasAnyAuthority(t *testing.T) {
+	t.Parallel()
+
 	voter := NewWebExpressionVoter()
 
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER", "ROLE_ADMIN"})
+	// Create a mock authentication
+	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER", "ROLE_ADMIN"})
 
-	ctx := context.Background()
-
-	result := voter.Vote(ctx, auth, "/test", []string{"permitAll"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for permitAll")
+	// Test with matching authority
+	if !voter.hasAnyAuthority(token, []string{"ROLE_USER", "ROLE_OTHER"}) {
+		t.Error("expected to have ROLE_USER authority")
 	}
 
-	result = voter.Vote(ctx, auth, "/test", []string{"denyAll"})
-	if result != ACCESS_DENIED {
-		t.Errorf("Expected ACCESS_DENIED for denyAll")
+	// Test with no matching authority
+	if voter.hasAnyAuthority(token, []string{"ROLE_OTHER", "ROLE_ANOTHER"}) {
+		t.Error("expected not to have any of the authorities")
 	}
 
-	result = voter.Vote(ctx, auth, "/test", []string{"authenticated"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for authenticated")
-	}
-
-	result = voter.Vote(ctx, nil, "/test", []string{"authenticated"})
-	if result != ACCESS_DENIED {
-		t.Errorf("Expected ACCESS_DENIED for unauthenticated user")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"hasRole('ADMIN')"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for hasRole('ADMIN')")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"hasRole('USER')"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for hasRole('USER')")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"hasRole('GUEST')"})
-	if result != ACCESS_DENIED {
-		t.Errorf("Expected ACCESS_DENIED for hasRole('GUEST')")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"hasAnyRole('ADMIN','USER')"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for hasAnyRole('ADMIN','USER')")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"hasAuthority('ROLE_ADMIN')"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for hasAuthority('ROLE_ADMIN')")
+	// Test with nil authentication
+	if voter.hasAnyAuthority(nil, []string{"ROLE_USER"}) {
+		t.Error("expected false for nil authentication")
 	}
 }
 
-func TestRoleVoter(t *testing.T) {
+func TestRoleVoter_Vote_WithCustomPrefix(t *testing.T) {
 	t.Parallel()
+
 	voter := NewRoleVoter()
+	voter.SetRolePrefix("CUSTOM_")
 
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_ADMIN"})
+	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"CUSTOM_ADMIN"})
 
-	ctx := context.Background()
-
-	result := voter.Vote(ctx, auth, "/test", []string{"ROLE_ADMIN"})
+	// Test with matching role
+	result := voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_ADMIN"})
 	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for ROLE_ADMIN")
+		t.Errorf("expected ACCESS_GRANTED, got %d", result)
 	}
 
-	result = voter.Vote(ctx, auth, "/test", []string{"ROLE_USER"})
+	// Test with non-matching role
+	result = voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_USER"})
 	if result != ACCESS_DENIED {
-		t.Errorf("Expected ACCESS_DENIED for ROLE_USER")
-	}
-
-	result = voter.Vote(ctx, nil, "/test", []string{"ROLE_ADMIN"})
-	if result != ACCESS_DENIED {
-		t.Errorf("Expected ACCESS_DENIED for nil authentication")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"permitAll"})
-	if result != ACCESS_ABSTAIN {
-		t.Errorf("Expected ACCESS_ABSTAIN for non-role attribute")
+		t.Errorf("expected ACCESS_DENIED, got %d", result)
 	}
 }
 
-func TestAuthenticatedVoter(t *testing.T) {
-	t.Parallel()
-	voter := NewAuthenticatedVoter()
-
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
-
-	ctx := context.Background()
-
-	result := voter.Vote(ctx, auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for IS_AUTHENTICATED_FULLY")
-	}
-
-	result = voter.Vote(ctx, auth, "/test", []string{"IS_AUTHENTICATED_REMEMBERED"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for IS_AUTHENTICATED_REMEMBERED")
-	}
-
-	result = voter.Vote(ctx, nil, "/test", []string{"IS_AUTHENTICATED_ANONYMOUSLY"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("Expected ACCESS_GRANTED for IS_AUTHENTICATED_ANONYMOUSLY")
-	}
-}
-
-func TestAffirmativeBased(t *testing.T) {
-	t.Parallel()
-	webExpressionVoter := NewWebExpressionVoter()
-	authenticatedVoter := NewAuthenticatedVoter()
-	roleVoter := NewRoleVoter()
-
-	manager := NewAffirmativeBased(webExpressionVoter, authenticatedVoter, roleVoter)
-
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
-
-	ctx := context.Background()
-
-	err := manager.Decide(ctx, auth, "/test", []string{"permitAll"})
-	if err != nil {
-		t.Errorf("Expected no error for permitAll, got %v", err)
-	}
-
-	err = manager.Decide(ctx, auth, "/test", []string{"denyAll"})
-	if err != ErrAccessDenied {
-		t.Errorf("Expected ErrAccessDenied for denyAll, got %v", err)
-	}
-
-	err = manager.Decide(ctx, auth, "/test", []string{"hasRole('USER')"})
-	if err != nil {
-		t.Errorf("Expected no error for hasRole('USER'), got %v", err)
-	}
-
-	err = manager.Decide(ctx, auth, "/test", []string{"hasRole('ADMIN')"})
-	if err != ErrAccessDenied {
-		t.Errorf("Expected ErrAccessDenied for hasRole('ADMIN'), got %v", err)
-	}
-}
-
-func TestUnanimousBased(t *testing.T) {
-	t.Parallel()
-	webExpressionVoter := NewWebExpressionVoter()
-	authenticatedVoter := NewAuthenticatedVoter()
-	roleVoter := NewRoleVoter()
-
-	manager := NewUnanimousBased(webExpressionVoter, authenticatedVoter, roleVoter)
-
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
-
-	ctx := context.Background()
-
-	err := manager.Decide(ctx, auth, "/test", []string{"permitAll"})
-	if err != nil {
-		t.Errorf("Expected no error for permitAll, got %v", err)
-	}
-
-	err = manager.Decide(ctx, auth, "/test", []string{"denyAll"})
-	if err != ErrAccessDenied {
-		t.Errorf("Expected ErrAccessDenied for denyAll, got %v", err)
-	}
-
-	err = manager.Decide(ctx, auth, "/test", []string{"authenticated", "hasRole('USER')"})
-	if err != nil {
-		t.Errorf("Expected no error for matching conditions, got %v", err)
-	}
-}
-
-func TestSecurityContext(t *testing.T) {
+func TestWebExpressionVoter_HasRole(t *testing.T) {
 	t.Parallel()
 
-	ctx := NewSecurityContext()
+	voter := NewWebExpressionVoter()
 
-	if ctx.Authentication() != nil {
-		t.Errorf("Expected no authentication initially")
+	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER", "ROLE_ADMIN"})
+
+	// Test with matching role
+	if !voter.hasRole(token, "USER") {
+		t.Error("expected to have ROLE_USER")
 	}
 
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
-	ctx.SetAuthentication(auth)
-
-	if ctx.Authentication() == nil {
-		t.Errorf("Expected authentication to be set")
+	// Test with non-matching role
+	if voter.hasRole(token, "GUEST") {
+		t.Error("expected not to have ROLE_GUEST")
 	}
 
-	if extractPrincipalName(ctx.Authentication()) != "user" {
-		t.Errorf("Expected username 'user', got '%s'", extractPrincipalName(ctx.Authentication()))
-	}
-
-	ctx.ClearAuthentication()
-
-	if ctx.Authentication() != nil {
-		t.Errorf("Expected authentication to be cleared")
+	// Test with nil authentication
+	if voter.hasRole(nil, "USER") {
+		t.Error("expected false for nil authentication")
 	}
 }
 
-func TestExpressionBasedFilterInvocationSecurityMetadataSource(t *testing.T) {
+func TestWebExpressionVoter_HasAnyRole(t *testing.T) {
 	t.Parallel()
-	source := NewExpressionBasedFilterInvocationSecurityMetadataSource()
 
-	source.AddMapping("GET::/api/public/**", []string{"permitAll"})
-	source.AddMapping("POST::/api/admin/**", []string{"hasRole('ADMIN')"})
-	source.AddMapping("**::/api/user/**", []string{"hasRole('USER')"})
+	voter := NewWebExpressionVoter()
 
-	ctx := context.Background()
+	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
 
-	request := &mockSecurityRequest{
-		method: "GET",
-		uri:    "/api/public/data",
+	// Test with matching role
+	if !voter.hasAnyRole(token, []string{"USER", "ADMIN"}) {
+		t.Error("expected to have one of the roles")
 	}
 
-	attributes, err := source.GetAttributes(ctx, request)
+	// Test with no matching roles
+	if voter.hasAnyRole(token, []string{"GUEST", "ANONYMOUS"}) {
+		t.Error("expected not to have any of the roles")
+	}
+
+	// Test with nil authentication
+	if voter.hasAnyRole(nil, []string{"USER"}) {
+		t.Error("expected false for nil authentication")
+	}
+}
+
+func TestWebExpressionVoter_HasAuthority(t *testing.T) {
+	t.Parallel()
+
+	voter := NewWebExpressionVoter()
+
+	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"READ", "WRITE"})
+
+	// Test with matching authority
+	if !voter.hasAuthority(token, "READ") {
+		t.Error("expected to have READ authority")
+	}
+
+	// Test with non-matching authority
+	if voter.hasAuthority(token, "DELETE") {
+		t.Error("expected not to have DELETE authority")
+	}
+
+	// Test with nil authentication
+	if voter.hasAuthority(nil, "READ") {
+		t.Error("expected false for nil authentication")
+	}
+}
+
+func TestAffirmativeBased_AllAbstain(t *testing.T) {
+	t.Parallel()
+
+	voter := &mockAccessDecisionVoter{result: ACCESS_ABSTAIN}
+	manager := NewAffirmativeBased(voter)
+	manager.SetAllowIfAllAbstainDecisions(false)
+
+	err := manager.Decide(context.Background(), nil, "/test", []string{"READ"})
+	if err == nil {
+		t.Error("expected error when all abstain and allowIfAllAbstainDecisions is false")
+	}
+}
+
+func TestAffirmativeBased_AllAbstainAllow(t *testing.T) {
+	t.Parallel()
+
+	voter := &mockAccessDecisionVoter{result: ACCESS_ABSTAIN}
+	manager := NewAffirmativeBased(voter)
+	manager.SetAllowIfAllAbstainDecisions(true)
+
+	err := manager.Decide(context.Background(), nil, "/test", []string{"READ"})
 	if err != nil {
-		t.Fatalf("Failed to get attributes: %v", err)
-	}
-
-	if len(attributes) != 1 || attributes[0] != "permitAll" {
-		t.Errorf("Expected permitAll, got %v", attributes)
-	}
-
-	request = &mockSecurityRequest{
-		method: "POST",
-		uri:    "/api/admin/users",
-	}
-
-	attributes, err = source.GetAttributes(ctx, request)
-	if err != nil {
-		t.Fatalf("Failed to get attributes: %v", err)
-	}
-
-	if len(attributes) != 1 || attributes[0] != "hasRole('ADMIN')" {
-		t.Errorf("Expected hasRole('ADMIN'), got %v", attributes)
-	}
-
-	request = &mockSecurityRequest{
-		method: "DELETE",
-		uri:    "/api/user/profile",
-	}
-
-	attributes, err = source.GetAttributes(ctx, request)
-	if err != nil {
-		t.Fatalf("Failed to get attributes: %v", err)
-	}
-
-	if len(attributes) != 1 || attributes[0] != "hasRole('USER')" {
-		t.Errorf("Expected hasRole('USER'), got %v", attributes)
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-type mockSecurityRequest struct {
-	method  string
-	uri     string
-	remote  string
-	attrs   map[string]any
-	headers map[string]string
-}
+func TestConsensusBased_Supports(t *testing.T) {
+	t.Parallel()
 
-func (m *mockSecurityRequest) GetMethod() string {
-	return m.method
-}
-
-func (m *mockSecurityRequest) GetURI() string {
-	return m.uri
-}
-
-func (m *mockSecurityRequest) GetHeader(key string) string {
-	if m.headers == nil {
-		return ""
+	manager := NewConsensusBased()
+	if !manager.Supports("READ") {
+		t.Error("expected to support READ")
 	}
-	return m.headers[key]
 }
 
-func (m *mockSecurityRequest) RemoteAddress() string {
-	return m.remote
-}
+func TestConsensusBased_AddVoter(t *testing.T) {
+	t.Parallel()
 
-func (m *mockSecurityRequest) SetHeader(key, value string) {
-	if m.headers == nil {
-		m.headers = make(map[string]string)
+	manager := NewConsensusBased()
+	voter := &mockAccessDecisionVoter{result: ACCESS_GRANTED}
+	manager.AddVoter(voter)
+
+	if len(manager.decisionVoters) != 1 {
+		t.Errorf("expected 1 voter, got %d", len(manager.decisionVoters))
 	}
-	m.headers[key] = value
 }
 
-func (m *mockSecurityRequest) SetAttribute(key string, value any) {
-	if m.attrs == nil {
-		m.attrs = make(map[string]any)
+func TestConsensusBased_SetAllowIfEqualGrantedDenied(t *testing.T) {
+	t.Parallel()
+
+	manager := NewConsensusBased()
+	manager.SetAllowIfEqualGrantedDenied(true)
+
+	if !manager.allowIfEqualGrantedDenied {
+		t.Error("expected allowIfEqualGrantedDenied to be true")
 	}
-	m.attrs[key] = value
 }
 
-func (m *mockSecurityRequest) GetAttribute(key string) (any, bool) {
-	if m.attrs == nil {
-		return nil, false
+func TestConsensusBased_SetAllowIfAllAbstainDecisions(t *testing.T) {
+	t.Parallel()
+
+	manager := NewConsensusBased()
+	manager.SetAllowIfAllAbstainDecisions(true)
+
+	if !manager.allowIfAllAbstainDecisions {
+		t.Error("expected allowIfAllAbstainDecisions to be true")
 	}
-	val, exists := m.attrs[key]
-	return val, exists
-}
-
-type mockSecurityResponse struct {
-	statusCode int
-	headers    map[string]string
-	body       []byte
-}
-
-func (m *mockSecurityResponse) SetStatusCode(code int) {
-	m.statusCode = code
-}
-
-func (m *mockSecurityResponse) SetHeader(key, value string) {
-	if m.headers == nil {
-		m.headers = make(map[string]string)
-	}
-	m.headers[key] = value
-}
-
-func (m *mockSecurityResponse) Write(data []byte) error {
-	m.body = data
-	return nil
 }

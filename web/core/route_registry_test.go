@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,19 @@ import (
 type mockController struct{}
 
 func (m *mockController) HandleGet() {
+}
+
+func (m *mockController) HandleWithContext(ctx Context) {
+}
+
+type mockControllerWithReturn struct{}
+
+func (m *mockControllerWithReturn) GetData() map[string]string {
+	return map[string]string{"message": "success"}
+}
+
+func (m *mockControllerWithReturn) GetError() (map[string]string, error) {
+	return nil, fmt.Errorf("test error")
 }
 
 func TestNewRouteRegistry(t *testing.T) {
@@ -272,10 +286,10 @@ func TestSimpleContextPathParam(t *testing.T) {
 func TestSimpleContextQuery(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name    string
-		url     string
-		key     string
-		want    string
+		name string
+		url  string
+		key  string
+		want string
 	}{
 		{"existing param", "/test?key=value", "key", "value"},
 		{"missing param", "/test", "key", ""},
@@ -296,11 +310,11 @@ func TestSimpleContextQuery(t *testing.T) {
 func TestSimpleContextQueryDefault(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		url         string
-		key         string
-		defaultVal  string
-		want        string
+		name       string
+		url        string
+		key        string
+		defaultVal string
+		want       string
 	}{
 		{"returns default when missing", "/test", "size", "10", "10"},
 		{"returns value when present", "/test?size=20", "size", "10", "20"},
@@ -694,4 +708,362 @@ func TestGetRoutesLazyResolution(t *testing.T) {
 	}
 }
 
+func TestCreateHandler_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+	registry := NewRouteRegistry()
+	controller := &mockController{}
 
+	registry.RegisterController("TestController", controller, "/test")
+
+	route := RouteInfo{
+		Method:     "POST",
+		Path:       "/test",
+		StructName: "TestController",
+		MethodName: "HandleGet",
+	}
+
+	registry.RegisterRoute(route)
+
+	mux := http.NewServeMux()
+	err := registry.RegisterToMux(mux)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rec.Code)
+	}
+}
+
+func TestCreateHandler_WithProduces(t *testing.T) {
+	t.Parallel()
+	registry := NewRouteRegistry()
+	controller := &mockController{}
+
+	registry.RegisterController("TestController", controller, "/test")
+
+	route := RouteInfo{
+		Method:     "GET",
+		Path:       "/test",
+		StructName: "TestController",
+		MethodName: "HandleWithContext",
+		Produces:   "application/json",
+	}
+
+	registry.RegisterRoute(route)
+
+	mux := http.NewServeMux()
+	err := registry.RegisterToMux(mux)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	mux.ServeHTTP(rec, req)
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type 'application/json', got %q", ct)
+	}
+}
+
+func TestCreateHandler_MethodNotFound(t *testing.T) {
+	t.Parallel()
+	registry := NewRouteRegistry()
+	controller := &mockController{}
+
+	registry.RegisterController("TestController", controller, "/test")
+
+	route := RouteInfo{
+		Method:     "GET",
+		Path:       "/test",
+		StructName: "TestController",
+		MethodName: "NonExistentMethod",
+	}
+
+	registry.RegisterRoute(route)
+
+	mux := http.NewServeMux()
+	err := registry.RegisterToMux(mux)
+	if err == nil {
+		t.Error("expected error for non-existent method")
+	}
+}
+
+func TestSimpleContext_Next(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.Next()
+
+	if ctx.IsAborted() {
+		t.Error("expected Next() to not abort")
+	}
+}
+
+func TestSimpleContext_QueryDefault(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test?name=John", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	val := ctx.QueryDefault("name", "default")
+	if val != "John" {
+		t.Errorf("expected 'John', got %s", val)
+	}
+
+	val = ctx.QueryDefault("missing", "default")
+	if val != "default" {
+		t.Errorf("expected 'default', got %s", val)
+	}
+}
+
+func TestSimpleContext_AbortWithStatus(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.AbortWithStatus(http.StatusUnauthorized)
+
+	if !ctx.IsAborted() {
+		t.Error("expected context to be aborted")
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestSimpleContext_AbortWithStatus_NoContent(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.AbortWithStatus(http.StatusNoContent)
+
+	if !ctx.IsAborted() {
+		t.Error("expected context to be aborted")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("expected status 204, got %d", rec.Code)
+	}
+}
+
+func TestSimpleContext_AbortWithStatusJSON(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.AbortWithStatusJSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
+
+	if !ctx.IsAborted() {
+		t.Error("expected context to be aborted")
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+
+	ct := rec.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type 'application/json', got %q", ct)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if result["error"] != "invalid request" {
+		t.Errorf("expected error message 'invalid request', got %q", result["error"])
+	}
+}
+
+func TestSimpleContext_String(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.String(http.StatusOK, "Hello, %s!", "World")
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+
+	ct := rec.Header().Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("expected Content-Type to start with 'text/plain', got %q", ct)
+	}
+
+	body := rec.Body.String()
+	if body != "Hello, World!" {
+		t.Errorf("expected 'Hello, World!', got %q", body)
+	}
+}
+
+func TestSimpleContext_SetStatusCode(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.SetStatusCode(http.StatusCreated)
+
+	if ctx.statusCode != http.StatusCreated {
+		t.Errorf("expected status code 201, got %d", ctx.statusCode)
+	}
+}
+
+func TestSimpleContext_SetHeader(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	ctx.SetHeader("X-Custom-Header", "custom-value")
+
+	header := rec.Header().Get("X-Custom-Header")
+	if header != "custom-value" {
+		t.Errorf("expected 'custom-value', got %q", header)
+	}
+}
+
+func TestSimpleContext_SetContext(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	newCtx := context.WithValue(req.Context(), "key", "value")
+	ctx.SetContext(newCtx)
+
+	if ctx.Context() != newCtx {
+		t.Error("expected context to be updated")
+	}
+}
+
+func TestSimpleContext_RequestMethod(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("POST", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	if ctx.RequestMethod() != "POST" {
+		t.Errorf("expected 'POST', got %s", ctx.RequestMethod())
+	}
+}
+
+func TestSimpleContext_RequestURI(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test?query=value", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	uri := ctx.RequestURI()
+	if uri != "/test?query=value" {
+		t.Errorf("expected '/test?query=value', got %s", uri)
+	}
+}
+
+func TestSimpleContext_PathParam(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	val := ctx.PathParam("id")
+	if val != "" {
+		t.Errorf("expected empty string, got %s", val)
+	}
+}
+
+func TestSimpleContext_Query(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test?name=John&age=30", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	name := ctx.Query("name")
+	if name != "John" {
+		t.Errorf("expected 'John', got %s", name)
+	}
+
+	age := ctx.Query("age")
+	if age != "30" {
+		t.Errorf("expected '30', got %s", age)
+	}
+
+	missing := ctx.Query("missing")
+	if missing != "" {
+		t.Errorf("expected empty string, got %s", missing)
+	}
+}
+
+func TestSimpleContext_Header(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer token123")
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	auth := ctx.Header("Authorization")
+	if auth != "Bearer token123" {
+		t.Errorf("expected 'Bearer token123', got %s", auth)
+	}
+
+	missing := ctx.Header("X-Missing")
+	if missing != "" {
+		t.Errorf("expected empty string, got %s", missing)
+	}
+}
+
+func TestSimpleContext_Request(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+
+	ctx := newSimpleContext(rec, req)
+
+	if ctx.Request() != req {
+		t.Error("expected request to match")
+	}
+}

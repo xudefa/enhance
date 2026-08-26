@@ -1,7 +1,15 @@
 // Package cache 提供缓存抽象层，用于 enhance 框架。
 //
-// 该模块提供多种缓存策略实现，包括 LRU 缓存和 Caffeine 缓存。
-// 参考 Spring Cache 的设计理念，提供统一的缓存抽象接口。
+// 该模块提供多种缓存策略实现，包括 LRU 缓存和 TTL 缓存。
+// 参考 Spring Cache 的设计理念，提供统一的缓存抽象接口，
+// 使得应用可以轻松切换不同的缓存实现（内存缓存、Redis 等）。
+//
+// # 设计原则
+//
+//   - 接口优先：定义统一的 Cache 接口，便于替换实现
+//   - 零外部依赖：核心缓存实现仅使用 Go 标准库
+//   - 并发安全：所有实现都支持并发访问
+//   - 灵活配置：通过函数式选项模式提供灵活配置
 //
 // # 架构设计
 //
@@ -10,12 +18,12 @@
 //   - Builder: 缓存构建器，支持链式配置
 //   - LRUCache: LRU（Least Recently Used）缓存实现
 //   - ShardedLRUCache: 分片 LRU 缓存，适合高并发场景
-//   - CaffeineCache: 类似 Caffeine 的高性能缓存实现
+//   - TTLCache: 基于 LRU + TTL 的高性能缓存实现
 //
 // # 支持的缓存策略
 //
 //   - LRU 缓存: 基于最近最少使用算法的缓存实现
-//   - Caffeine 缓存: 类似 Java Caffeine 的高性能缓存实现
+//   - TTL 缓存: 基于 LRU + TTL 的高性能缓存实现
 //   - 分片缓存: 支持并发安全的分片 LRU 缓存
 //
 // # 使用方式
@@ -63,14 +71,19 @@ type Cache interface {
 	// Del 删除指定的缓存键。
 	Del(ctx context.Context, keys ...string) error
 
-	// Exists 检查键是否存在且未过期。
-	Exists(ctx context.Context, key string) (bool, error)
-
-	// TTL 获取键的剩余过期时间。
-	TTL(ctx context.Context, key string) (time.Duration, error)
-
 	// Close 关闭缓存连接并释放资源。
 	Close() error
+}
+
+// CacheInspector 可选的缓存检查接口。
+//
+// 用于需要检查键是否存在或获取过期时间的场景。
+type CacheInspector interface {
+	Cache
+	// Exists 检查键是否存在且未过期。
+	Exists(ctx context.Context, key string) (bool, error)
+	// TTL 获取键的剩余过期时间。
+	TTL(ctx context.Context, key string) (time.Duration, error)
 }
 
 // Getter 缓存旁路模式的值加载函数。

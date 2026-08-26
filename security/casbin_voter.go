@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/xudefa/enhance/security/authorization"
 )
@@ -51,13 +52,22 @@ type CasbinVoter struct {
 	enforcer CasbinEnforcer
 }
 
-func NewCasbinVoter(enforcer CasbinEnforcer) *CasbinVoter {
+func NewCasbinVoter(enforcer CasbinEnforcer) (*CasbinVoter, error) {
 	if enforcer == nil {
-		panic("casbin: enforcer must not be nil")
+		return nil, fmt.Errorf("casbin: enforcer must not be nil")
 	}
 	return &CasbinVoter{
 		enforcer: enforcer,
+	}, nil
+}
+
+// MustNewCasbinVoter 创建 Casbin 投票者，失败则 panic。
+func MustNewCasbinVoter(enforcer CasbinEnforcer) *CasbinVoter {
+	voter, err := NewCasbinVoter(enforcer)
+	if err != nil {
+		panic(err)
 	}
+	return voter
 }
 
 // Vote 投票决定是否授予访问权限。

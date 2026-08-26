@@ -117,9 +117,18 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if err := container.RegisterInstance(enforcer, reflect.TypeFor[security.CasbinEnforcer]()); err != nil {
 		return fmt.Errorf("failed to register CasbinEnforcer: %w", err)
 	}
+	// 同时注册具体类型，方便直接获取 DefaultCasbinEnforcer 使用其扩展方法
+	if defaultEnforcer, ok := enforcer.(*DefaultCasbinEnforcer); ok {
+		if err := container.RegisterInstance(defaultEnforcer, reflect.TypeFor[*DefaultCasbinEnforcer]()); err != nil {
+			return fmt.Errorf("failed to register DefaultCasbinEnforcer: %w", err)
+		}
+	}
 	c.logger.Info(ctx.Context(), "CasbinEnforcer registered")
 
-	voter := security.NewCasbinVoter(enforcer)
+	voter, err := security.NewCasbinVoter(enforcer)
+	if err != nil {
+		return fmt.Errorf("failed to create CasbinVoter: %w", err)
+	}
 	if err := container.RegisterInstance(voter, reflect.TypeFor[security.CasbinVoter]()); err != nil {
 		return fmt.Errorf("failed to register CasbinVoter: %w", err)
 	}

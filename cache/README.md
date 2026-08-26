@@ -2,11 +2,11 @@
 
 > **所属层级**: Infrastructure Layer  
 > **设计理念**: 统一接口，Cache-Aside 模式  
-> **设计灵感**: Spring Cache + Caffeine
+> **设计灵感**: Spring Cache + Go 惯用法
 
 ## 概述
 
-`cache` 包提供统一的缓存操作接口抽象，支持不同的缓存实现（如 Redis、内存缓存、Caffeine 本地缓存）无缝替换。核心设计模式包括 Cache-Aside（缓存旁路）模式，通过 `Getter` 函数实现缓存未命中时的数据加载。
+`cache` 包提供统一的缓存操作接口抽象，支持不同的缓存实现（如 Redis、内存缓存、TTL 本地缓存）无缝替换。核心设计模式包括 Cache-Aside（缓存旁路）模式，通过 `Getter` 函数实现缓存未命中时的数据加载。
 
 ### 核心功能
 
@@ -15,7 +15,7 @@
 | **统一接口** | Cache 接口定义标准缓存操作 |
 | **Cache-Aside 模式** | 缓存未命中时自动从数据源加载 |
 | **内存缓存** | MemoryCache 适用于测试和轻量场景 |
-| **高性能本地缓存** | CaffeineCache 支持 LRU 淘汰 + TTL |
+| **高性能本地缓存** | TTLCache 支持 LRU 淘汰 + TTL |
 | **批量操作** | 支持批量获取、设置、删除 |
 | **TTL 过期** | 支持为每个缓存项设置独立的过期时间 |
 
@@ -137,7 +137,7 @@ cache := cache.NewMemoryCache()
 | `DeleteMulti` | 批量删除多个缓存键 |
 | `Clear` | 清空所有缓存 |
 
-### CaffeineCache — 高性能本地缓存
+### TinyLFUCache — 高性能本地缓存
 
 基于 LRU（最近最少使用）淘汰策略的高性能本地缓存实现，适用于需要控制内存使用量的场景。
 
@@ -145,12 +145,12 @@ cache := cache.NewMemoryCache()
 
 ```go
 // 使用默认配置（最大 1000 项，默认 TTL 5 分钟）
-cache := cache.NewCaffeineCache()
+cache := cache.NewTinyLFUCache()
 
 // 自定义配置
-cache := cache.NewCaffeineCache(
-    cache.WithCaffeineMaxSize(5000),
-    cache.WithCaffeineDefaultTTL(10*time.Minute),
+cache := cache.NewTinyLFUCache(
+    cache.WithTinyLFUMaxSize(5000),
+    cache.WithTinyLFUDefaultTTL(10*time.Minute),
 )
 ```
 
@@ -166,7 +166,7 @@ cache := cache.NewCaffeineCache(
 #### 使用示例
 
 ```go
-c := cache.NewCaffeineCache(cache.WithMaxSize(1000))
+c := cache.NewTinyLFUCache(cache.WithMaxSize(1000))
 ctx := context.Background()
 
 // 设置缓存
@@ -277,13 +277,13 @@ c.Set(ctx, "config:app", config, 1*time.Hour)     // 配置数据 1 小时
 c.Set(ctx, key, value, 10*time.Minute)
 ```
 
-### 3. 使用 CaffeineCache 控制内存使用
+### 3. 使用 TinyLFUCache 控制内存使用
 
 ```go
 // ✅ 推荐：设置最大缓存大小
-c := cache.NewCaffeineCache(
-    cache.WithCaffeineMaxSize(5000),
-    cache.WithCaffeineDefaultTTL(10*time.Minute),
+c := cache.NewTinyLFUCache(
+    cache.WithTinyLFUMaxSize(5000),
+    cache.WithTinyLFUDefaultTTL(10*time.Minute),
 )
 
 // ⚠️ 不推荐：不限制缓存大小，可能导致内存溢出

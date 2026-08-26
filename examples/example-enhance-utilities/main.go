@@ -50,11 +50,53 @@ func main() {
 	}
 	defer app.Stop()
 
+	// 手动注册服务到容器（替代 starter 自动配置）
+	c := app.Container()
+
+	// 注册 validator
+	_ = core.Register[*validator.Validate](c,
+		core.WithName[*validator.Validate]("validator"),
+		core.WithFactory[*validator.Validate](func(c ...any) (any, error) {
+			return validator.New(), nil
+		}),
+	)
+
+	// 注册 rate limiter
+	_ = core.Register[*rate.Limiter](c,
+		core.WithName[*rate.Limiter]("limiter"),
+		core.WithFactory[*rate.Limiter](func(c ...any) (any, error) {
+			return rate.NewLimiter(rate.Limit(100), 200), nil
+		}),
+	)
+
+	// 注册 cron scheduler
+	_ = core.Register[*cron.Cron](c,
+		core.WithName[*cron.Cron]("cronMgr"),
+		core.WithFactory[*cron.Cron](func(c ...any) (any, error) {
+			return cron.New(cron.WithSeconds()), nil
+		}),
+	)
+
+	// 注册 asynq client（需要先初始化容器才能获取 Redis 等依赖）
+	_ = core.Register[*asynq.Client](c,
+		core.WithName[*asynq.Client]("asynqClient"),
+		core.WithFactory[*asynq.Client](func(c ...any) (any, error) {
+			// 使用默认配置创建 asynq client（实际使用需要 Redis 连接）
+			redisOpt := asynq.RedisClientOpt{Addr: "localhost:6379"}
+			return asynq.NewClient(redisOpt), nil
+		}),
+	)
+
+	// 初始化容器
+	if err := c.Initialize(); err != nil {
+		panic(err)
+	}
+
 	// 获取所有服务实例
-	validator := core.MustGet[*validator.Validate](app.Container(), "validator")
-	limiter := core.MustGet[*rate.Limiter](app.Container(), "limiter")
-	cronMgr := core.MustGet[*cron.Cron](app.Container(), "cronMgr")
-	asynqClient := core.MustGet[*asynq.Client](app.Container(), "asynqClient")
+	validate := core.MustGet[*validator.Validate](c, "validator")
+	limiter := core.MustGet[*rate.Limiter](c, "limiter")
+	cronMgr := core.MustGet[*cron.Cron](c, "cronMgr")
+	asynqClient := core.MustGet[*asynq.Client](c, "asynqClient")
 
 	// 创建 Gin 路由
 	gin.SetMode(gin.ReleaseMode)
@@ -73,7 +115,7 @@ func main() {
 	})
 
 	// 注册路由
-	r.POST("/api/users", createUserHandler(validator))
+	r.POST("/api/users", createUserHandler(validate))
 	r.GET("/api/health", healthHandler())
 	r.POST("/api/tasks/email", sendEmailHandler(asynqClient))
 

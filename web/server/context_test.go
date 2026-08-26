@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 func TestNewContext(t *testing.T) {
@@ -243,23 +243,23 @@ func TestContext_Next(t *testing.T) {
 
 	executionOrder := []string{}
 
-	mw1 := func(ctx mvc.Context) {
+	mw1 := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw1-before")
 		ctx.Next()
 		executionOrder = append(executionOrder, "mw1-after")
 	}
 
-	mw2 := func(ctx mvc.Context) {
+	mw2 := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw2-before")
 		ctx.Next()
 		executionOrder = append(executionOrder, "mw2-after")
 	}
 
-	handler := func(ctx mvc.Context) {
+	handler := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "handler")
 	}
 
-	ctx.WithMiddleware([]mvc.MiddlewareFunc{mw1, mw2}, handler)
+	ctx.WithMiddleware([]core.MiddlewareFunc{mw1, mw2}, handler)
 	ctx.Next()
 
 	expected := []string{"mw1-before", "mw2-before", "handler", "mw2-after", "mw1-after"}
@@ -282,20 +282,20 @@ func TestContext_Next_Abort(t *testing.T) {
 
 	executionOrder := []string{}
 
-	mw1 := func(ctx mvc.Context) {
+	mw1 := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw1")
 		ctx.AbortWithStatus(http.StatusUnauthorized)
 	}
 
-	mw2 := func(ctx mvc.Context) {
+	mw2 := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw2")
 	}
 
-	handler := func(ctx mvc.Context) {
+	handler := func(ctx core.Context) {
 		executionOrder = append(executionOrder, "handler")
 	}
 
-	ctx.WithMiddleware([]mvc.MiddlewareFunc{mw1, mw2}, handler)
+	ctx.WithMiddleware([]core.MiddlewareFunc{mw1, mw2}, handler)
 	ctx.Next()
 
 	if len(executionOrder) != 1 || executionOrder[0] != "mw1" {
@@ -338,8 +338,8 @@ func TestContext_WithMiddleware(t *testing.T) {
 
 	ctx := NewContext(w, req)
 
-	handler := func(ctx mvc.Context) {}
-	middlewares := []mvc.MiddlewareFunc{func(ctx mvc.Context) {}}
+	handler := func(ctx core.Context) {}
+	middlewares := []core.MiddlewareFunc{func(ctx core.Context) {}}
 
 	result := ctx.WithMiddleware(middlewares, handler)
 

@@ -1,7 +1,9 @@
 package environment
 
 import (
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestBindConfig_Generic(t *testing.T) {
@@ -233,5 +235,91 @@ func TestBindConfig_NestedStruct(t *testing.T) {
 	}
 	if !cfg.SSL.Enabled {
 		t.Error("expected SSL enabled")
+	}
+}
+
+func TestIsEmptyValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		value    interface{}
+		expected bool
+	}{
+		{"empty string", "", true},
+		{"non-empty string", "test", false},
+		{"zero int", 0, true},
+		{"non-zero int", 42, false},
+		{"false bool", false, true},
+		{"true bool", true, false},
+		{"nil pointer", (*int)(nil), true},
+		{"empty slice", []int{}, true},
+		{"non-empty slice", []int{1}, false},
+		{"empty map", map[string]int{}, true},
+		{"non-empty map", map[string]int{"a": 1}, false},
+		{"zero float", 0.0, true},
+		{"non-zero float", 1.5, false},
+		{"empty struct", struct{}{}, true},
+		{"zero time", time.Time{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := reflect.ValueOf(tt.value)
+			result := isEmptyValue(v)
+			if result != tt.expected {
+				t.Errorf("isEmptyValue(%v) = %v, want %v", tt.value, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMustBindConfig_Panic(t *testing.T) {
+	t.Parallel()
+
+	// 这个测试验证MustBindConfig在绑定失败时会panic
+	// 但由于我们的配置绑定总是成功（即使字段为空），
+	// 所以我们只验证函数可以正常调用
+	defer func() {
+		if r := recover(); r != nil {
+			t.Logf("panic occurred (expected in some cases): %v", r)
+		}
+	}()
+
+	env := NewEnvironment()
+
+	type Config struct {
+		Name string `config:"app.name"`
+	}
+
+	cfg := MustBindConfig[Config](env)
+	// Name应该为空字符串
+	if cfg.Name != "" {
+		t.Errorf("expected empty name, got '%s'", cfg.Name)
+	}
+}
+
+func TestMustBindConfigPrefix_Panic(t *testing.T) {
+	t.Parallel()
+
+	// 这个测试验证MustBindConfigPrefix在绑定失败时会panic
+	// 但由于我们的配置绑定总是成功（即使字段为空），
+	// 所以我们只验证函数可以正常调用
+	defer func() {
+		if r := recover(); r != nil {
+			t.Logf("panic occurred (expected in some cases): %v", r)
+		}
+	}()
+
+	env := NewEnvironment()
+
+	type Config struct {
+		Port int `config:"port"`
+	}
+
+	cfg := MustBindConfigPrefix[Config](env, "server")
+	// Port应该为0
+	if cfg.Port != 0 {
+		t.Errorf("expected 0 port, got %d", cfg.Port)
 	}
 }

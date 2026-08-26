@@ -3,6 +3,7 @@ package webtest
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -301,4 +302,58 @@ func TestWebTestClient_ChainedCalls(t *testing.T) {
 	client.Get("/users").Exchange().StatusIsOk().BodyContains("users")
 	client.Get("/posts").Exchange().StatusIsOk().BodyContains("posts")
 	client.Get("/unknown").Exchange().StatusIsNotFound()
+}
+
+func TestWebTestClient_Header(t *testing.T) {
+	t.Parallel()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Custom-Header") != "custom-value" {
+			t.Errorf("expected X-Custom-Header header, got %s", r.Header.Get("X-Custom-Header"))
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	client := NewWebTestClient(handler)
+	client.Header("X-Custom-Header", "custom-value").Get("/test").Exchange().StatusIsOk()
+}
+
+func TestRequestSpec_ContentType(t *testing.T) {
+	t.Parallel()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	client := NewWebTestClient(handler)
+	client.Post("/test").ContentType("application/json").Exchange().StatusIsOk()
+}
+
+func TestRequestSpec_Body(t *testing.T) {
+	t.Parallel()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := make([]byte, 100)
+		n, _ := r.Body.Read(body)
+		if string(body[:n]) != "test body content" {
+			t.Errorf("expected 'test body content', got %s", string(body[:n]))
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	client := NewWebTestClient(handler)
+	client.Post("/test").Body(strings.NewReader("test body content")).Exchange().StatusIsOk()
+}
+
+func TestResponseSpec_Print(t *testing.T) {
+	t.Parallel()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Test-Header", "test-value")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test body"))
+	})
+
+	client := NewWebTestClient(handler)
+	// Print 只是打印到 stdout，不应该 panic
+	client.Get("/test").Exchange().StatusIsOk().Print()
 }

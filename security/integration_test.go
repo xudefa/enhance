@@ -35,10 +35,13 @@ func TestPasswordEncoding(t *testing.T) {
 		t.Error("Standard encoder should match")
 	}
 
-	delegating := NewDelegatingPasswordEncoder("sha256", map[string]PasswordEncoder{
+	delegating, err := NewDelegatingPasswordEncoder("sha256", map[string]PasswordEncoder{
 		"sha256": sha256,
 		"noop":   noop,
 	})
+	if err != nil {
+		t.Fatalf("failed to create DelegatingPasswordEncoder: %v", err)
+	}
 	delegatedEncoded := delegating.Encode("password123")
 	if !delegating.Matches("password123", delegatedEncoded) {
 		t.Error("Delegating encoder should match")

@@ -11,16 +11,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/casbin/casbin/v2"
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/core"
+	"github.com/xudefa/enhance/starter/casbin"
 
 	_ "github.com/xudefa/enhance/starter/casbin"
 )
 
 func main() {
+	ctx := context.Background()
 	fmt.Println("=== Casbin Starter Example ===")
 	fmt.Println()
 
@@ -41,7 +43,7 @@ func main() {
 	}
 
 	// Get the Casbin enforcer from container
-	enforcer, err := core.GetByName[*casbin.Enforcer](app.Container(), "")
+	enforcer, err := core.GetByName[*casbin.DefaultCasbinEnforcer](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get Casbin enforcer: %v\n", err)
 		return
@@ -50,7 +52,7 @@ func main() {
 	// Demo 1: Check permissions
 	fmt.Println("--- Demo 1: Check Permissions ---")
 	// Alice can read data1
-	allowed, err := enforcer.Enforce("alice", "data1", "read")
+	allowed, err := enforcer.Enforce(ctx, "alice", "data1", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -58,7 +60,7 @@ func main() {
 	fmt.Printf("alice can read data1: %v\n", allowed)
 
 	// Alice can write data1 (as admin)
-	allowed, err = enforcer.Enforce("alice", "data1", "write")
+	allowed, err = enforcer.Enforce(ctx, "alice", "data1", "write")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -66,7 +68,7 @@ func main() {
 	fmt.Printf("alice can write data1 (as admin): %v\n", allowed)
 
 	// Alice cannot read data2
-	allowed, err = enforcer.Enforce("alice", "data2", "read")
+	allowed, err = enforcer.Enforce(ctx, "alice", "data2", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -76,7 +78,7 @@ func main() {
 	// Demo 2: Check Bob's permissions
 	fmt.Println("\n--- Demo 2: Bob's Permissions ---")
 	// Bob can write data2
-	allowed, err = enforcer.Enforce("bob", "data2", "write")
+	allowed, err = enforcer.Enforce(ctx, "bob", "data2", "write")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -84,7 +86,7 @@ func main() {
 	fmt.Printf("bob can write data2: %v\n", allowed)
 
 	// Bob cannot read data1
-	allowed, err = enforcer.Enforce("bob", "data1", "read")
+	allowed, err = enforcer.Enforce(ctx, "bob", "data1", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -107,7 +109,7 @@ func main() {
 	}
 
 	for _, test := range adminTests {
-		allowed, err = enforcer.Enforce(test.sub, test.obj, test.act)
+		allowed, err = enforcer.Enforce(ctx, test.sub, test.obj, test.act)
 		if err != nil {
 			fmt.Printf("Failed to check permission: %v\n", err)
 			continue
@@ -117,7 +119,7 @@ func main() {
 
 	// Demo 4: Add a new policy
 	fmt.Println("\n--- Demo 4: Add New Policy ---")
-	_, err = enforcer.AddPolicy("charlie", "data3", "read")
+	err = enforcer.AddPolicy(ctx, "charlie", "data3", "read")
 	if err != nil {
 		fmt.Printf("Failed to add policy: %v\n", err)
 		return
@@ -125,7 +127,7 @@ func main() {
 	fmt.Println("Added policy: charlie can read data3")
 
 	// Check the new policy
-	allowed, err = enforcer.Enforce("charlie", "data3", "read")
+	allowed, err = enforcer.Enforce(ctx, "charlie", "data3", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -134,7 +136,7 @@ func main() {
 
 	// Demo 5: Remove a policy
 	fmt.Println("\n--- Demo 5: Remove Policy ---")
-	_, err = enforcer.RemovePolicy("charlie", "data3", "read")
+	err = enforcer.RemovePolicy(ctx, "charlie", "data3", "read")
 	if err != nil {
 		fmt.Printf("Failed to remove policy: %v\n", err)
 		return
@@ -142,7 +144,7 @@ func main() {
 	fmt.Println("Removed policy: charlie can read data3")
 
 	// Check the removed policy
-	allowed, err = enforcer.Enforce("charlie", "data3", "read")
+	allowed, err = enforcer.Enforce(ctx, "charlie", "data3", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -151,7 +153,7 @@ func main() {
 
 	// Demo 6: Get all policies
 	fmt.Println("\n--- Demo 6: Get All Policies ---")
-	policies, _ := enforcer.GetPolicy()
+	policies, _ := enforcer.GetPolicy(ctx)
 	fmt.Printf("Total policies: %d\n", len(policies))
 	for _, p := range policies {
 		fmt.Printf("  - %v\n", p)
@@ -159,7 +161,7 @@ func main() {
 
 	// Demo 7: Get roles for a user
 	fmt.Println("\n--- Demo 7: Get Roles ---")
-	roles, err := enforcer.GetRolesForUser("alice")
+	roles, err := enforcer.GetRolesForUser(ctx, "alice")
 	if err != nil {
 		fmt.Printf("Failed to get roles: %v\n", err)
 		return
@@ -168,7 +170,7 @@ func main() {
 
 	// Demo 8: Get users for a role
 	fmt.Println("\n--- Demo 8: Get Users for Role ---")
-	users, err := enforcer.GetUsersForRole("admin")
+	users, err := enforcer.GetUsersForRole(ctx, "admin")
 	if err != nil {
 		fmt.Printf("Failed to get users: %v\n", err)
 		return
@@ -177,7 +179,7 @@ func main() {
 
 	// Demo 9: Add a role
 	fmt.Println("\n--- Demo 9: Add Role ---")
-	_, err = enforcer.AddRoleForUser("bob", "admin")
+	_, err = enforcer.AddRoleForUser(ctx, "bob", "admin")
 	if err != nil {
 		fmt.Printf("Failed to add role: %v\n", err)
 		return
@@ -185,7 +187,7 @@ func main() {
 	fmt.Println("Added role: bob is now admin")
 
 	// Check Bob's new permissions
-	allowed, err = enforcer.Enforce("bob", "data1", "read")
+	allowed, err = enforcer.Enforce(ctx, "bob", "data1", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return
@@ -194,15 +196,15 @@ func main() {
 
 	// Demo 10: Remove a role
 	fmt.Println("\n--- Demo 10: Remove Role ---")
-	_, err = enforcer.DeleteRoleForUser("bob", "admin")
+	_, err = enforcer.DeleteRoleForUser(ctx, "bob", "admin")
 	if err != nil {
 		fmt.Printf("Failed to remove role: %v\n", err)
 		return
 	}
 	fmt.Println("Removed role: bob is no longer admin")
 
-	// Check Bob's permissions after role removal
-	allowed, err = enforcer.Enforce("bob", "data1", "read")
+	// Check Bob's permissions after removing role
+	allowed, err = enforcer.Enforce(ctx, "bob", "data1", "read")
 	if err != nil {
 		fmt.Printf("Failed to check permission: %v\n", err)
 		return

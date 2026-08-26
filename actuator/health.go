@@ -4,15 +4,10 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/xudefa/enhance/actuator/health"
-)
-
-// Default simulated disk space values for health checks.
-const (
-	defaultTotalDiskBytes = 100 * 1024 * 1024 * 1024 // 100GB
-	defaultUsedDiskBytes  = 50 * 1024 * 1024 * 1024  // 50GB
 )
 
 // DiskSpaceHealthIndicator 磁盘空间健康指标
@@ -40,11 +35,35 @@ func (d *DiskSpaceHealthIndicator) Name() string {
 	return fmt.Sprintf("disk_space_%s", d.path)
 }
 
-// Health 执行磁盘空间健康检查
+// Health 执行磁盘空间健康检查（使用真实系统调用）。
 func (d *DiskSpaceHealthIndicator) Health(ctx context.Context) health.Health {
-	// 模拟磁盘空间检查
-	total := uint64(defaultTotalDiskBytes)
-	used := uint64(defaultUsedDiskBytes)
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(d.path, &stat); err != nil {
+		return health.Health{
+			Status:    health.StatusUnknown,
+			Timestamp: time.Now(),
+			Details: map[string]any{
+				"path":    d.path,
+				"error":   err.Error(),
+				"message": "无法获取磁盘空间信息",
+			},
+		}
+	}
+
+	// stat.Bsize 在 macOS 上是 uint32，在 Linux 上是 int64
+	var bsize uint64
+	switch v := any(stat.Bsize).(type) {
+	case uint32:
+		bsize = uint64(v)
+	case int64:
+		bsize = uint64(v)
+	default:
+		bsize = uint64(stat.Bsize)
+	}
+
+	total := stat.Blocks * bsize
+	free := stat.Bavail * bsize
+	used := total - free
 
 	usagePercent := float64(used) / float64(total)
 

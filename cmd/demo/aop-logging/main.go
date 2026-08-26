@@ -46,7 +46,7 @@ func main() {
 	factory := aop.NewProxyFactory(userService)
 
 	// 创建日志切面
-	loggingAspect := func(jp aop.JoinPoint, proceed func() any) any {
+	loggingAspect := func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
 		method := jp.Method()
 		fmt.Printf("[LOG] 调用方法: %v\n", method)
 		fmt.Printf("[LOG] 参数: %v\n", jp.Args())
@@ -61,7 +61,7 @@ func main() {
 
 	// 创建性能监控切面
 	threshold := 50 * time.Millisecond
-	perfAspect := func(jp aop.JoinPoint, proceed func() any) any {
+	perfAspect := func(jp aop.JoinPoint, proceed aop.ProceedFunc) any {
 		start := time.Now()
 		result := proceed()
 		elapsed := time.Since(start)

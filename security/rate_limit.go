@@ -12,12 +12,18 @@ import (
 	"github.com/xudefa/enhance/security/filter"
 )
 
-// SlidingWindowRateLimiter 滑动窗口限流器
+// slidingWindowShard 分片结构
+type slidingWindowShard struct {
+	mu      sync.Mutex
+	windows map[string]*slidingWindow
+}
+
+// SlidingWindowRateLimiter 滑动窗口限流器（分片锁优化）
 type SlidingWindowRateLimiter struct {
 	windowSize  time.Duration
 	maxRequests int
-	mu          sync.RWMutex
-	windows     map[string]*slidingWindow
+	shards      []*slidingWindowShard
+	shardCount  int
 	done        chan struct{}
 	closeOnce   sync.Once
 }
@@ -33,14 +39,34 @@ func NewSlidingWindowRateLimiter(windowSize time.Duration, maxRequests int) *Sli
 	if maxRequests < 0 {
 		maxRequests = 100
 	}
+
+	shardCount := 16 // 16 分片
+	shards := make([]*slidingWindowShard, shardCount)
+	for i := 0; i < shardCount; i++ {
+		shards[i] = &slidingWindowShard{
+			windows: make(map[string]*slidingWindow),
+		}
+	}
+
 	l := &SlidingWindowRateLimiter{
 		windowSize:  windowSize,
 		maxRequests: maxRequests,
-		windows:     make(map[string]*slidingWindow),
+		shards:      shards,
+		shardCount:  shardCount,
 		done:        make(chan struct{}),
 	}
 	newSlidingWindowCleanup(l)
 	return l
+}
+
+// getShard 根据 key 获取对应的分片
+func (r *SlidingWindowRateLimiter) getShard(key string) *slidingWindowShard {
+	// 简单哈希分片
+	hash := uint64(0)
+	for _, c := range key {
+		hash = hash*31 + uint64(c)
+	}
+	return r.shards[hash%uint64(r.shardCount)]
 }
 
 func newSlidingWindowCleanup(l *SlidingWindowRateLimiter) {
@@ -65,8 +91,9 @@ func newSlidingWindowCleanup(l *SlidingWindowRateLimiter) {
 
 // Allow 检查指定 key 的请求是否允许通过（滑动窗口算法）。
 func (r *SlidingWindowRateLimiter) Allow(key string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	shard := r.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
 	if r.maxRequests <= 0 {
 		return false
@@ -75,12 +102,12 @@ func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 	now := time.Now()
 	windowStart := now.Add(-r.windowSize)
 
-	window, exists := r.windows[key]
+	window, exists := shard.windows[key]
 	if !exists {
 		window = &slidingWindow{
 			requests: make([]time.Time, 0, r.maxRequests),
 		}
-		r.windows[key] = window
+		shard.windows[key] = window
 	}
 
 	validIdx := 0
@@ -102,23 +129,25 @@ func (r *SlidingWindowRateLimiter) Allow(key string) bool {
 
 // Cleanup 清理滑动窗口中过期的请求记录，释放内存。
 func (r *SlidingWindowRateLimiter) Cleanup() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	now := time.Now()
 	windowStart := now.Add(-r.windowSize)
-	for key, window := range r.windows {
-		validIdx := 0
-		for _, t := range window.requests {
-			if t.After(windowStart) {
-				window.requests[validIdx] = t
-				validIdx++
+
+	for _, shard := range r.shards {
+		shard.mu.Lock()
+		for key, window := range shard.windows {
+			validIdx := 0
+			for _, t := range window.requests {
+				if t.After(windowStart) {
+					window.requests[validIdx] = t
+					validIdx++
+				}
+			}
+			window.requests = window.requests[:validIdx]
+			if len(window.requests) == 0 {
+				delete(shard.windows, key)
 			}
 		}
-		window.requests = window.requests[:validIdx]
-		if len(window.requests) == 0 {
-			delete(r.windows, key)
-		}
+		shard.mu.Unlock()
 	}
 }
 
@@ -129,214 +158,15 @@ func (r *SlidingWindowRateLimiter) Close() {
 	})
 }
 
-// LeakyBucketRateLimiter 漏桶限流器
-type LeakyBucketRateLimiter struct {
-	capacity  int
-	rate      time.Duration
-	mu        sync.RWMutex
-	buckets   map[string]*leakyBucket
-	done      chan struct{}
-	closeOnce sync.Once
-}
-
-type leakyBucket struct {
-	tokens   int
-	lastLeak time.Time
-}
-
-func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRateLimiter {
-	if capacity <= 0 {
-		capacity = 100
+// WindowCount 返回当前活跃窗口数量（用于测试和监控）
+func (r *SlidingWindowRateLimiter) WindowCount() int {
+	count := 0
+	for _, shard := range r.shards {
+		shard.mu.Lock()
+		count += len(shard.windows)
+		shard.mu.Unlock()
 	}
-	if rate <= 0 {
-		rate = 100 * time.Millisecond
-	}
-	l := &LeakyBucketRateLimiter{
-		capacity: capacity,
-		rate:     rate,
-		buckets:  make(map[string]*leakyBucket),
-		done:     make(chan struct{}),
-	}
-	newLeakyBucketCleanup(l)
-	return l
-}
-
-func newLeakyBucketCleanup(l *LeakyBucketRateLimiter) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] leaky bucket cleanup panic: %v\n", r)
-			}
-		}()
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				l.Cleanup()
-			case <-l.done:
-				return
-			}
-		}
-	}()
-}
-
-// Allow 检查指定 key 的请求是否允许通过（漏桶算法）。
-func (r *LeakyBucketRateLimiter) Allow(key string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.capacity <= 0 {
-		return false
-	}
-
-	now := time.Now()
-	bucket, exists := r.buckets[key]
-
-	if !exists {
-		r.buckets[key] = &leakyBucket{
-			tokens:   1,
-			lastLeak: now,
-		}
-		return true
-	}
-
-	if r.rate <= 0 {
-		r.rate = 100 * time.Millisecond
-	}
-	elapsed := now.Sub(bucket.lastLeak)
-	leaked := int(elapsed / r.rate)
-	if leaked > 0 {
-		bucket.tokens = max(0, bucket.tokens-leaked)
-		bucket.lastLeak = now
-	}
-
-	if bucket.tokens < r.capacity {
-		bucket.tokens++
-		return true
-	}
-
-	return false
-}
-
-// Cleanup 清理漏桶中过期的桶数据，释放内存。
-func (r *LeakyBucketRateLimiter) Cleanup() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := time.Now()
-	for key, bucket := range r.buckets {
-		if now.Sub(bucket.lastLeak) > r.rate*time.Duration(r.capacity) {
-			delete(r.buckets, key)
-		}
-	}
-}
-
-// Close 关闭漏桶限流器，停止后台清理协程。
-func (r *LeakyBucketRateLimiter) Close() {
-	r.closeOnce.Do(func() {
-		close(r.done)
-	})
-}
-
-// FixedWindowCounterRateLimiter 固定窗口计数器限流器
-type FixedWindowCounterRateLimiter struct {
-	windowSize  time.Duration
-	maxRequests int
-	mu          sync.RWMutex
-	counters    map[string]*fixedWindowCounter
-	done        chan struct{}
-	closeOnce   sync.Once
-}
-
-type fixedWindowCounter struct {
-	count       int
-	windowStart time.Time
-}
-
-func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int) *FixedWindowCounterRateLimiter {
-	if windowSize <= 0 {
-		windowSize = 1 * time.Minute
-	}
-	if maxRequests <= 0 {
-		maxRequests = 100
-	}
-	l := &FixedWindowCounterRateLimiter{
-		windowSize:  windowSize,
-		maxRequests: maxRequests,
-		counters:    make(map[string]*fixedWindowCounter),
-		done:        make(chan struct{}),
-	}
-	newFixedWindowCleanup(l)
-	return l
-}
-
-func newFixedWindowCleanup(l *FixedWindowCounterRateLimiter) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] fixed window cleanup panic: %v\n", r)
-			}
-		}()
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				l.Cleanup()
-			case <-l.done:
-				return
-			}
-		}
-	}()
-}
-
-// Allow 检查指定 key 的请求是否允许通过（固定窗口计数算法）。
-func (r *FixedWindowCounterRateLimiter) Allow(key string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.maxRequests <= 0 {
-		return false
-	}
-
-	now := time.Now()
-	counter, exists := r.counters[key]
-
-	if !exists || now.Sub(counter.windowStart) > r.windowSize {
-		r.counters[key] = &fixedWindowCounter{
-			count:       1,
-			windowStart: now,
-		}
-		return true
-	}
-
-	if counter.count < r.maxRequests {
-		counter.count++
-		return true
-	}
-
-	return false
-}
-
-// Cleanup 清理固定窗口中过期的计数器数据，释放内存。
-func (r *FixedWindowCounterRateLimiter) Cleanup() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	now := time.Now()
-	for key, counter := range r.counters {
-		if now.Sub(counter.windowStart) > r.windowSize {
-			delete(r.counters, key)
-		}
-	}
-}
-
-// Close 关闭固定窗口计数器限流器，停止后台清理协程。
-func (r *FixedWindowCounterRateLimiter) Close() {
-	r.closeOnce.Do(func() {
-		close(r.done)
-	})
+	return count
 }
 
 // StrategyRateLimiterAdapter 限流器适配器

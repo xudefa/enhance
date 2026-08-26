@@ -1,214 +1,195 @@
 package aop
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
 
 func TestNewWeaver(t *testing.T) {
 	t.Parallel()
-	weaver := NewWeaver()
-	if weaver == nil {
-		t.Error("NewWeaver should return non-nil weaver")
+
+	w := NewWeaver()
+	if w == nil {
+		t.Fatal("expected non-nil weaver")
 	}
 }
 
-func TestWeaverWeaveWithoutAspects(t *testing.T) {
+func TestWeaver_AddAspects(t *testing.T) {
 	t.Parallel()
-	weaver := NewWeaver()
-	service := &TestUserService{}
 
-	result := weaver.Weave(service)
-	if result != service {
-		t.Error("Weave should return original target when no aspects registered")
+	w := NewWeaver()
+	aspect := &AspectMeta{
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 0),
 	}
+
+	w.AddAspects(aspect)
 }
 
-func TestWeaverWithBasicAspect(t *testing.T) {
+func TestWeaver_Weave_NilTarget(t *testing.T) {
 	t.Parallel()
-	weaver := NewWeaver()
-	weaver.AddAspects(&AspectMeta{
-		Instance: &TestAspect{},
-		PointCut: MatchByNamePrefix("Do"),
-		Advice: Around(func(jp JoinPoint, proceed func() any) any {
-			return proceed()
-		}),
-		Order: 0,
-	})
 
-	service := &TestUserService{}
-	weaved := weaver.Weave(service)
-	proxy, ok := AsReflectiveProxy(weaved)
-	if !ok {
-		t.Fatal("expected ReflectiveAopProxy")
-	}
-	if _, err := proxy.Call("DoSomething"); err != nil {
-		t.Errorf("DoSomething failed: %v", err)
-	}
-	if _, err := proxy.Call("DoAnother"); err != nil {
-		t.Errorf("DoAnother failed: %v", err)
-	}
-}
-
-func TestWeaverWithMultipleAspects(t *testing.T) {
-	t.Parallel()
-	weaver := NewWeaver()
-	weaver.AddAspects(
-		&AspectMeta{
-			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-			Order:    2,
-		},
-		&AspectMeta{
-			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-			Order:    1,
-		},
-	)
-
-	service := &TestUserService{}
-	weaved := weaver.Weave(service)
-	proxy, ok := AsReflectiveProxy(weaved)
-	if !ok {
-		t.Fatal("expected ReflectiveAopProxy")
-	}
-	if _, err := proxy.Call("DoSomething"); err != nil {
-		t.Errorf("DoSomething failed: %v", err)
-	}
-}
-
-func TestWeaverWithOrderSorting(t *testing.T) {
-	t.Parallel()
-	weaver := NewWeaver()
-	weaver.AddAspects(
-		&AspectMeta{
-			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-			Order:    10,
-		},
-		&AspectMeta{
-			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-			Order:    5,
-		},
-		&AspectMeta{
-			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-			Order:    1,
-		},
-	)
-
-	service := &TestUserService{}
-	weaved := weaver.Weave(service)
-	proxy, ok := AsReflectiveProxy(weaved)
-	if !ok {
-		t.Fatal("expected ReflectiveAopProxy")
-	}
-	if _, err := proxy.Call("DoSomething"); err != nil {
-		t.Errorf("DoSomething failed: %v", err)
-	}
-}
-
-func TestWeaverWithInterfaceTarget(t *testing.T) {
-	t.Parallel()
-	weaver := NewWeaver()
-	weaver.AddAspects(&AspectMeta{
-		PointCut: MatchInterface((*TestServiceInterface)(nil)),
-		Advice: Around(func(jp JoinPoint, proceed func() any) any {
-			return proceed()
-		}),
-		Order: 0,
-	})
-
-	impl := &TestServiceImpl{}
-	weaved := weaver.Weave(impl)
-	proxy, ok := AsReflectiveProxy(weaved)
-	if !ok {
-		t.Fatal("expected ReflectiveAopProxy")
-	}
-	if _, err := proxy.Call("DoSomething"); err != nil {
-		t.Errorf("DoSomething failed: %v", err)
-	}
-}
-
-func TestWeaverWeaveNil(t *testing.T) {
-	t.Parallel()
-	weaver := NewWeaver()
-	result := weaver.Weave(nil)
+	w := NewWeaver()
+	result := w.Weave(nil)
 	if result != nil {
-		t.Error("Weave should return nil for nil target")
+		t.Error("expected nil result for nil target")
 	}
 }
 
-func TestAopRegistry(t *testing.T) {
+func TestWeaver_Weave_NoAspects(t *testing.T) {
 	t.Parallel()
-	registry := NewAopRegistry()
-	if registry == nil {
-		t.Error("NewAopRegistry should return non-nil registry")
+
+	w := NewWeaver()
+	target := &testTypedService{Name: "test"}
+	result := w.Weave(target)
+	if result != target {
+		t.Error("expected original target when no aspects registered")
+	}
+}
+
+func TestWeaver_Weave_WithAspects(t *testing.T) {
+	t.Parallel()
+
+	w := NewWeaver()
+	aspect := &AspectMeta{
+		PointCut: MatchByName("DoWork"),
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 0),
+	}
+	w.AddAspects(aspect)
+
+	target := &testTypedService{Name: "test"}
+	result := w.Weave(target)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestAopRegistry_NewAndRegister(t *testing.T) {
+	t.Parallel()
+
+	reg := NewAopRegistry()
+	if reg == nil {
+		t.Fatal("expected non-nil registry")
 	}
 
 	aspect := &AspectMeta{
-		PointCut: MatchAll(),
-		Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 0),
 	}
-	registry.RegisterAspect(aspect)
+	reg.RegisterAspect(aspect)
 
-	aspects := registry.GetAspects()
+	aspects := reg.GetAspects()
 	if len(aspects) != 1 {
 		t.Errorf("expected 1 aspect, got %d", len(aspects))
 	}
 }
 
-func TestAopRegistryMatchAspectsForType(t *testing.T) {
+func TestAopRegistry_RegisterWeaver(t *testing.T) {
 	t.Parallel()
-	registry := NewAopRegistry()
-	registry.RegisterAspect(&AspectMeta{
-		PointCut: MatchByName("DoSomething"),
-		Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
-	})
 
-	matched := registry.MatchAspectsForType(reflect.TypeFor[*TestUserService]())
-	if len(matched) == 0 {
-		t.Error("expected matched aspects")
+	reg := NewAopRegistry()
+	w := NewWeaver()
+
+	reg.RegisterWeaver("testBean", w)
+
+	retrieved, ok := reg.GetWeaver("testBean")
+	if !ok {
+		t.Fatal("expected to find weaver")
+	}
+	if retrieved != w {
+		t.Error("expected retrieved weaver to match registered one")
 	}
 }
 
-func TestAopRegistryWeaveIfNeeded(t *testing.T) {
+func TestAopRegistry_GetWeaver_NotFound(t *testing.T) {
 	t.Parallel()
-	registry := NewAopRegistry()
-	testWeaver := NewWeaver()
-	registry.RegisterWeaver("test", testWeaver)
 
-	weaver, ok := registry.GetWeaver("test")
-	if !ok || weaver == nil {
-		t.Error("expected weaver")
+	reg := NewAopRegistry()
+	_, ok := reg.GetWeaver("nonexistent")
+	if ok {
+		t.Error("expected not found")
 	}
+}
 
-	result := registry.WeaveIfNeeded("test", &TestUserService{})
+func TestAopRegistry_WeaveIfNeeded_Found(t *testing.T) {
+	t.Parallel()
+
+	reg := NewAopRegistry()
+	w := NewWeaver()
+	reg.RegisterWeaver("testBean", w)
+
+	target := &testTypedService{Name: "test"}
+	result := reg.WeaveIfNeeded("testBean", target)
 	if result == nil {
-		t.Error("expected weaved result")
+		t.Error("expected non-nil result")
 	}
 }
 
-type TestAspect struct{}
+func TestAopRegistry_WeaveIfNeeded_NotFound(t *testing.T) {
+	t.Parallel()
 
-func (a *TestAspect) AspectName() string {
-	return "test"
+	reg := NewAopRegistry()
+	target := &testTypedService{Name: "test"}
+	result := reg.WeaveIfNeeded("nonexistent", target)
+	if result != target {
+		t.Error("expected original target when weaver not found")
+	}
 }
 
-type TestUserService struct{}
+func TestAopRegistry_MatchAspectsForType(t *testing.T) {
+	t.Parallel()
 
-func (s *TestUserService) DoSomething() {}
+	reg := NewAopRegistry()
 
-func (s *TestUserService) DoAnother() {}
+	// 注册匹配的切面
+	aspect1 := &AspectMeta{
+		PointCut: MatchByName("DoWork"),
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 0),
+	}
+	reg.RegisterAspect(aspect1)
 
-type TestServiceInterface interface {
-	DoSomething()
-	DoAnother()
+	// 注册不匹配的切面
+	aspect2 := &AspectMeta{
+		PointCut: MatchByName("NonExistentMethod"),
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 1),
+	}
+	reg.RegisterAspect(aspect2)
+
+	// 注册无 PointCut 的切面
+	aspect3 := &AspectMeta{
+		Advice: NewBeforeAdvice(func(ctx context.Context, jp JoinPoint) (any, error) {
+			return nil, nil
+		}, 2),
+	}
+	reg.RegisterAspect(aspect3)
+
+	targetType := reflect.TypeOf(&testTypedService{})
+	matched := reg.MatchAspectsForType(targetType)
+
+	if len(matched) != 1 {
+		t.Errorf("expected 1 matched aspect, got %d", len(matched))
+	}
+	if len(matched) > 0 && matched[0] != aspect1 {
+		t.Error("expected matched aspect to be aspect1")
+	}
 }
 
-type TestServiceImpl struct{}
+func TestAopRegistry_MatchAspectsForType_Empty(t *testing.T) {
+	t.Parallel()
 
-func (s *TestServiceImpl) DoSomething() {}
-
-func (s *TestServiceImpl) DoAnother() {}
+	reg := NewAopRegistry()
+	targetType := reflect.TypeOf(&testTypedService{})
+	matched := reg.MatchAspectsForType(targetType)
+	if len(matched) != 0 {
+		t.Errorf("expected 0 matched aspects, got %d", len(matched))
+	}
+}

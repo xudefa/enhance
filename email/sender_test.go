@@ -382,3 +382,110 @@ func splitLines(s string) []string {
 	}
 	return lines
 }
+
+func TestBuildMessage_Multipart(t *testing.T) {
+	t.Parallel()
+	sender := NewSender()
+	impl := getImpl(sender)
+
+	msg := &Message{
+		From:    "sender@test.com",
+		To:      []string{"recipient@example.com"},
+		Subject: "Test with Attachment",
+		Body:    "Test body",
+		Attachments: []Attachment{
+			{
+				Filename:    "test.txt",
+				ContentType: "text/plain",
+				Data:        []byte("test data"),
+			},
+		},
+	}
+
+	result := impl.buildMessage(msg, msg.From)
+
+	if !containsSubstring(result, "multipart/mixed") {
+		t.Error("期望消息为 multipart/mixed 类型")
+	}
+
+	if !containsSubstring(result, "test.txt") {
+		t.Error("期望消息中包含附件文件名")
+	}
+
+	if !containsSubstring(result, "text/plain") {
+		t.Error("期望消息中包含附件内容类型")
+	}
+}
+
+func TestBuildMessage_Multipart_HTML(t *testing.T) {
+	t.Parallel()
+	sender := NewSender()
+	impl := getImpl(sender)
+
+	msg := &Message{
+		From:    "sender@test.com",
+		To:      []string{"recipient@example.com"},
+		Subject: "HTML with Attachment",
+		HTML:    "<h1>Hello</h1>",
+		Attachments: []Attachment{
+			{
+				Filename:    "report.pdf",
+				ContentType: "application/pdf",
+				Data:        []byte{0x25, 0x50, 0x44, 0x46},
+			},
+		},
+	}
+
+	result := impl.buildMessage(msg, msg.From)
+
+	if !containsSubstring(result, "multipart/mixed") {
+		t.Error("期望消息为 multipart/mixed 类型")
+	}
+
+	if !containsSubstring(result, "text/html") {
+		t.Error("期望消息中包含 HTML 内容类型")
+	}
+
+	if !containsSubstring(result, "<h1>Hello</h1>") {
+		t.Error("期望消息中包含 HTML 内容")
+	}
+
+	if !containsSubstring(result, "report.pdf") {
+		t.Error("期望消息中包含附件文件名")
+	}
+}
+
+func TestBuildMessage_Multipart_MultipleAttachments(t *testing.T) {
+	t.Parallel()
+	sender := NewSender()
+	impl := getImpl(sender)
+
+	msg := &Message{
+		From:    "sender@test.com",
+		To:      []string{"recipient@example.com"},
+		Subject: "Multiple Attachments",
+		Body:    "Please find attached",
+		Attachments: []Attachment{
+			{
+				Filename:    "doc1.txt",
+				ContentType: "text/plain",
+				Data:        []byte("document 1"),
+			},
+			{
+				Filename:    "doc2.txt",
+				ContentType: "text/plain",
+				Data:        []byte("document 2"),
+			},
+		},
+	}
+
+	result := impl.buildMessage(msg, msg.From)
+
+	if !containsSubstring(result, "doc1.txt") {
+		t.Error("期望消息中包含第一个附件文件名")
+	}
+
+	if !containsSubstring(result, "doc2.txt") {
+		t.Error("期望消息中包含第二个附件文件名")
+	}
+}

@@ -12,7 +12,7 @@ func TestProxyFactory_ConcurrentGetProxy(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed() }),
 			Order:    1,
 		},
 	})
@@ -45,7 +45,7 @@ func TestProxyFactory_ConcurrentSetAspects(t *testing.T) {
 			aspects := []*AspectMeta{
 				{
 					PointCut: MatchByName("DoSomething"),
-					Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
+					Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed() }),
 					Order:    id,
 				},
 			}
@@ -63,7 +63,7 @@ func TestProxyFactory_ConcurrentProxyInvocation(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("DoSomething"),
-			Advice:   Around(func(jp JoinPoint, proceed func() any) any { return proceed() }),
+			Advice:   Around(func(jp JoinPoint, proceed ProceedFunc) any { return proceed() }),
 			Order:    1,
 		},
 	})

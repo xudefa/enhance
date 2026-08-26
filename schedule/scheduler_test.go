@@ -819,3 +819,50 @@ func TestScheduler_WithLogger(t *testing.T) {
 		t.Error("expected non-nil scheduler")
 	}
 }
+
+func TestSchedulerBuilder_Context(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	builder := NewSchedulerBuilder().Context(ctx)
+
+	if builder == nil {
+		t.Error("expected non-nil builder")
+	}
+
+	scheduler := builder.Build()
+	if scheduler == nil {
+		t.Error("expected non-nil scheduler")
+	}
+}
+
+func TestScheduler_Close(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewScheduler(context.Background())
+
+	task := NewTask("close-task", "* * * * * *", func(ctx context.Context) error {
+		return nil
+	})
+
+	_ = scheduler.Register(task)
+
+	ctx := context.Background()
+	_ = scheduler.Start(ctx)
+
+	// Close should shutdown gracefully
+	scheduler.Close()
+
+	if scheduler.IsRunning() {
+		t.Error("should not be running after close")
+	}
+}
+
+func TestScheduler_Close_NotRunning(t *testing.T) {
+	t.Parallel()
+
+	scheduler := NewScheduler(context.Background())
+
+	// Close when not running should not error
+	scheduler.Close()
+}

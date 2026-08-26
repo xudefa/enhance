@@ -372,6 +372,24 @@ func TestValidatorChain_Empty(t *testing.T) {
 	}
 }
 
+func TestValidatorChain_Add(t *testing.T) {
+	t.Parallel()
+
+	// 测试直接添加自定义Validator
+	customValidator := &valueValidator{
+		value: "test@example.com",
+		rules: "required,email",
+	}
+
+	chain := NewValidatorChain().
+		Add(customValidator)
+
+	err := chain.Validate()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestGetRegexCache(t *testing.T) {
 	t.Parallel()
 	cache := GetRegexCache()

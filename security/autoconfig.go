@@ -166,8 +166,8 @@ func (c *SecurityAutoConfiguration) buildSecurityFilterChain(authManager Authent
 		filters = append(filters, rateLimitFilter)
 	}
 
-	// 添加安全上下文持有者过滤器（必须在最前面，保存初始状态）
-	contextHolderFilter := NewSecurityContextHolderFilter()
+	// 添加认证上下文过滤器（必须在最前面，保存初始状态）
+	contextHolderFilter := NewAuthContextFilter()
 	filters = append(filters, contextHolderFilter)
 
 	// 添加JWT认证过滤器（如果容器中存在）
@@ -179,7 +179,8 @@ func (c *SecurityAutoConfiguration) buildSecurityFilterChain(authManager Authent
 	defaultFilters := c.buildDefaultSecurityFilters(authManager, env, container, true) // skipContextFilter=true
 	filters = append(filters, defaultFilters...)
 
-	return NewFilterChainProxy(filters, &DefaultSecurityFilterChain{})
+	proxy := newFilterChainProxy(filters, &DefaultSecurityFilterChain{})
+	return &securityFilterChainAdapter{proxy: proxy}
 }
 
 // getJwtAuthenticationFilter 从容器中获取JWT认证过滤器
@@ -210,7 +211,7 @@ func (c *SecurityAutoConfiguration) buildDefaultSecurityFilters(authManager Auth
 	}
 
 	if !skip {
-		contextHolderFilter := NewSecurityContextHolderFilter()
+		contextHolderFilter := NewAuthContextFilter()
 		filters = append(filters, contextHolderFilter)
 	}
 
@@ -343,24 +344,24 @@ func (c *SecurityAutoConfiguration) createDefaultRateLimitFilter(env *environmen
 
 // addDefaultFiltersIfMissing 如果用户注入的过滤器链中不存在CORS、限流过滤器，则添加默认的
 func (c *SecurityAutoConfiguration) addDefaultFiltersIfMissing(filterChain SecurityFilterChain, env *environment.Environment, container core.Container) SecurityFilterChain {
-	// 尝试将用户的过滤器链转换为 FilterChainProxy
-	proxy, ok := filterChain.(*FilterChainProxy)
+	// 尝试将用户的过滤器链转换为 securityFilterChainAdapter
+	adapter, ok := filterChain.(*securityFilterChainAdapter)
 	if !ok {
 		return filterChain
 	}
 
 	// 检查是否已存在CORS过滤器
-	hasCors := c.hasFilter(proxy.filters, (*CorsFilter)(nil))
+	hasCors := c.hasFilter(adapter.proxy.filters, (*CorsFilter)(nil))
 
 	// 检查是否已存在限流过滤器
-	hasRateLimit := c.hasFilter(proxy.filters, (*RateLimitFilter)(nil))
+	hasRateLimit := c.hasFilter(adapter.proxy.filters, (*RateLimitFilter)(nil))
 
 	// 如果不存在CORS过滤器且配置启用了CORS，则添加默认的
 	if !hasCors && env.GetBool("security.cors.enabled", false) {
 		corsFilter := c.getOrCreateCorsFilter(env, container)
 		if corsFilter != nil {
 			// 在最前面插入CORS过滤器
-			proxy.filters = append([]SecurityFilter{corsFilter}, proxy.filters...)
+			adapter.proxy.filters = append([]SecurityFilter{corsFilter}, adapter.proxy.filters...)
 		}
 	}
 
@@ -373,11 +374,11 @@ func (c *SecurityAutoConfiguration) addDefaultFiltersIfMissing(filterChain Secur
 			if hasCors || (!hasCors && env.GetBool("security.cors.enabled", false)) {
 				insertIndex = 1
 			}
-			proxy.filters = append(proxy.filters[:insertIndex], append([]SecurityFilter{rateLimitFilter}, proxy.filters[insertIndex:]...)...)
+			adapter.proxy.filters = append(adapter.proxy.filters[:insertIndex], append([]SecurityFilter{rateLimitFilter}, adapter.proxy.filters[insertIndex:]...)...)
 		}
 	}
 
-	return proxy
+	return adapter
 }
 
 // hasFilter 检查过滤器列表中是否包含指定类型的过滤器

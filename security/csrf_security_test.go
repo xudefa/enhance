@@ -86,7 +86,7 @@ func TestGenerateSecureToken_Length(t *testing.T) {
 // TestCsrfFilter_AddExcludePath_Validation 测试排除路径的输入验证
 func TestCsrfFilter_AddExcludePath_Validation(t *testing.T) {
 	t.Parallel()
-	filter := NewCsrfFilter(NewCookieCsrfTokenRepository())
+	filter := MustNewCsrfFilter(NewCookieCsrfTokenRepository())
 
 	// 测试空路径
 	err := filter.AddExcludePath("")
@@ -116,7 +116,7 @@ func TestCsrfFilter_AddExcludePath_Validation(t *testing.T) {
 // TestCsrfFilter_ExcludePathValidation 测试排除路径验证后的行为
 func TestCsrfFilter_ExcludePathValidation(t *testing.T) {
 	t.Parallel()
-	filter := NewCsrfFilter(NewCookieCsrfTokenRepository())
+	filter := MustNewCsrfFilter(NewCookieCsrfTokenRepository())
 
 	// 添加有效路径
 	err := filter.AddExcludePath("/api/health", "/api/status")

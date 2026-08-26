@@ -2,9 +2,11 @@ package mvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/xudefa/enhance/boot"
@@ -25,6 +27,8 @@ type WebStarter struct {
 	name        string
 	handler     http.Handler // 自定义处理器（如安全过滤器链）
 	logger      log.Logger
+	errCh       chan error     // 服务器启动/运行错误（可观测）
+	wg          sync.WaitGroup // 服务器 goroutine 跟踪
 }
 
 // WebStarterOption 是 WebStarter 配置选项函数。
@@ -280,7 +284,11 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 		s.server.SetHandler(s.handler)
 		s.logger.Debug(sCtx, "使用自定义处理器")
 	} else {
-		s.server.SetHandler(s.router)
+		rt, ok := s.router.(http.Handler)
+		if !ok {
+			return fmt.Errorf("router %T does not implement http.Handler", s.router)
+		}
+		s.server.SetHandler(rt)
 		s.logger.Debug(sCtx, "使用默认路由器")
 	}
 
@@ -290,12 +298,16 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
-	// 在后台启动服务器
+	// 在后台启动服务器，错误可观测
+	s.errCh = make(chan error, 1)
+	s.wg.Add(1)
 	go func() {
-		if err := s.server.Start(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error(sCtx, "Web 服务器运行错误",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
+		defer s.wg.Done()
+		if err := s.server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			select {
+			case s.errCh <- err:
+			default:
+			}
 		}
 	}()
 
@@ -322,7 +334,22 @@ func (s *WebStarter) Stop(ctx boot.ApplicationContext) error {
 		}
 		s.logger.Info(sCtx, "Web 服务器已停止")
 	}
+	// 停止后等待服务器 goroutine 退出
+	s.wg.Wait()
 	return nil
+}
+
+// Wait 阻塞直到服务器退出（正常关闭返回 nil）。
+//
+// 若服务器启动失败（如端口被占用），返回该错误。
+func (s *WebStarter) Wait() error {
+	if s.errCh == nil {
+		return nil
+	}
+	select {
+	case err := <-s.errCh:
+		return err
+	}
 }
 
 // GetCondition 返回启动条件

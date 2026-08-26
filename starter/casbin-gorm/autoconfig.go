@@ -118,7 +118,10 @@ func (c *CasbinGormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 	}
 	c.logger.Info(ctx.Context(), "CasbinEnforcer (GORM) registered")
 
-	voter := security.NewCasbinVoter(gormEnforcer)
+	voter, err := security.NewCasbinVoter(gormEnforcer)
+	if err != nil {
+		return fmt.Errorf("failed to create CasbinVoter: %w", err)
+	}
 	if err := container.RegisterInstance(voter, reflect.TypeFor[security.CasbinVoter]()); err != nil {
 		return fmt.Errorf("failed to register CasbinVoter: %w", err)
 	}

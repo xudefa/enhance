@@ -75,7 +75,7 @@
 // # 执行顺序
 //
 // 安全过滤器链中的执行顺序：
-//  1. SecurityContextHolderFilter（保存并清除认证上下文）
+//  1. AuthContextFilter（保存并清除认证上下文）
 //  2. JwtAuthenticationFilter（JWT Token 认证）
 //  3. BasicAuthenticationFilter（Basic 认证，跳过 Bearer Token）
 //  4. AnonymousAuthenticationFilter（匿名认证）

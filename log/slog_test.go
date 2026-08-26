@@ -142,6 +142,38 @@ func TestSlogLoggerImplementsInterface(t *testing.T) {
 	var _ Logger = (*SlogLogger)(nil)
 }
 
+func TestSlogLoggerWithDevelopment(t *testing.T) {
+	t.Parallel()
+	buf := &bytes.Buffer{}
+	logger := NewSlogLogger(
+		WithLevel(DebugLevel),
+		WithOutput(buf),
+		WithDevelopment(true),
+	)
+	if logger == nil {
+		t.Error("NewSlogLogger() with WithDevelopment returned nil")
+	}
+
+	ctx := context.Background()
+	logger.Debug(ctx, "development debug message")
+}
+
+func TestSlogLoggerClose(t *testing.T) {
+	t.Parallel()
+	buf := &bytes.Buffer{}
+	logger := NewSlogLogger(
+		WithLevel(DebugLevel),
+		WithOutput(buf),
+	)
+
+	// 测试 Close 方法
+	logger.Close()
+
+	// Close 后再次记录日志应该不 panic
+	ctx := context.Background()
+	logger.Info(ctx, "message after close")
+}
+
 func TestToLevel(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

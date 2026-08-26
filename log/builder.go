@@ -104,15 +104,22 @@ func (l *SampledLogger) Fatal(ctx context.Context, msg string, keys ...KeyValue)
 
 // Sync 同步日志缓冲区
 func (l *SampledLogger) Sync() error {
-	return l.logger.Sync()
+	if syncer, ok := l.logger.(LoggerWithSync); ok {
+		return syncer.Sync()
+	}
+	return nil
 }
 
 // With 返回带有额外字段的日志记录器
 func (l *SampledLogger) With(ctx context.Context, keys ...KeyValue) Logger {
-	return &SampledLogger{
-		logger:  l.logger.With(ctx, keys...),
-		sampler: l.sampler,
+	if withFields, ok := l.logger.(LoggerWithFields); ok {
+		return &SampledLogger{
+			logger:  withFields.With(ctx, keys...),
+			sampler: l.sampler,
+		}
 	}
+	// 如果不支持 With，返回原始 logger
+	return l.logger
 }
 
 var _ Logger = (*SampledLogger)(nil)

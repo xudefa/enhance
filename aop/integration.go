@@ -165,9 +165,16 @@ func AutoRegisterAll() error {
 	return nil
 }
 
-// BuildTagChecker 构建标签检查器
+// BuildTagChecker 构建标签检查器。
 //
-// 检查当前构建是否包含特定标签
+// 通过编译期注入的布尔常量判断构建标签，避免运行时解析开销。
+// 使用方式：在包含 goaop 标签的文件中定义 //go:build goaop，并设置
+//
+//	const hasGoAopBuildTag = true
+//
+// 默认文件（无标签）中设置
+//
+//	const hasGoAopBuildTag = false
 type BuildTagChecker struct{}
 
 // NewBuildTagChecker 创建构建标签检查器
@@ -175,8 +182,13 @@ func NewBuildTagChecker() *BuildTagChecker {
 	return &BuildTagChecker{}
 }
 
-// HasTag 检查是否有指定标签
+// HasTag 检查是否有指定标签。
+//
+// 目前仅支持 "goaop" 标签，通过 hasGoAopBuildTag 编译期常量判断。
 func (c *BuildTagChecker) HasTag(tag string) bool {
+	if tag == "goaop" {
+		return hasGoAopBuildTag
+	}
 	return false
 }
 

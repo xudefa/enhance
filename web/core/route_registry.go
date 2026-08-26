@@ -149,9 +149,8 @@ func (r *RouteRegistry) createHandler(route RouteInfo) (http.Handler, error) {
 		}
 
 		args := make([]reflect.Value, 0, methodType.NumIn())
-		args = append(args, controllerVal)
 
-		for i := 1; i < methodType.NumIn(); i++ {
+		for i := 0; i < methodType.NumIn(); i++ {
 			paramType := methodType.In(i)
 			if paramType.Implements(contextInterfaceType) {
 				args = append(args, reflect.ValueOf(newSimpleContext(w, req)))

@@ -24,7 +24,7 @@ type AopBeanScanner struct {
 // NewAopBeanScanner 创建AOP Bean扫描器
 func NewAopBeanScanner(container *AopContainer) *AopBeanScanner {
 	if container == nil {
-		container = CreateAopContainer()
+		container = NewAopContainer(nil)
 	}
 	return &AopBeanScanner{
 		container: container,

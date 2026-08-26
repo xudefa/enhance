@@ -16,7 +16,9 @@
     },
     "casbin": {
       "enabled": true,
+      "model-type": "file",
       "model-path": "config/casbin_model.conf",
+      "policy-type": "file",
       "policy-path": "config/casbin_policy.csv"
     },
     "rules": "/public/**->permitAll,/login->permitAll,/api/admin/**->hasRole('ADMIN'),/api/**->authenticated"

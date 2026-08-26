@@ -1,13 +1,18 @@
 package actuator
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/config/environment"
+	"github.com/xudefa/enhance/core"
 )
 
 func TestHttpEndpointRegistryAdapter(t *testing.T) {
@@ -238,4 +243,329 @@ func TestBuildEndpointConfigs_CustomBasePath(t *testing.T) {
 	if endpoints[0].Path != "/monitor/health" {
 		t.Errorf("Expected path /monitor/health, got %s", endpoints[0].Path)
 	}
+}
+
+func TestActuatorHttpStarter_Name(t *testing.T) {
+	t.Parallel()
+	starter := &ActuatorHttpStarter{}
+	if starter.Name() != "actuator-http" {
+		t.Errorf("Expected name 'actuator-http', got %s", starter.Name())
+	}
+}
+
+func TestActuatorHttpStarter_Dependencies(t *testing.T) {
+	t.Parallel()
+	starter := &ActuatorHttpStarter{}
+	deps := starter.Dependencies()
+	if len(deps) != 0 {
+		t.Errorf("Expected 0 dependencies, got %d", len(deps))
+	}
+}
+
+func TestActuatorHttpStarter_GetCondition(t *testing.T) {
+	t.Parallel()
+	starter := &ActuatorHttpStarter{}
+	cond := starter.GetCondition()
+	if cond == nil {
+		t.Error("Expected non-nil condition")
+	}
+}
+
+func TestActuatorHttpStarter_Stop(t *testing.T) {
+	t.Parallel()
+	starter := &ActuatorHttpStarter{}
+
+	// 测试没有standaloneSrv的情况
+	err := starter.Stop(nil)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestActuatorHttpStarter_Configure_NilActuator(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{}
+	ctx := &mockActuatorContext{}
+
+	err := starter.Configure(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestActuatorHttpStarter_Start_NilActuator(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{}
+	ctx := &mockActuatorContext{}
+
+	err := starter.Start(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestActuatorHttpStarter_Start_NoEndpoints(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{
+		actuator: &Actuator{},
+	}
+
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewDefaultPropertySource("test-config", map[string]any{
+		"actuator.expose.health":     false,
+		"actuator.expose.metrics":    false,
+		"actuator.expose.env":        false,
+		"actuator.expose.beans":      false,
+		"actuator.expose.info":       false,
+		"actuator.expose.prometheus": false,
+	}))
+
+	ctx := &mockActuatorContext{
+		env: env,
+	}
+
+	err := starter.Start(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+// mockActuatorContext 模拟ApplicationContext
+type mockActuatorContext struct {
+	env       *environment.Environment
+	container core.Container
+	ctx       context.Context
+}
+
+func (m *mockActuatorContext) Environment() *environment.Environment {
+	if m.env == nil {
+		return environment.NewEnvironment()
+	}
+	return m.env
+}
+
+func (m *mockActuatorContext) Container() core.Container {
+	if m.container == nil {
+		return core.NewContainer()
+	}
+	return m.container
+}
+
+func (m *mockActuatorContext) Context() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
+}
+
+func (m *mockActuatorContext) EventBus() boot.EventBusResult {
+	return nil
+}
+
+func (m *mockActuatorContext) GetByType(t reflect.Type) (any, error) {
+	return nil, nil
+}
+
+func (m *mockActuatorContext) Register(t reflect.Type, opts ...core.BeanOption) error {
+	return nil
+}
+
+func TestActuatorHttpStarter_Configure_NoActuator(t *testing.T) {
+	t.Parallel()
+
+	container := core.NewContainer()
+	ctx := &mockActuatorContext{
+		container: container,
+	}
+
+	starter := &ActuatorHttpStarter{}
+	err := starter.Configure(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// actuator应该为nil因为容器中没有Actuator bean
+	if starter.actuator != nil {
+		t.Error("Expected actuator to be nil")
+	}
+}
+
+func TestActuatorHttpStarter_Configure_CustomPath(t *testing.T) {
+	t.Parallel()
+
+	container := core.NewContainer()
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewDefaultPropertySource("test", map[string]any{
+		"actuator.path": "/monitor",
+	}))
+
+	ctx := &mockActuatorContext{
+		container: container,
+		env:       env,
+	}
+
+	starter := &ActuatorHttpStarter{basePath: "/actuator"} // 设置默认值
+	err := starter.Configure(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// 注意：Configure在没有actuator时会提前返回，不会修改basePath
+	// 这个测试验证Configure在没有actuator时不会报错
+}
+
+func TestActuatorHttpStarter_Start_NilActuator_Extended(t *testing.T) {
+	t.Parallel()
+
+	ctx := &mockActuatorContext{}
+	starter := &ActuatorHttpStarter{}
+
+	err := starter.Start(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestActuatorHttpStarter_Stop_NoStandaloneServer_Extended(t *testing.T) {
+	t.Parallel()
+
+	ctx := &mockActuatorContext{}
+	starter := &ActuatorHttpStarter{}
+
+	err := starter.Stop(ctx)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+}
+
+func TestActuatorHttpStarter_Name_Extended(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{}
+	if starter.Name() != "actuator-http" {
+		t.Errorf("Expected name 'actuator-http', got '%s'", starter.Name())
+	}
+}
+
+func TestActuatorHttpStarter_Dependencies_Extended(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{}
+	deps := starter.Dependencies()
+	if len(deps) != 0 {
+		t.Errorf("Expected no dependencies, got %d", len(deps))
+	}
+}
+
+func TestActuatorHttpStarter_GetCondition_Extended(t *testing.T) {
+	t.Parallel()
+
+	starter := &ActuatorHttpStarter{}
+	cond := starter.GetCondition()
+	if cond == nil {
+		t.Error("Expected non-nil condition")
+	}
+}
+
+func TestActuatorHttpStarter_RegisterViaEndpointRegistry(t *testing.T) {
+	t.Parallel()
+
+	// 创建端点配置
+	endpoints := []EndpointConfig{
+		{Path: "/test", Method: "GET", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})},
+	}
+
+	// 测试没有注册器时应该返回false
+	starter := &ActuatorHttpStarter{}
+	container := core.NewContainer()
+	ctx := &mockActuatorContext{container: container}
+
+	result := starter.registerViaEndpointRegistry(ctx, endpoints)
+	if result {
+		t.Error("expected false when no HttpEndpointRegistry is registered")
+	}
+}
+
+func TestActuatorHttpStarter_RegisterViaHandlerRegistry(t *testing.T) {
+	t.Parallel()
+
+	// 创建端点配置
+	endpoints := []EndpointConfig{
+		{Path: "/test", Method: "GET", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})},
+	}
+
+	// 测试没有注册器时应该返回false
+	starter := &ActuatorHttpStarter{}
+	container := core.NewContainer()
+	ctx := &mockActuatorContext{container: container}
+
+	result := starter.registerViaHandlerRegistry(ctx, endpoints)
+	if result {
+		t.Error("expected false when no HttpHandlerRegistry is registered")
+	}
+}
+
+func TestActuatorHttpStarter_RegisterViaRouteRegistrar(t *testing.T) {
+	t.Parallel()
+
+	// 创建端点配置
+	endpoints := []EndpointConfig{
+		{Path: "/test", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})},
+	}
+
+	// 测试没有注册器时应该返回false
+	starter := &ActuatorHttpStarter{}
+	container := core.NewContainer()
+	ctx := &mockActuatorContext{container: container}
+
+	result := starter.registerViaRouteRegistrar(ctx, endpoints)
+	if result {
+		t.Error("expected false when no RouteRegistrar is registered")
+	}
+}
+
+func TestActuatorHttpStarter_StartStandaloneServer(t *testing.T) {
+	t.Parallel()
+
+	// 创建端点配置
+	endpoints := []EndpointConfig{
+		{Path: "/health", Method: "GET", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"UP"}`))
+		})},
+	}
+
+	env := environment.NewEnvironment()
+	env.AddPropertySource(environment.NewDefaultPropertySource("test", map[string]any{
+		"actuator.port": "18081", // 使用非标准端口避免冲突
+		"actuator.host": "127.0.0.1",
+	}))
+
+	starter := &ActuatorHttpStarter{}
+
+	// 启动独立服务器
+	starter.startStandaloneServer(env, endpoints)
+
+	// 验证服务器已启动
+	if starter.standaloneSrv == nil {
+		t.Error("expected standalone server to be created")
+	}
+
+	// 等待服务器启动
+	time.Sleep(100 * time.Millisecond)
+
+	// 测试服务器是否响应
+	resp, err := http.Get("http://127.0.0.1:18081/health")
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+	}
+
+	// 停止服务器
+	starter.Stop(nil)
 }

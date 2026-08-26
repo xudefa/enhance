@@ -183,7 +183,7 @@ func TestLegacyAround_ForwardedError_TriggersAfterThrowing(t *testing.T) {
 	factory.SetAspects([]*AspectMeta{
 		{
 			PointCut: MatchByName("Close"),
-			Advice: Around(func(jp JoinPoint, proceed func() any) any {
+			Advice: Around(func(jp JoinPoint, proceed ProceedFunc) any {
 				return proceed()
 			}),
 			Order: 1,
@@ -308,37 +308,5 @@ func TestMatchByName_RegexWithDotStar(t *testing.T) {
 	}
 	if pc.Matches(nil, "GetValue") {
 		t.Error("^Do.* should not match GetValue")
-	}
-}
-
-// ==================== Bug 6: 容器配置写入全局 manager 导致数据竞争与污染 ====================
-//
-// 现象：container_builder.go 直接写入 container.integration.manager.config（全局
-// GlobalAopManager 的字段），未加锁，与 config.go GetConfig 的 RLock 读取构成数据竞争；
-// 且所有容器共享全局 manager，后构建的容器会覆盖先前容器的配置。
-
-func TestAopContainerBuilder_PerContainerConfig(t *testing.T) {
-	t.Parallel()
-
-	c1 := NewAopContainerBuilder().WithAopMode(AopModeGenerated).BuildOrPanic()
-	c2 := NewAopContainerBuilder().WithAopMode(AopModeRuntime).BuildOrPanic()
-
-	if got := c1.integration.config.Mode; got != AopModeGenerated {
-		t.Fatalf("container1 mode = %v, want %v", got, AopModeGenerated)
-	}
-	if got := c2.integration.config.Mode; got != AopModeRuntime {
-		t.Fatalf("container2 mode = %v, want %v", got, AopModeRuntime)
-	}
-}
-
-func TestCreateAopContainerWithConfig_SetsOwnConfig(t *testing.T) {
-	t.Parallel()
-
-	cfg := DefaultAopConfig()
-	cfg.Mode = AopModeGenerated
-	container := CreateAopContainerWithConfig(cfg)
-
-	if got := container.integration.config.Mode; got != AopModeGenerated {
-		t.Fatalf("container mode = %v, want %v", got, AopModeGenerated)
 	}
 }

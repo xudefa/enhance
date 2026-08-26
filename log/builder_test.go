@@ -545,7 +545,9 @@ func TestLoggerBuilder_WithOutputPath(t *testing.T) {
 	logger.Info(ctx, "output path log")
 
 	// 清理
-	_ = logger.Sync()
+	if syncer, ok := logger.(LoggerWithSync); ok {
+		_ = syncer.Sync()
+	}
 }
 
 func TestDynamicLevelLogger_RapidLevelChanges(t *testing.T) {
@@ -781,6 +783,180 @@ func TestDynamicLevelLogger_LevelOrdering(t *testing.T) {
 	}
 }
 
+func TestSampledLogger_DPanic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
+	sampler := NewRandomSampler(1.0)
+	logger := NewSampledLogger(baseLogger, sampler)
+
+	ctx := context.Background()
+
+	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected DPanic to panic in development mode")
+		}
+	}()
+
+	logger.DPanic(ctx, "dpanic message")
+}
+
+func TestSampledLogger_Panic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	sampler := NewRandomSampler(1.0)
+	logger := NewSampledLogger(baseLogger, sampler)
+
+	ctx := context.Background()
+
+	// Panic 应该 panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected Panic to panic")
+		}
+	}()
+
+	logger.Panic(ctx, "panic message")
+}
+
+func TestSampledLogger_Fatal(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	sampler := NewRandomSampler(1.0)
+	logger := NewSampledLogger(baseLogger, sampler)
+
+	ctx := context.Background()
+
+	// Fatal 应该调用 os.Exit(1)，这里无法直接测试，只验证不 panic
+	// 实际测试时需要用子进程测试
+	_ = logger
+	_ = ctx
+}
+
+func TestContextLogger_DPanic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
+	logger := NewContextLogger(baseLogger)
+
+	ctx := context.Background()
+
+	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected DPanic to panic in development mode")
+		}
+	}()
+
+	logger.DPanic(ctx, "dpanic message")
+}
+
+func TestContextLogger_Panic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewContextLogger(baseLogger)
+
+	ctx := context.Background()
+
+	// Panic 应该 panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected Panic to panic")
+		}
+	}()
+
+	logger.Panic(ctx, "panic message")
+}
+
+func TestContextLogger_Fatal(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewContextLogger(baseLogger)
+
+	ctx := context.Background()
+
+	// Fatal 应该调用 os.Exit(1)，这里无法直接测试
+	// 实际测试时需要用子进程测试
+	_ = logger
+	_ = ctx
+}
+
+func TestDynamicLevelLogger_IsLevelEnabled(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewDynamicLevelLogger(baseLogger, WarnLevel)
+
+	// 测试 IsLevelEnabled
+	if logger.IsLevelEnabled(DebugLevel) {
+		t.Error("DebugLevel should not be enabled when level is WarnLevel")
+	}
+	if logger.IsLevelEnabled(InfoLevel) {
+		t.Error("InfoLevel should not be enabled when level is WarnLevel")
+	}
+	if !logger.IsLevelEnabled(WarnLevel) {
+		t.Error("WarnLevel should be enabled")
+	}
+	if !logger.IsLevelEnabled(ErrorLevel) {
+		t.Error("ErrorLevel should be enabled")
+	}
+}
+
+func TestDynamicLevelLogger_DPanic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
+	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
+
+	ctx := context.Background()
+
+	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected DPanic to panic in development mode")
+		}
+	}()
+
+	logger.DPanic(ctx, "dpanic message")
+}
+
+func TestDynamicLevelLogger_Panic(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
+
+	ctx := context.Background()
+
+	// Panic 应该 panic
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected Panic to panic")
+		}
+	}()
+
+	logger.Panic(ctx, "panic message")
+}
+
+func TestDynamicLevelLogger_Fatal(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
+
+	ctx := context.Background()
+
+	// Fatal 应该调用 os.Exit(1)，这里无法直接测试
+	_ = logger
+	_ = ctx
+}
+
+func TestDynamicLevelLogger_Sync(t *testing.T) {
+	t.Parallel()
+	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
+	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
+
+	err := logger.Sync()
+	if err != nil {
+		t.Errorf("expected no error from Sync, got %v", err)
+	}
+}
+
 func TestContextLogger_WithMultipleFields(t *testing.T) {
 	t.Parallel()
 	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
@@ -952,7 +1128,9 @@ func TestLoggerBuilder_ComplexConfigWithAllOptions(t *testing.T) {
 	ctx := WithTraceID(context.Background(), "full-trace")
 	logger.Info(ctx, "full config log")
 
-	_ = logger.Sync()
+	if syncer, ok := logger.(LoggerWithSync); ok {
+		_ = syncer.Sync()
+	}
 }
 
 func TestContextLogger_WithEmptyMessage(t *testing.T) {
@@ -1267,7 +1445,7 @@ func TestContextLogger_WithChain(t *testing.T) {
 
 	// 链式 With
 	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.With(ctx, KeyValue{Key: "key2", Value: "value2"})
+	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
 
 	child2.Info(ctx, "chained with log")
 }
@@ -1281,7 +1459,7 @@ func TestSampledLogger_WithChain(t *testing.T) {
 	ctx := context.Background()
 
 	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.With(ctx, KeyValue{Key: "key2", Value: "value2"})
+	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
 
 	child2.Info(ctx, "chained with log")
 }
@@ -1294,7 +1472,7 @@ func TestDynamicLevelLogger_WithChain(t *testing.T) {
 	ctx := context.Background()
 
 	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.With(ctx, KeyValue{Key: "key2", Value: "value2"})
+	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
 
 	child2.Info(ctx, "chained with log")
 }

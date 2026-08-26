@@ -62,7 +62,7 @@ func (ss *StickySession) NextWithSession(backends []*ServiceInstance, sessionID 
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
-	idx := int(simpleHash(sessionID) % uint32(len(backends)))
+	idx := int(hashKey(sessionID) % uint32(len(backends)))
 	backend = backends[idx]
 	ss.sessionBackendMap[sessionID] = backend
 

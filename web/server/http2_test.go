@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 // TestHTTP2_Configuration 测试 HTTP/2 配置
@@ -55,7 +55,7 @@ func TestHTTP2_ConcurrentRequests(t *testing.T) {
 	t.Parallel()
 
 	router := NewRouter()
-	router.GET("/api/test", func(ctx mvc.Context) {
+	router.GET("/api/test", func(ctx core.Context) {
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 
@@ -94,10 +94,10 @@ func BenchmarkHTTP2_MiddlewareChain(b *testing.B) {
 
 	// 添加 10 个中间件
 	for i := 0; i < 10; i++ {
-		router.Use(func(ctx mvc.Context) { ctx.Next() })
+		router.Use(func(ctx core.Context) { ctx.Next() })
 	}
 
-	router.GET("/api/test", func(ctx mvc.Context) {
+	router.GET("/api/test", func(ctx core.Context) {
 		_ = ctx.JSON(200, map[string]string{"status": "ok"})
 	})
 

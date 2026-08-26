@@ -1,7 +1,7 @@
 package resilience
 
 import (
-	"sync"
+	"sync/atomic"
 )
 
 // nonNilBackends 过滤掉 nil 的后端，避免空指针解引用。
@@ -17,8 +17,7 @@ func nonNilBackends(backends []*ServiceInstance) []*ServiceInstance {
 
 // RoundRobin 轮询负载均衡器
 type RoundRobin struct {
-	mu      sync.Mutex
-	current int64
+	current atomic.Int64
 }
 
 // NewRoundRobin 创建轮询负载均衡器
@@ -33,18 +32,13 @@ func (rr *RoundRobin) Next(backends []*ServiceInstance) (*ServiceInstance, error
 		return nil, ErrNoBackends
 	}
 
-	rr.mu.Lock()
-	defer rr.mu.Unlock()
-
-	idx := rr.current % int64(len(backends))
-	rr.current++
+	idx := (rr.current.Add(1) - 1) % int64(len(backends))
 	return backends[idx], nil
 }
 
 // WeightedRoundRobin 加权轮询负载均衡器
 type WeightedRoundRobin struct {
-	mu      sync.Mutex
-	current int64
+	current atomic.Int64
 }
 
 // NewWeightedRoundRobin 创建加权轮询负载均衡器
@@ -59,9 +53,6 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 		return nil, ErrNoBackends
 	}
 
-	wrr.mu.Lock()
-	defer wrr.mu.Unlock()
-
 	totalWeight := 0
 	for _, b := range backends {
 		w := b.Weight
@@ -75,8 +66,7 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 		return backends[0], nil
 	}
 
-	current := wrr.current % int64(totalWeight)
-	wrr.current++
+	current := (wrr.current.Add(1) - 1) % int64(totalWeight)
 
 	accumulated := int64(0)
 	for _, b := range backends {

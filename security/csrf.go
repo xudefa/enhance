@@ -29,16 +29,24 @@ type CsrfFilter struct {
 //
 // 返回:
 //   - *CsrfFilter: CSRF 过滤器实例
-//
-// panic: tokenRepository 为 nil 时触发 panic
-func NewCsrfFilter(tokenRepository CsrfTokenRepository) *CsrfFilter {
+//   - error: 参数错误
+func NewCsrfFilter(tokenRepository CsrfTokenRepository) (*CsrfFilter, error) {
 	if tokenRepository == nil {
-		panic("csrf: tokenRepository must not be nil")
+		return nil, fmt.Errorf("csrf: tokenRepository must not be nil")
 	}
 	return &CsrfFilter{
 		tokenRepository: tokenRepository,
 		excludePaths:    []string{},
+	}, nil
+}
+
+// MustNewCsrfFilter 创建 CSRF 防护过滤器，失败则 panic。
+func MustNewCsrfFilter(tokenRepository CsrfTokenRepository) *CsrfFilter {
+	filter, err := NewCsrfFilter(tokenRepository)
+	if err != nil {
+		panic(err)
 	}
+	return filter
 }
 
 // AddExcludePath 添加不需要 CSRF 防护的路径。

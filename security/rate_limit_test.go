@@ -38,10 +38,7 @@ func TestSlidingWindowRateLimiter_Cleanup(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 	limiter.Cleanup()
 
-	limiter.mu.RLock()
-	count := len(limiter.windows)
-	limiter.mu.RUnlock()
-
+	count := limiter.WindowCount()
 	if count != 0 {
 		t.Errorf("expected 0 windows after cleanup, got %d", count)
 	}
@@ -435,6 +432,101 @@ func TestSecurityBuilder_EmptyBuild(t *testing.T) {
 	}
 }
 
+func TestTokenBucket_Take(t *testing.T) {
+	t.Parallel()
+	bucket := NewTokenBucket(5, 10)
+
+	// 应该允许前5个请求
+	for range 5 {
+		if !bucket.Take() {
+			t.Error("expected token to be available")
+		}
+	}
+
+	// 第6个请求应该被拒绝（令牌已用完）
+	if bucket.Take() {
+		t.Error("expected token to be exhausted")
+	}
+}
+
+func TestTokenBucket_IsExpired(t *testing.T) {
+	t.Parallel()
+	bucket := NewTokenBucket(5, 10)
+
+	// 刚创建不应该过期
+	if bucket.IsExpired(time.Second) {
+		t.Error("expected new bucket to not be expired")
+	}
+
+	// 模拟过期（通过修改lastAccess）
+	bucket.mu.Lock()
+	bucket.lastAccess = time.Now().Add(-time.Minute)
+	bucket.mu.Unlock()
+
+	// 现在应该过期
+	if !bucket.IsExpired(time.Second) {
+		t.Error("expected bucket to be expired after timeout")
+	}
+}
+
+func TestNewRateLimitFilter(t *testing.T) {
+	t.Parallel()
+	config := RateLimitConfig{
+		Enabled: true,
+		Rate:    10,
+		Burst:   20,
+	}
+
+	f := NewRateLimitFilter(config)
+	if f == nil {
+		t.Error("expected non-nil filter")
+	}
+}
+
+func TestRateLimitFilter_Order(t *testing.T) {
+	t.Parallel()
+	config := RateLimitConfig{
+		Enabled: true,
+		Rate:    10,
+		Burst:   20,
+	}
+
+	f := NewRateLimitFilter(config)
+	order := f.Order()
+	if order != 0 {
+		t.Errorf("expected order 0, got %d", order)
+	}
+}
+
+func TestParseTrustedProxies(t *testing.T) {
+	t.Parallel()
+	// 测试解析可信代理列表
+	proxies := parseTrustedProxies([]string{"192.168.1.1", "10.0.0.0/8"})
+	if len(proxies) != 2 {
+		t.Errorf("expected 2 proxies, got %d", len(proxies))
+	}
+}
+
+func TestIsTrustedProxy(t *testing.T) {
+	t.Parallel()
+	proxies := parseTrustedProxies([]string{"192.168.1.1", "10.0.0.0/8"})
+
+	// 测试可信代理
+	if !isTrustedProxy("192.168.1.1", proxies) {
+		t.Error("expected 192.168.1.1 to be trusted")
+	}
+
+	// 测试CIDR范围内的IP
+	if !isTrustedProxy("10.0.1.1", proxies) {
+		t.Error("expected 10.0.1.1 to be trusted (in 10.0.0.0/8)")
+	}
+
+	// 测试不可信代理
+	if isTrustedProxy("172.16.0.1", proxies) {
+		t.Error("expected 172.16.0.1 to not be trusted")
+	}
+}
+
 // 测试模拟实现
 
 type testAuth struct {
@@ -519,10 +611,7 @@ func TestSlidingWindowRateLimiter_LongRunning(t *testing.T) {
 	// 触发清理
 	limiter.Cleanup()
 
-	limiter.mu.RLock()
-	count := len(limiter.windows)
-	limiter.mu.RUnlock()
-
+	count := limiter.WindowCount()
 	if count != 0 {
 		t.Errorf("expected 0 windows after cleanup, got %d", count)
 	}
@@ -551,4 +640,216 @@ func TestFixedWindowCounterRateLimiter_WindowBoundary(t *testing.T) {
 	if !limiter.Allow("user1") {
 		t.Error("expected request in new window to be allowed")
 	}
+}
+
+func TestRateLimitFilter_CloseAndOrder(t *testing.T) {
+	t.Parallel()
+
+	filter := NewRateLimitFilter(RateLimitConfig{
+		Enabled: true,
+		Burst:   10,
+		Rate:    1.0,
+	})
+
+	// 验证Close不会panic
+	filter.Close()
+
+	// 多次调用Close应该安全
+	filter.Close()
+
+	// 验证Order
+	if filter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", filter.Order())
+	}
+}
+
+func TestRateLimitFilter_ExcludePaths(t *testing.T) {
+	t.Parallel()
+
+	filter := NewRateLimitFilter(RateLimitConfig{
+		Enabled:      true,
+		Burst:        10,
+		Rate:         1.0,
+		ExcludePaths: []string{"/health", "/metrics"},
+		Log:          &mockLogger{},
+	})
+
+	req := &mockSecurityRequest{
+		uri:    "/health",
+		method: "GET",
+	}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := filter.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected excluded path to bypass rate limiting")
+	}
+}
+
+func TestEnhancedRateLimitFilter_WithTrustedProxies(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter,
+		WithTrustedProxies("10.0.0.0/8", "192.168.1.100"),
+	)
+
+	if !filter.trustProxyHeaders {
+		t.Error("expected trustProxyHeaders to be true")
+	}
+	if len(filter.trustedProxyNets) == 0 {
+		t.Error("expected trustedProxyNets to be populated")
+	}
+}
+
+func TestEnhancedRateLimitFilter_Order(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter)
+
+	// Order应该返回0
+	if filter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", filter.Order())
+	}
+}
+
+func TestLeakyBucketRateLimiter_Close(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewLeakyBucketRateLimiter(10, 1*time.Second)
+
+	// 验证Close不会panic
+	limiter.Close()
+}
+
+func TestFixedWindowCounterRateLimiter_Close(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewFixedWindowCounterRateLimiter(1*time.Second, 10)
+
+	// 验证Close不会panic
+	limiter.Close()
+}
+
+func TestRateLimitFilter_CleanupBuckets(t *testing.T) {
+	t.Parallel()
+
+	// 创建一个带很短空闲超时的过滤器，以便快速清理
+	filter := NewRateLimitFilter(RateLimitConfig{
+		Enabled:           true,
+		Burst:             10,
+		Rate:              1.0,
+		BucketIdleTimeout: 50 * time.Millisecond,
+		CleanupInterval:   100 * time.Millisecond,
+		Log:               &mockLogger{},
+	})
+
+	// 手动添加一些桶到buckets中
+	filter.buckets.Store("192.168.1.1", NewTokenBucket(10, 1.0))
+	filter.buckets.Store("192.168.1.2", NewTokenBucket(10, 1.0))
+
+	// 等待超过空闲超时
+	time.Sleep(100 * time.Millisecond)
+
+	// 手动调用cleanupBuckets
+	filter.cleanupBuckets()
+
+	// 验证桶已被清理
+	count := 0
+	filter.buckets.Range(func(key, value any) bool {
+		count++
+		return true
+	})
+
+	if count != 0 {
+		t.Errorf("expected 0 buckets after cleanup, got %d", count)
+	}
+
+	filter.Close()
+}
+
+func TestRateLimitFilter_GetClientIP(t *testing.T) {
+	t.Parallel()
+
+	t.Run("from remote address", func(t *testing.T) {
+		t.Parallel()
+
+		filter := NewRateLimitFilter(RateLimitConfig{
+			Enabled: true,
+			Burst:   10,
+			Rate:    1.0,
+			Log:     &mockLogger{},
+		})
+
+		req := &mockSecurityRequest{}
+
+		// mockSecurityRequest.RemoteAddress()返回"127.0.0.1:8080"
+		ip := filter.getClientIP(req)
+		if ip != "127.0.0.1" {
+			t.Errorf("expected IP '127.0.0.1', got '%s'", ip)
+		}
+
+		filter.Close()
+	})
+
+	t.Run("from X-Forwarded-For with trusted proxy", func(t *testing.T) {
+		t.Parallel()
+
+		filter := NewRateLimitFilter(RateLimitConfig{
+			Enabled:           true,
+			Burst:             10,
+			Rate:              1.0,
+			TrustProxyHeaders: true,
+			TrustedProxies:    []string{"127.0.0.1"},
+			Log:               &mockLogger{},
+		})
+
+		req := &mockSecurityRequest{
+			headers: map[string]string{
+				"X-Forwarded-For": "203.0.113.50, 127.0.0.1",
+			},
+		}
+
+		// RemoteAddress返回"127.0.0.1:8080"，在TrustedProxies中
+		ip := filter.getClientIP(req)
+		if ip != "203.0.113.50" {
+			t.Errorf("expected IP '203.0.113.50', got '%s'", ip)
+		}
+
+		filter.Close()
+	})
+
+	t.Run("ignore headers without trusted proxy", func(t *testing.T) {
+		t.Parallel()
+
+		filter := NewRateLimitFilter(RateLimitConfig{
+			Enabled: true,
+			Burst:   10,
+			Rate:    1.0,
+			Log:     &mockLogger{},
+		})
+
+		req := &mockSecurityRequest{
+			headers: map[string]string{
+				"X-Forwarded-For": "203.0.113.50",
+			},
+		}
+
+		// 没有启用TrustProxyHeaders，应该忽略X-Forwarded-For
+		ip := filter.getClientIP(req)
+		if ip != "127.0.0.1" {
+			t.Errorf("expected IP '127.0.0.1', got '%s'", ip)
+		}
+
+		filter.Close()
+	})
 }

@@ -481,44 +481,6 @@ matched := registry.MatchAspectsForType(reflect.TypeOf(&UserService{}))
 
 ---
 
-## 装饰器（Decorator）
-
-框架还提供函数级别的装饰器，用于简单的 AOP 场景：
-
-```go
-// 前置装饰器
-decorated := aop.BeforeDecorator(
-    func(args ...any) []any {
-        // 原始函数逻辑
-        return []any{"result"}
-    },
-    func(args ...any) {
-        fmt.Println("before")
-    },
-)
-
-// 后置装饰器
-decorated := aop.AfterDecorator(
-    originalFunc,
-    func(results []any, args ...any) {
-        fmt.Println("after, result:", results)
-    },
-)
-
-// 环绕装饰器
-decorated := aop.AroundDecorator(
-    originalFunc,
-    func(originalFunc func(args ...any) []any, args ...any) []any {
-        fmt.Println("around before")
-        results := originalFunc(args...)
-        fmt.Println("around after")
-        return results
-    },
-)
-```
-
----
-
 ## 通知执行顺序
 
 当目标方法被调用时，通知按以下顺序执行：

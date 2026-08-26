@@ -1,6 +1,9 @@
 package resilience
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // HealthAware 健康感知负载均衡器
 type HealthAware struct {
@@ -10,14 +13,23 @@ type HealthAware struct {
 }
 
 // NewHealthAware 创建健康感知负载均衡器
-func NewHealthAware(inner Balancer) *HealthAware {
+func NewHealthAware(inner Balancer) (*HealthAware, error) {
 	if inner == nil {
-		panic("resilience: inner balancer must not be nil")
+		return nil, fmt.Errorf("resilience: inner balancer must not be nil")
 	}
 	return &HealthAware{
 		inner:   inner,
 		failure: make(map[string]int),
+	}, nil
+}
+
+// MustNewHealthAware 创建健康感知负载均衡器，失败则 panic。
+func MustNewHealthAware(inner Balancer) *HealthAware {
+	h, err := NewHealthAware(inner)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 // Next 选择健康的后端

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/xudefa/enhance/web/mvc"
+	"github.com/xudefa/enhance/web/core"
 )
 
 func TestNewRouter(t *testing.T) {
@@ -20,7 +20,7 @@ func TestNewRouter(t *testing.T) {
 func TestRouter_HEAD_FallsBackToGET(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
-	router.GET("/hello", func(ctx mvc.Context) {
+	router.GET("/hello", func(ctx core.Context) {
 		ctx.String(http.StatusOK, "hello")
 	})
 
@@ -45,7 +45,7 @@ func TestRouter_HEAD_FallsBackToGET(t *testing.T) {
 func TestRouter_HEAD_FallsBackToGET_ParamRoute(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
-	router.GET("/users/{id}", func(ctx mvc.Context) {
+	router.GET("/users/{id}", func(ctx core.Context) {
 		ctx.String(http.StatusOK, ctx.PathParam("id"))
 	})
 
@@ -66,10 +66,10 @@ func TestRouter_HEAD_FallsBackToGET_ParamRoute(t *testing.T) {
 func TestRouter_HEAD_ExplicitRouteTakesPrecedence(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
-	router.GET("/x", func(ctx mvc.Context) {
+	router.GET("/x", func(ctx core.Context) {
 		ctx.String(http.StatusOK, "get")
 	})
-	router.handle(http.MethodHead, "/x", func(ctx mvc.Context) {
+	router.handle(http.MethodHead, "/x", func(ctx core.Context) {
 		ctx.SetStatusCode(http.StatusNoContent)
 	})
 
@@ -94,7 +94,7 @@ func TestRouter_GroupPrefix_RespectsSegmentBoundary(t *testing.T) {
 
 	api := router.Group("/api").(*DefaultRouter)
 	sibling := router.Group("/apix")
-	sibling.GET("/", func(ctx mvc.Context) {
+	sibling.GET("/", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -117,7 +117,7 @@ func TestRouter_GroupPrefix_SegmentBoundaryMatch(t *testing.T) {
 	handlerCalled := false
 
 	api := router.Group("/api").(*DefaultRouter)
-	api.GET("/x", func(ctx mvc.Context) {
+	api.GET("/x", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -139,10 +139,10 @@ func TestRouter_DuplicateRegistration_Rejected(t *testing.T) {
 	firstCalled := false
 	secondCalled := false
 
-	router.GET("/dup", func(ctx mvc.Context) {
+	router.GET("/dup", func(ctx core.Context) {
 		firstCalled = true
 	})
-	router.GET("/dup", func(ctx mvc.Context) {
+	router.GET("/dup", func(ctx core.Context) {
 		secondCalled = true
 	})
 
@@ -164,10 +164,10 @@ func TestRouter_DuplicateParamRegistration_Rejected(t *testing.T) {
 	firstCalled := false
 	secondCalled := false
 
-	router.GET("/items/{id}", func(ctx mvc.Context) {
+	router.GET("/items/{id}", func(ctx core.Context) {
 		firstCalled = true
 	})
-	router.GET("/items/{id}", func(ctx mvc.Context) {
+	router.GET("/items/{id}", func(ctx core.Context) {
 		secondCalled = true
 	})
 
@@ -188,7 +188,7 @@ func TestRouter_GET(t *testing.T) {
 	router := NewRouter()
 	handlerCalled := false
 
-	router.GET("/test", func(ctx mvc.Context) {
+	router.GET("/test", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -207,7 +207,7 @@ func TestRouter_POST(t *testing.T) {
 	router := NewRouter()
 	handlerCalled := false
 
-	router.POST("/test", func(ctx mvc.Context) {
+	router.POST("/test", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -226,7 +226,7 @@ func TestRouter_PUT(t *testing.T) {
 	router := NewRouter()
 	handlerCalled := false
 
-	router.PUT("/test", func(ctx mvc.Context) {
+	router.PUT("/test", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -245,7 +245,7 @@ func TestRouter_DELETE(t *testing.T) {
 	router := NewRouter()
 	handlerCalled := false
 
-	router.DELETE("/test", func(ctx mvc.Context) {
+	router.DELETE("/test", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -264,7 +264,7 @@ func TestRouter_PATCH(t *testing.T) {
 	router := NewRouter()
 	handlerCalled := false
 
-	router.PATCH("/test", func(ctx mvc.Context) {
+	router.PATCH("/test", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -282,7 +282,7 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
 
-	router.GET("/test", func(ctx mvc.Context) {})
+	router.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodPost, "/test", nil)
 	w := httptest.NewRecorder()
@@ -298,7 +298,7 @@ func TestRouter_NotFound(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
 
-	router.GET("/test", func(ctx mvc.Context) {})
+	router.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/notfound", nil)
 	w := httptest.NewRecorder()
@@ -316,7 +316,7 @@ func TestRouter_Group(t *testing.T) {
 	handlerCalled := false
 
 	api := router.Group("/api")
-	api.GET("/users", func(ctx mvc.Context) {
+	api.GET("/users", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -337,7 +337,7 @@ func TestRouter_Group_Prefix(t *testing.T) {
 
 	v1 := router.Group("/v1")
 	api := v1.Group("/api")
-	api.GET("/users", func(ctx mvc.Context) {
+	api.GET("/users", func(ctx core.Context) {
 		handlerCalled = true
 	})
 
@@ -356,12 +356,12 @@ func TestRouter_Use(t *testing.T) {
 	router := NewRouter()
 	middlewareCalled := false
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		middlewareCalled = true
 		ctx.Next()
 	})
 
-	router.GET("/test", func(ctx mvc.Context) {})
+	router.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
@@ -378,17 +378,17 @@ func TestRouter_MiddlewareChain(t *testing.T) {
 	router := NewRouter()
 	executionOrder := []string{}
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw1")
 		ctx.Next()
 	})
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		executionOrder = append(executionOrder, "mw2")
 		ctx.Next()
 	})
 
-	router.GET("/test", func(ctx mvc.Context) {
+	router.GET("/test", func(ctx core.Context) {
 		executionOrder = append(executionOrder, "handler")
 	})
 
@@ -414,12 +414,12 @@ func TestRouter_ParamRouteMiddleware(t *testing.T) {
 	middlewareCalled := false
 	var capturedID string
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		middlewareCalled = true
 		ctx.Next()
 	})
 
-	router.GET("/users/{id}", func(ctx mvc.Context) {
+	router.GET("/users/{id}", func(ctx core.Context) {
 		capturedID = ctx.PathParam("id")
 	})
 
@@ -441,7 +441,7 @@ func TestRouter_PathParams(t *testing.T) {
 	router := NewRouter()
 	var capturedID string
 
-	router.GET("/users/{id}", func(ctx mvc.Context) {
+	router.GET("/users/{id}", func(ctx core.Context) {
 		capturedID = ctx.PathParam("id")
 	})
 
@@ -485,7 +485,7 @@ func TestRouter_MatchPath(t *testing.T) {
 func TestRouter_ExtractParams(t *testing.T) {
 	t.Parallel()
 	router := NewRouter()
-	router.GET("/users/{id}/posts/{postId}", func(ctx mvc.Context) {})
+	router.GET("/users/{id}/posts/{postId}", func(ctx core.Context) {})
 
 	// 通过 ServeHTTP 触发路由匹配和参数提取
 	req := httptest.NewRequest(http.MethodGet, "/users/123/posts/456", nil)
@@ -509,13 +509,13 @@ func TestRouter_GroupInheritsMiddleware(t *testing.T) {
 	router := NewRouter()
 	middlewareCalled := false
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		middlewareCalled = true
 		ctx.Next()
 	})
 
 	api := router.Group("/api")
-	api.GET("/test", func(ctx mvc.Context) {})
+	api.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	w := httptest.NewRecorder()
@@ -532,7 +532,7 @@ func TestRouter_GroupMiddleware(t *testing.T) {
 	router := NewRouter()
 	executionOrder := []string{}
 
-	router.Use(func(ctx mvc.Context) {
+	router.Use(func(ctx core.Context) {
 		executionOrder = append(executionOrder, "root")
 		ctx.Next()
 	})
@@ -541,12 +541,12 @@ func TestRouter_GroupMiddleware(t *testing.T) {
 	api := router.Group("/api")
 
 	// 在创建后向组添加中间件
-	api.Use(func(ctx mvc.Context) {
+	api.Use(func(ctx core.Context) {
 		executionOrder = append(executionOrder, "api")
 		ctx.Next()
 	})
 
-	api.GET("/test", func(ctx mvc.Context) {
+	api.GET("/test", func(ctx core.Context) {
 		executionOrder = append(executionOrder, "handler")
 	})
 

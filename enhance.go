@@ -85,7 +85,7 @@ type EnhanceApp struct{}
 //	        boot.WithModulesOption(WebModule, DatabaseModule),
 //	    )
 //	}
-func (e *EnhanceApp) Run(opts ...any) {
+func (e *EnhanceApp) Run(opts ...boot.BootOption) {
 	boot.Run(opts...)
 }
 
@@ -106,7 +106,7 @@ func (e *EnhanceApp) Run(opts ...any) {
 //	    // ... 自定义逻辑
 //	    app.Stop()
 //	}
-func NewApplication(opts ...any) (*boot.Boot, error) {
+func NewApplication(opts ...boot.BootOption) (*boot.Boot, error) {
 	return boot.NewApplication(opts...)
 }
 
@@ -119,6 +119,6 @@ func NewApplication(opts ...any) (*boot.Boot, error) {
 //	func main() {
 //	    enhance.Run()
 //	}
-func Run(opts ...any) {
+func Run(opts ...boot.BootOption) {
 	boot.Run(opts...)
 }

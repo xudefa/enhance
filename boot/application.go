@@ -50,17 +50,14 @@ import (
 //   - 该方法只创建应用实例，不会启动应用
 //   - 需要显式调用 Start() 方法才会执行完整的启动流程
 //   - 支持多次调用 NewApplication 创建多个独立的应用实例
-func NewApplication(opts ...any) (*Boot, error) {
+func NewApplication(opts ...BootOption) (*Boot, error) {
 	cfg := defaultBootConfig()
-	appOpts := make([]ApplicationOption, 0)
 
 	for _, opt := range opts {
-		switch o := opt.(type) {
-		case BootOption:
-			o(cfg)
-		case ApplicationOption:
-			appOpts = append(appOpts, o)
+		if opt == nil {
+			continue
 		}
+		opt(cfg)
 	}
 
 	container := core.NewContainer()
@@ -83,13 +80,6 @@ func NewApplication(opts ...any) (*Boot, error) {
 		config:       cfg,
 		configLoader: configLoader,
 		hooks:        lifecycle.NewHookRegistry(),
-	}
-
-	// 应用 ApplicationOption（用于模块组合等后处理）
-	for _, opt := range appOpts {
-		if err := opt(b); err != nil {
-			return nil, err
-		}
 	}
 
 	return b, nil

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/xudefa/enhance/web/core"
 )
@@ -10,16 +11,16 @@ import (
 type ServerAdapter struct {
 	startFunc  func() error
 	stopFunc   func(ctx context.Context) error
-	setHandler func(handler any)
-	useFunc    func(m any)
+	setHandler func(handler http.Handler)
+	useFunc    func(middleware func(http.Handler) http.Handler)
 }
 
 // NewServerAdapter 创建服务器适配器。
 func NewServerAdapter(
 	start func() error,
 	stop func(ctx context.Context) error,
-	setHandler func(handler any),
-	use func(m any),
+	setHandler func(handler http.Handler),
+	use func(middleware func(http.Handler) http.Handler),
 ) *ServerAdapter {
 	return &ServerAdapter{
 		startFunc:  start,
@@ -40,13 +41,13 @@ func (a *ServerAdapter) Stop(ctx context.Context) error {
 }
 
 // SetHandler 设置处理器。
-func (a *ServerAdapter) SetHandler(handler any) {
+func (a *ServerAdapter) SetHandler(handler http.Handler) {
 	a.setHandler(handler)
 }
 
 // Use 注册中间件。
-func (a *ServerAdapter) Use(m any) {
-	a.useFunc(m)
+func (a *ServerAdapter) Use(middleware func(http.Handler) http.Handler) {
+	a.useFunc(middleware)
 }
 
 // RouterAdapter 将不同框架的路由器适配为统一的 Router 接口。
@@ -56,6 +57,7 @@ type RouterAdapter struct {
 	putFunc    func(path string, handler core.HandlerFunc)
 	deleteFunc func(path string, handler core.HandlerFunc)
 	patchFunc  func(path string, handler core.HandlerFunc)
+	handleFunc func(method, path string, handler core.HandlerFunc)
 	groupFunc  func(prefix string) core.Router
 	useFunc    func(middleware core.MiddlewareFunc)
 }
@@ -67,6 +69,7 @@ func NewRouterAdapter(
 	put func(path string, handler core.HandlerFunc),
 	delete func(path string, handler core.HandlerFunc),
 	patch func(path string, handler core.HandlerFunc),
+	handle func(method, path string, handler core.HandlerFunc),
 	group func(prefix string) core.Router,
 	use func(middleware core.MiddlewareFunc),
 ) *RouterAdapter {
@@ -76,6 +79,7 @@ func NewRouterAdapter(
 		putFunc:    put,
 		deleteFunc: delete,
 		patchFunc:  patch,
+		handleFunc: handle,
 		groupFunc:  group,
 		useFunc:    use,
 	}
@@ -104,6 +108,13 @@ func (a *RouterAdapter) DELETE(path string, handler core.HandlerFunc) {
 // PATCH 注册 PATCH 路由。
 func (a *RouterAdapter) PATCH(path string, handler core.HandlerFunc) {
 	a.patchFunc(path, handler)
+}
+
+// Handle 注册任意 HTTP 方法的路由。
+func (a *RouterAdapter) Handle(method, path string, handler core.HandlerFunc) {
+	if a.handleFunc != nil {
+		a.handleFunc(method, path, handler)
+	}
 }
 
 // Group 创建路由组。
