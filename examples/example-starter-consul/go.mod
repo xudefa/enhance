@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/hashicorp/consul/api v1.31.0
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/consul v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/consul v0.0.6
 )
 
 require (

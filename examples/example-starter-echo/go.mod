@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/labstack/echo/v4 v4.11.4
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/echo v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/echo v0.0.6
 )
 
 require (

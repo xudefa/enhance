@@ -5,14 +5,14 @@ go 1.25.12
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/cron v0.0.5
-	github.com/xudefa/enhance/starter/gin v0.0.5
-	github.com/xudefa/enhance/starter/jwt v0.0.5
-	github.com/xudefa/enhance/starter/otel v0.0.5
-	github.com/xudefa/enhance/starter/prometheus v0.0.5
-	github.com/xudefa/enhance/starter/redis v0.0.5
-	github.com/xudefa/enhance/starter/zerolog v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/cron v0.0.6
+	github.com/xudefa/enhance/starter/gin v0.0.6
+	github.com/xudefa/enhance/starter/jwt v0.0.6
+	github.com/xudefa/enhance/starter/otel v0.0.6
+	github.com/xudefa/enhance/starter/prometheus v0.0.6
+	github.com/xudefa/enhance/starter/redis v0.0.6
+	github.com/xudefa/enhance/starter/zerolog v0.0.6
 )
 
 require (

@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-mongodb
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/mongodb v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/mongodb v0.0.6
 	go.mongodb.org/mongo-driver v1.15.0
 )
 

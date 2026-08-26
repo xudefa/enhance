@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/segmentio/kafka-go v0.4.47
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/kafka v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/kafka v0.0.6
 )
 
 require (

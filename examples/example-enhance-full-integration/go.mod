@@ -3,12 +3,12 @@ module github.com/xudefa/enhance/examples/example-enhance-full-integration
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/casbin v0.0.5
-	github.com/xudefa/enhance/starter/casbin-gorm v0.0.5
-	github.com/xudefa/enhance/starter/gorm v0.0.5
-	github.com/xudefa/enhance/starter/jwt v0.0.5
-	github.com/xudefa/enhance/starter/zerolog v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/casbin v0.0.6
+	github.com/xudefa/enhance/starter/casbin-gorm v0.0.6
+	github.com/xudefa/enhance/starter/gorm v0.0.6
+	github.com/xudefa/enhance/starter/jwt v0.0.6
+	github.com/xudefa/enhance/starter/zerolog v0.0.6
 	gorm.io/gorm v1.31.2
 )
 

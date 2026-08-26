@@ -5,10 +5,10 @@ go 1.25.12
 require xorm.io/xorm v1.3.11
 
 require (
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/casbin-xorm v0.0.5
-	github.com/xudefa/enhance/starter/jwt v0.0.5
-	github.com/xudefa/enhance/starter/xorm v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/casbin-xorm v0.0.6
+	github.com/xudefa/enhance/starter/jwt v0.0.6
+	github.com/xudefa/enhance/starter/xorm v0.0.6
 )
 
 require (

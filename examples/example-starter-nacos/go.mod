@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/nacos-group/nacos-sdk-go/v2 v2.2.5
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/nacos v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/nacos v0.0.6
 )
 
 require (

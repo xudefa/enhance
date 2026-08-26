@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/apolloconfig/agollo/v4 v4.4.0
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/apollo v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/apollo v0.0.6
 )
 
 require (

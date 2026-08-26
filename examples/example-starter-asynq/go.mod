@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/hibiken/asynq v0.24.1
-	github.com/xudefa/enhance v0.0.5
-	github.com/xudefa/enhance/starter/asynq v0.0.5
+	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance/starter/asynq v0.0.6
 )
 
 require (
