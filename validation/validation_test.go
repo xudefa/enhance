@@ -335,7 +335,7 @@ func TestBindAndValidate(t *testing.T) {
 }
 
 // TestValidateStruct 测试结构体验证便捷函数
-func TestValidateStruct(t *testing.T) {
+func TestValidateStruct_Coverage(t *testing.T) {
 	t.Parallel()
 	type TestStruct struct {
 		Name string `validate:"required,min=2"`

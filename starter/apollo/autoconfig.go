@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ApolloAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ApolloEnabled, ConditionTrue),
+			// 约定优于配置：当 apollo.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ApolloEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)

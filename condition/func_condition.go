@@ -1,7 +1,5 @@
 package condition
 
-import "fmt"
-
 // ConditionFunc 条件函数类型
 //
 // 这是 Condition 接口的函数式替代方案，适用于简单条件判断。
@@ -54,37 +52,6 @@ func Always() Condition {
 // 用于禁用某个自动配置。
 func Never() Condition {
 	return ConditionFunc(func(ctx ConditionContext) bool { return false })
-}
-
-// When 创建带描述的条件
-//
-// 在 ConditionFunc 基础上增加可读的 String() 输出。
-//
-// 示例:
-//
-//	cond := condition.When("feature flag is enabled", func(ctx condition.ConditionContext) bool {
-//	    val, _ := ctx.GetProperty("feature.enabled")
-//	    return val == "true"
-//	})
-func When(description string, fn func(ctx ConditionContext) bool) Condition {
-	return &describedCondition{
-		description: description,
-		fn:          fn,
-	}
-}
-
-// describedCondition 带描述的条件实现
-type describedCondition struct {
-	description string
-	fn          func(ctx ConditionContext) bool
-}
-
-func (d *describedCondition) Matches(ctx ConditionContext) bool {
-	return d.fn(ctx)
-}
-
-func (d *describedCondition) String() string {
-	return fmt.Sprintf("When(%s)", d.description)
 }
 
 // AllFunc 创建函数类型的逻辑与条件

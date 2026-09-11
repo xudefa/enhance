@@ -47,7 +47,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&RateLimiterAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(RateLimiterEnabled, ConditionTrue),
+			// 约定优于配置：当 ratelimiter.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(RateLimiterEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityMiddleware)),
 	)

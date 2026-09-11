@@ -22,7 +22,8 @@ var fiberAutoConfig = &FiberAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(fiberAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(FiberEnabled, ConditionTrue),
+			// 约定优于配置：当 fiber.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(FiberEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -163,7 +164,7 @@ func (c *FiberAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *FiberAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(FiberEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(FiberEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetApp 从容器中获取 Fiber App 实例。

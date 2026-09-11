@@ -163,7 +163,7 @@ value, _ := expr.GetValue(ctx)
 // value == "Alice"
 ```
 
-### 与 AOP 集成
+### 在拦截器中使用
 
 ```go
 // 使用表达式解析方法参数

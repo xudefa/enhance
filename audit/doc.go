@@ -162,7 +162,6 @@ type Auditor interface {
 // AuditInterceptor 审计拦截器接口。
 //
 // 用于拦截方法调用并自动记录审计日志。
-// 通常与 AOP 框架配合使用，实现声明式审计。
 type AuditInterceptor interface {
 	// Intercept 拦截方法调用并记录审计日志。
 	Intercept(methodName string, args []any, result any, err error)

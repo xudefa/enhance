@@ -8,6 +8,49 @@ import (
 	"sync"
 )
 
+// ErrorCodeExceptionResolver 错误码异常解析器
+//
+// 将 ErrorCode 类型的错误转换为统一的错误响应。
+type ErrorCodeExceptionResolver struct {
+	order int
+}
+
+// BusinessError 业务错误
+//
+// 包装 ErrorCode 并支持附加详细信息。
+type BusinessError struct {
+	mu      sync.Mutex
+	code    ErrorCode
+	details map[string]any
+}
+
+// 预定义的业务错误码（不与其他包冲突）
+var (
+	ErrCodeBadRequest          = ErrorCode{400, "请求参数错误", "bad_request"}
+	ErrCodeUnauthorized        = ErrorCode{401, "未授权", "unauthorized"}
+	ErrCodeForbidden           = ErrorCode{403, "禁止访问", "forbidden"}
+	ErrCodeNotFound            = ErrorCode{404, "资源不存在", "not_found"}
+	ErrCodeMethodNotAllowed    = ErrorCode{405, "方法不允许", "method_not_allowed"}
+	ErrCodeConflict            = ErrorCode{409, "资源冲突", "conflict"}
+	ErrCodeInternalServerError = ErrorCode{500, "服务器内部错误", "internal_server_error"}
+	ErrCodeServiceUnavailable  = ErrorCode{503, "服务不可用", "service_unavailable"}
+)
+
+// 全局错误码注册表
+var globalErrorCodeRegistry = NewErrorCodeRegistry()
+
+func init() {
+	RegisterErrorCode(ErrCodeBadRequest)
+	RegisterErrorCode(ErrCodeUnauthorized)
+	RegisterErrorCode(ErrCodeForbidden)
+	RegisterErrorCode(ErrCodeNotFound)
+	RegisterErrorCode(ErrCodeMethodNotAllowed)
+	RegisterErrorCode(ErrCodeConflict)
+	RegisterErrorCode(ErrCodeInternalServerError)
+	RegisterErrorCode(ErrCodeServiceUnavailable)
+}
+
+// Error 返回错误码的字符串表示
 func (e ErrorCode) Error() string {
 	return fmt.Sprintf("[%d] %s (%s)", e.Code, e.Message, e.Detail)
 }
@@ -70,9 +113,6 @@ func (r *ErrorCodeRegistry) GetAll() []ErrorCode {
 	return codes
 }
 
-// 全局错误码注册表
-var globalErrorCodeRegistry = NewErrorCodeRegistry()
-
 // GlobalErrorCodeRegistry 返回全局错误码注册表
 func GlobalErrorCodeRegistry() *ErrorCodeRegistry {
 	return globalErrorCodeRegistry
@@ -86,13 +126,6 @@ func RegisterErrorCode(code ErrorCode) {
 // GetErrorCode 从全局注册表获取错误码
 func GetErrorCode(detail string) (ErrorCode, bool) {
 	return globalErrorCodeRegistry.Get(detail)
-}
-
-// ErrorCodeExceptionResolver 错误码异常解析器
-//
-// 将 ErrorCode 类型的错误转换为统一的错误响应。
-type ErrorCodeExceptionResolver struct {
-	order int
 }
 
 // NewErrorCodeExceptionResolver 创建错误码异常解析器
@@ -122,43 +155,6 @@ func (r *ErrorCodeExceptionResolver) Supports(err error) bool {
 // Order 返回解析器优先级
 func (r *ErrorCodeExceptionResolver) Order() int {
 	return r.order
-}
-
-// asErrorCode 尝试将错误转换为 ErrorCode
-//
-// 使用 errors.As 沿错误链查找，使 fmt.Errorf("wrap: %w", err) 等包装错误也能被识别。
-func asErrorCode(err error, target *ErrorCode) bool {
-	if err == nil {
-		return false
-	}
-
-	// 匹配 ErrorCode 值类型（ErrorCode 本身实现了 error 接口）
-	var code ErrorCode
-	if errors.As(err, &code) {
-		*target = code
-		return true
-	}
-
-	// 匹配实现了 ErrorCode() ErrorCode 接口的类型（如 *BusinessError）
-	type errorCodeInterface interface {
-		ErrorCode() ErrorCode
-	}
-	var iface errorCodeInterface
-	if errors.As(err, &iface) {
-		*target = iface.ErrorCode()
-		return true
-	}
-
-	return false
-}
-
-// BusinessError 业务错误
-//
-// 包装 ErrorCode 并支持附加详细信息。
-type BusinessError struct {
-	mu      sync.Mutex
-	code    ErrorCode
-	details map[string]any
 }
 
 // New 创建业务错误
@@ -213,25 +209,30 @@ func (e *BusinessError) ErrorCode() ErrorCode {
 	return e.code
 }
 
-// 预定义的业务错误码（不与其他包冲突）
-var (
-	ErrCodeBadRequest          = ErrorCode{400, "请求参数错误", "bad_request"}
-	ErrCodeUnauthorized        = ErrorCode{401, "未授权", "unauthorized"}
-	ErrCodeForbidden           = ErrorCode{403, "禁止访问", "forbidden"}
-	ErrCodeNotFound            = ErrorCode{404, "资源不存在", "not_found"}
-	ErrCodeMethodNotAllowed    = ErrorCode{405, "方法不允许", "method_not_allowed"}
-	ErrCodeConflict            = ErrorCode{409, "资源冲突", "conflict"}
-	ErrCodeInternalServerError = ErrorCode{500, "服务器内部错误", "internal_server_error"}
-	ErrCodeServiceUnavailable  = ErrorCode{503, "服务不可用", "service_unavailable"}
-)
+// asErrorCode 尝试将错误转换为 ErrorCode
+//
+// 使用 errors.As 沿错误链查找，使 fmt.Errorf("wrap: %w", err) 等包装错误也能被识别。
+func asErrorCode(err error, target *ErrorCode) bool {
+	if err == nil {
+		return false
+	}
 
-func init() {
-	RegisterErrorCode(ErrCodeBadRequest)
-	RegisterErrorCode(ErrCodeUnauthorized)
-	RegisterErrorCode(ErrCodeForbidden)
-	RegisterErrorCode(ErrCodeNotFound)
-	RegisterErrorCode(ErrCodeMethodNotAllowed)
-	RegisterErrorCode(ErrCodeConflict)
-	RegisterErrorCode(ErrCodeInternalServerError)
-	RegisterErrorCode(ErrCodeServiceUnavailable)
+	// 匹配 ErrorCode 值类型（ErrorCode 本身实现了 error 接口）
+	var code ErrorCode
+	if errors.As(err, &code) {
+		*target = code
+		return true
+	}
+
+	// 匹配实现了 ErrorCode() ErrorCode 接口的类型（如 *BusinessError）
+	type errorCodeInterface interface {
+		ErrorCode() ErrorCode
+	}
+	var iface errorCodeInterface
+	if errors.As(err, &iface) {
+		*target = iface.ErrorCode()
+		return true
+	}
+
+	return false
 }

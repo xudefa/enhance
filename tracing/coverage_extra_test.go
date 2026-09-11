@@ -47,7 +47,7 @@ func (m *mockApplicationContext) EventBus() boot.EventBusResult {
 	return nil
 }
 
-func TestTracingAutoConfiguration_Configure(t *testing.T) {
+func TestTracingAutoConfiguration_Configure_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name       string
@@ -126,7 +126,7 @@ func TestTracingAutoConfiguration_Configure(t *testing.T) {
 	}
 }
 
-func TestTracingAutoConfiguration_GetTracer(t *testing.T) {
+func TestTracingAutoConfiguration_GetTracer_Coverage(t *testing.T) {
 	t.Parallel()
 	cfg := &TracingAutoConfiguration{}
 	if cfg.GetTracer() != nil {
@@ -139,14 +139,14 @@ func TestTracingAutoConfiguration_GetTracer(t *testing.T) {
 	}
 }
 
-func TestTracingAutoConfiguration_LoadConfig(t *testing.T) {
+func TestTracingAutoConfiguration_LoadConfig_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		props      map[string]any
-		wantName   string
-		wantRate   float64
-		wantMax    int
+		name     string
+		props    map[string]any
+		wantName string
+		wantRate float64
+		wantMax  int
 	}{
 		{
 			name:     "defaults",
@@ -201,11 +201,11 @@ func TestTracingAutoConfiguration_LoadConfig(t *testing.T) {
 	}
 }
 
-func TestSpan_SetTag_NilMap(t *testing.T) {
+func TestSpan_SetTag_NilMap_Coverage(t *testing.T) {
 	t.Parallel()
 	span := &Span{
-		Name:  "test",
-		Tags:  nil,
+		Name:   "test",
+		Tags:   nil,
 		Events: make([]SpanEvent, 0),
 	}
 
@@ -219,7 +219,7 @@ func TestSpan_SetTag_NilMap(t *testing.T) {
 	}
 }
 
-func TestSpan_MarshalJSON_NotEnded(t *testing.T) {
+func TestSpan_MarshalJSON_NotEnded_Coverage(t *testing.T) {
 	t.Parallel()
 	span := &Span{
 		TraceID:   "trace-1",
@@ -249,7 +249,7 @@ func TestSpan_MarshalJSON_NotEnded(t *testing.T) {
 	}
 }
 
-func TestTraceHelper_TraceDB_Error(t *testing.T) {
+func TestTraceHelper_TraceDB_Error_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer()
 	helper := NewTraceHelper(tracer)
@@ -264,7 +264,7 @@ func TestTraceHelper_TraceDB_Error(t *testing.T) {
 	}
 }
 
-func TestTraceHelper_TraceRPC_Error(t *testing.T) {
+func TestTraceHelper_TraceRPC_Error_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer()
 	helper := NewTraceHelper(tracer)
@@ -279,7 +279,7 @@ func TestTraceHelper_TraceRPC_Error(t *testing.T) {
 	}
 }
 
-func TestTracer_Inject_WithoutParentSpanID(t *testing.T) {
+func TestTracer_Inject_WithoutParentSpanID_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer()
 	ctx := SpanContext{
@@ -301,7 +301,7 @@ func TestTracer_Inject_WithoutParentSpanID(t *testing.T) {
 	}
 }
 
-func TestTracer_Extract_WithParentSpanID(t *testing.T) {
+func TestTracer_Extract_WithParentSpanID_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer()
 	headers := map[string]string{
@@ -321,7 +321,7 @@ func TestTracer_Extract_WithParentSpanID(t *testing.T) {
 	}
 }
 
-func TestTraceFromContext_NilContext(t *testing.T) {
+func TestTraceFromContext_NilContext_Coverage(t *testing.T) {
 	t.Parallel()
 	_, ok := TraceFromContext(nil)
 	if ok {
@@ -329,7 +329,7 @@ func TestTraceFromContext_NilContext(t *testing.T) {
 	}
 }
 
-func TestTracer_StartSpan_MaxSpansEviction(t *testing.T) {
+func TestTracer_StartSpan_MaxSpansEviction_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer(WithMaxSpans(3))
 
@@ -346,7 +346,7 @@ func TestTracer_StartSpan_MaxSpansEviction(t *testing.T) {
 	}
 }
 
-func TestTracer_StartSpan_ContextNotSampled(t *testing.T) {
+func TestTracer_StartSpan_ContextNotSampled_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer(WithServiceName("test"))
 
@@ -366,7 +366,7 @@ func TestTracer_StartSpan_ContextNotSampled(t *testing.T) {
 	}
 }
 
-func TestConsoleExporter_ExportSpans(t *testing.T) {
+func TestConsoleExporter_ExportSpans_Coverage(t *testing.T) {
 	t.Parallel()
 	exporter := &ConsoleExporter{}
 
@@ -386,7 +386,7 @@ func TestConsoleExporter_ExportSpans(t *testing.T) {
 	}
 }
 
-func TestTracer_Export_WithExporter(t *testing.T) {
+func TestTracer_Export_WithExporter_Coverage(t *testing.T) {
 	t.Parallel()
 	exporter := &mockExporter{}
 	tracer := NewTracer(WithExporter(exporter))
@@ -403,7 +403,7 @@ func TestTracer_Export_WithExporter(t *testing.T) {
 	}
 }
 
-func TestSpan_Duration_Ended(t *testing.T) {
+func TestSpan_Duration_Ended_Coverage(t *testing.T) {
 	t.Parallel()
 	span := &Span{
 		StartTime: time.Now().Add(-time.Second),
@@ -417,7 +417,7 @@ func TestSpan_Duration_Ended(t *testing.T) {
 	}
 }
 
-func TestTracer_Inject_WithParentSpanID(t *testing.T) {
+func TestTracer_Inject_WithParentSpanID_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer()
 	ctx := SpanContext{
@@ -434,7 +434,7 @@ func TestTracer_Inject_WithParentSpanID(t *testing.T) {
 	}
 }
 
-func TestTracer_StartSpan_NotSampled(t *testing.T) {
+func TestTracer_StartSpan_NotSampled_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer(WithSampler(&AlwaysOffSampler{}))
 
@@ -448,7 +448,7 @@ func TestTracer_StartSpan_NotSampled(t *testing.T) {
 	}
 }
 
-func TestTracer_StartSpan_NoOpts(t *testing.T) {
+func TestTracer_StartSpan_NoOpts_Coverage(t *testing.T) {
 	t.Parallel()
 	tracer := NewTracer(WithServiceName("test"))
 

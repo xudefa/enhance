@@ -96,8 +96,8 @@ func TestWatchManager_Close(t *testing.T) {
 	// After close, operations should be no-ops
 	m.Register("cb2", func(event WatchEvent) {}) // no panic
 	m.Unregister("cb")                           // no panic
-	m.Notify(WatchEvent{})                        // no panic
-	m.AddSource("src2", make(chan WatchEvent))     // no panic
+	m.Notify(WatchEvent{})                       // no panic
+	m.AddSource("src2", make(chan WatchEvent))   // no panic
 }
 
 func TestWatchManager_CloseIdempotent(t *testing.T) {

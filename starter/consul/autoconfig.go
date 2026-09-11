@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ConsulAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ConsulEnabled, ConditionTrue),
+			// 约定优于配置：当 consul.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ConsulEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityServiceDiscovery)),
 	)

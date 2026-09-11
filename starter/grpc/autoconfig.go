@@ -21,7 +21,8 @@ var grpcAutoConfig = &GrpcAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(grpcAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(GrpcEnabled, ConditionTrue),
+			// 约定优于配置：当 grpc.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(GrpcEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -124,7 +125,7 @@ func (c *GrpcAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *GrpcAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(GrpcEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(GrpcEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetServer 获取 gRPC 服务器实例。

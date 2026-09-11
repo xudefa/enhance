@@ -3,7 +3,6 @@ package stdlib
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -12,18 +11,7 @@ import (
 	"github.com/xudefa/enhance/web/engine"
 )
 
-func getFreePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to get free port: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	return port
-}
-
-func TestServer_Start_ListenAndServe(t *testing.T) {
+func TestServer_Start_ListenAndServe_Coverage(t *testing.T) {
 	t.Parallel()
 
 	port := getFreePort(t)
@@ -80,7 +68,7 @@ func TestServer_Start_ListenAndServe(t *testing.T) {
 	}
 }
 
-func TestServer_Stop_ShutdownWaitsForInFlight(t *testing.T) {
+func TestServer_Stop_ShutdownWaitsForInFlight_Coverage(t *testing.T) {
 	t.Parallel()
 
 	port := getFreePort(t)
@@ -153,7 +141,7 @@ func TestServer_Stop_ShutdownWaitsForInFlight(t *testing.T) {
 	}
 }
 
-func TestFactory_CreateServer_WithOptions(t *testing.T) {
+func TestFactory_CreateServer_WithOptions_Coverage(t *testing.T) {
 	t.Parallel()
 
 	f := &Factory{}
@@ -172,7 +160,7 @@ func TestFactory_CreateServer_WithOptions(t *testing.T) {
 	}
 }
 
-func TestNewServer_WithTLSOptions(t *testing.T) {
+func TestNewServer_WithTLSOptions_Coverage(t *testing.T) {
 	t.Parallel()
 
 	s := NewServer(

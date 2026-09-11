@@ -25,7 +25,8 @@ var chiAutoConfig = &ChiAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(chiAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(ChiEnabled, ConditionTrue),
+			// 约定优于配置：当 chi.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ChiEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -178,7 +179,7 @@ func (c *ChiAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *ChiAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(ChiEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(ChiEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetRouter 从容器中获取 Chi 路由器实例。

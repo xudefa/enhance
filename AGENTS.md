@@ -24,7 +24,7 @@
 
 ### 0.3 工程化框架
 - enhance 是**工程化框架**，不是"轻量级框架"
-- 提供完整的企业级特性：IoC、AOP、自动配置、Actuator 等
+- 提供完整的企业级特性：IoC、自动配置、Actuator 等
 - 保持代码质量、可测试性、可维护性
 
 ### 0.4 依赖方向与接口隔离原则
@@ -99,7 +99,7 @@ enhance 采用三层架构设计，职责清晰：
 | 层级 | 职责 | 核心模块 |
 |------|------|----------|
 | **Boot Layer** | 应用启动、自动配置、Starter 管理 | `boot`, `condition`, `context` |
-| **Core Layer** | IoC 容器、AOP、事件驱动、配置管理 | `core`, `aop`, `event`, `config`, `lifecycle` |
+| **Core Layer** | IoC 容器、事件驱动、配置管理 | `core`, `event`, `config`, `lifecycle` |
 | **Infrastructure Layer** | Web、安全、监控、缓存、数据访问等基础设施 | `web`, `security`, `actuator`, `cache`, `schedule`, `log`, `metrics` |
 
 ### 1.2 包结构清单
@@ -111,7 +111,6 @@ enhance 采用三层架构设计，职责清晰：
 | 包 | 说明 | 核心接口 |
 |---|------|----------|
 | `core/` | IoC 容器（依赖注入、组件扫描、泛型 API） | `core.Container`, `core.Scope`, `core.BeanPostProcessor` |
-| `aop/` | AOP 框架（5 种通知 + 切点匹配 + 代码生成） | `aop.Advice`, `aop.PointCut`, `aop.Advisor` |
 | `boot/` | 应用启动器、自动配置、横幅、失败分析 | `boot.AutoConfiguration`, `boot.Starter` |
 | `context/` | 应用上下文（聚合容器、环境、生命周期、事件） | `context.ApplicationContext` |
 | `condition/` | 条件判断（OnProperty / OnBean / OnClass） | `condition.Condition` |
@@ -310,22 +309,6 @@ c.Register(reflect.TypeOf(&MyService{}), core.FactoryOf[MyService](func(c core.C
 svc := core.MustGetBean[*MyService](c)
 ```
 
-### 3.2 AOP 框架
-
-```go
-// 通知类型：Before, After, Around, AfterReturning, AfterThrowing
-// 切点匹配：MatchByName, MatchByPrefix, MatchByRegex
-
-// 织入流程
-weaver := aop.NewWeaver()
-weaver.AddAspects(aspects...)
-proxy := weaver.Weave(target)
-```
-
-**关键规则**：
-- Around 通知**必须**调用 `proceed` 使调用链继续
-- 多个通知通过 `aop.WithOrder(n)` 排序，值越小优先级越高
-
 ### 3.3 自动配置机制
 
 ```go
@@ -374,32 +357,54 @@ func main() {
 
 ### 4.1 代码生成流程
 
-1. **理解需求**：确认用户意图，明确功能边界
-2. **查阅架构**：参考本文档第 1 节，确定功能所属模块
+1. **理解需求**：确认用户意图，明确功能边界，参考 Spring Boot 的"约定优于配置"理念
+2. **查阅架构**：参考本文档第 1 节和 [ARCHITECTURE.md](ARCHITECTURE.md)，确定功能所属模块
 3. **遵循规范**：遵守 [CODING_STYLE.md](CODING_STYLE.md) 中的编码规范
-4. **生成代码**：按照文件内顺序组织代码
+4. **生成代码**：按照文件内顺序组织代码，保持高内聚低耦合
 5. **编写测试**：使用表驱动测试，覆盖正常路径和错误路径
 6. **自检清单**：完成第 5 节的检查清单
 
 ### 4.2 代码修改流程
 
 1. **定位代码**：找到需要修改的文件和函数
-2. **理解上下文**：阅读相关代码，理解现有逻辑
+2. **理解上下文**：阅读相关代码，理解现有逻辑和设计意图
 3. **最小修改**：只修改必要的部分，保持原有风格
 4. **更新测试**：同步更新相关测试用例
-5. **验证编译**：确保代码编译通过
+5. **验证编译**：确保代码编译通过，测试通过
 
 ### 4.3 代码审查要点
 
-- [ ] 是否遵循命名规范
-- [ ] 是否使用函数式选项模式
-- [ ] 是否早期返回，无多余 else
-- [ ] 导出类型是否有文档注释
-- [ ] 错误是否已正确处理
-- [ ] 并发是否安全
-- [ ] 接口是否小而精
-- [ ] 是否使用表驱动测试
-- [ ] 测试是否使用 `t.Parallel()` 支持并发
+#### 命名与结构
+- [ ] 包名简洁且语义明确（全小写，无下划线）
+- [ ] 导出标识符使用大写驼峰，非导出使用小写驼峰
+- [ ] 接口命名使用 `er` 后缀或功能描述，禁止 `I` 前缀
+- [ ] 结构体字段命名清晰，避免缩写（除非是常见缩写如 ID、URL）
+
+#### 代码组织
+- [ ] 文件结构遵循：包文档 → 常量 → 变量 → 接口 → 结构体 → 构造函数 → 方法 → 工具函数
+- [ ] 导入分组正确：标准库 → 项目内部包，空行分隔
+- [ ] 函数职责单一，不超过 50 行
+- [ ] 文件不超过 500 行（超过时拆分）
+
+#### Go 惯用法
+- [ ] 使用早期返回（early return），避免深层嵌套和多余 else
+- [ ] 使用函数式选项模式提供灵活配置
+- [ ] 使用组合而非继承
+- [ ] 接口小而精（通常 1-5 个方法）
+- [ ] 错误处理完整，使用 `%w` 包装错误
+
+#### 并发安全
+- [ ] 共享状态使用互斥锁或原子操作保护
+- [ ] 避免 goroutine 泄漏（使用 context 控制生命周期）
+- [ ] channel 操作有超时机制
+- [ ] 使用 `sync.Map` 优化读多写少场景
+
+#### 测试质量
+- [ ] 使用表驱动测试
+- [ ] 测试函数使用 `t.Parallel()` 支持并发
+- [ ] 子测试也使用 `t.Parallel()`
+- [ ] 覆盖正常路径和错误路径
+- [ ] 无全局状态竞争
 
 ---
 
@@ -407,26 +412,26 @@ func main() {
 
 AI 在生成代码后必须自检以下项目：
 
-### 5.1 必须通过
+### 5.1 必须通过（阻塞项）
 - [ ] 代码编译通过（`go build ./...`）
 - [ ] 测试通过（`go test ./...`）
 - [ ] 无数据竞争（`go test -race ./...`）
 - [ ] 代码已格式化（`go fmt ./...`）
 - [ ] 依赖已修复（`go mod tidy`）
 
-### 5.2 规范检查
-- [ ] 遵循命名规范
-- [ ] 导入分组正确
-- [ ] 使用函数式选项模式
+### 5.2 规范检查（重要）
+- [ ] 遵循命名规范（包名、标识符、接口）
+- [ ] 导入分组正确（标准库 → 项目内部包）
+- [ ] 使用函数式选项模式（配置项 > 3 个时）
 - [ ] 早期返回，无多余 else
-- [ ] 导出类型有文档注释
-- [ ] 错误已正确处理
-- [ ] 并发安全
-- [ ] 接口小而精
+- [ ] 导出类型有文档注释（godoc 格式）
+- [ ] 错误已正确处理（不忽略，使用 `%w` 包装）
+- [ ] 并发安全（锁保护、原子操作、context 控制）
+- [ ] 接口小而精（1-5 个方法）
 - [ ] 文件不超过 500 行
 - [ ] 函数不超过 50 行
 
-### 5.3 测试检查
+### 5.3 测试检查（重要）
 - [ ] 使用表驱动测试
 - [ ] 覆盖正常路径和错误路径
 - [ ] 测试覆盖率 >= 80%
@@ -434,34 +439,223 @@ AI 在生成代码后必须自检以下项目：
 - [ ] 表驱动子测试也使用 `t.Parallel()`
 - [ ] 无全局状态竞争
 
+### 5.4 AI 可读性检查（新增）
+- [ ] 变量名语义清晰，避免单字母（除循环变量 i、j、k）
+- [ ] 函数名动词开头，清晰表达意图
+- [ ] 注释说明"为什么这样做"而非"做了什么"
+- [ ] 复杂逻辑有分步注释
+- [ ] 魔法数字使用常量
+- [ ] 错误信息包含上下文（如：`"failed to create user: %w"`）
+
 ---
 
 ## 6. 禁止事项
 
-### 6.1 绝对禁止
-- ❌ 框架引入外部依赖
-- ❌ 使用相对导入
-- ❌ 忽略错误返回值
-- ❌ 使用全局变量（除非明确设计）
-- ❌ 照搬 Java 语法（如 getter/setter 模式）
+### 6.1 绝对禁止（❌）
+- ❌ 框架核心包引入外部依赖
+- ❌ 使用相对导入（必须使用完整模块路径）
+- ❌ 忽略错误返回值（除非明确使用 `_` 忽略）
+- ❌ 使用全局变量（除非明确设计为全局单例）
+- ❌ 照搬 Java 语法（如 getter/setter 模式、动态类加载）
 - ❌ 使用 `else` 分支（当 `if` 已返回时）
 - ❌ 裸 goroutine（不使用 errgroup 或 WaitGroup）
 - ❌ 直接比较错误（必须使用 `errors.Is/As`）
+- ❌ 循环依赖（包之间不能有循环引用）
 
-### 6.2 强烈不建议
-- ⚠️ 过度使用反射
-- ⚠️ 过深的继承层次（Go 使用组合）
-- ⚠️ 超过 4 层的嵌套
-- ⚠️ 魔法数字（使用常量）
-- ⚠️ 过长的函数（> 50 行）
-- ⚠️ 过度泛型（> 2 个类型参数）
-- ⚠️ 大接口（> 5 个方法）
+### 6.2 强烈不建议（⚠️）
+- ⚠️ 过度使用反射（优先使用泛型）
+- ⚠️ 过深的嵌套（超过 4 层应重构）
+- ⚠️ 魔法数字（使用常量或枚举）
+- ⚠️ 过长的函数（> 50 行应拆分）
+- ⚠️ 过度泛型（> 2 个类型参数应重新设计）
+- ⚠️ 大接口（> 5 个方法应拆分）
+- ⚠️ 过长的行（> 120 字符应换行）
+- ⚠️ 复杂的条件表达式（提取为函数或变量）
 
 ---
 
-## 7. 参考文档
+## 7. Spring Boot 设计理念在 Go 中的实践
 
-- [架构设计文档](ARCHITECTURE.md)
-- [README.md](README.md)
-- [贡献指南](CONTRIBUTING.md)
-- [代码风格指南](CODING_STYLE.md)
+### 7.1 约定优于配置（Convention over Configuration）
+
+参考 Spring Boot 的自动配置理念，但使用 Go 惯用法实现：
+
+```go
+// ✅ Go 惯用法：使用函数式选项 + 默认值
+func NewDatabase(opts ...DatabaseOption) *Database {
+    cfg := defaultDatabaseConfig() // 约定默认值
+    for _, opt := range opts {
+        opt(&cfg) // 允许覆盖
+    }
+    return &Database{config: cfg}
+}
+
+// ❌ Java 风格：大量 setter 方法
+```
+
+### 7.2 自动装配（Auto-Configuration）
+
+使用条件注册实现类似 Spring Boot 的 `@Conditional` 注解：
+
+```go
+// 参考 Spring Boot 的 @ConditionalOnProperty
+func init() {
+    boot.RegisterAutoConfig(
+        &RedisAutoConfiguration{},
+        condition.OnProperty("redis.enabled", "true"),
+    )
+}
+```
+
+### 7.3 依赖注入（Dependency Injection）
+
+使用 Go 泛型实现类型安全的依赖注入：
+
+```go
+// ✅ Go 惯用法：泛型 API，编译期类型安全
+core.Register(container, "userService", func(c core.Container) *UserService {
+    db := core.MustGet[*Database](c, "database")
+    return &UserService{DB: db}
+})
+
+// 获取 Bean
+svc := core.MustGetBean[*UserService](container)
+```
+
+### 7.4 Starter 机制
+
+模块化启动器，参考 Spring Boot Starter：
+
+```go
+// 参考 Spring Boot 的 spring-boot-starter-web
+type WebStarter struct{}
+
+func (s *WebStarter) Name() string { return "web" }
+
+func (s *WebStarter) Configure(ctx boot.ApplicationContext) error {
+    // 注册 Web 相关 Bean
+    return nil
+}
+
+func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
+    // 启动 HTTP 服务器
+    return nil
+}
+
+func init() {
+    boot.RegisterStarter(&WebStarter{})
+}
+```
+
+### 7.5 事件驱动（Event-Driven）
+
+参考 Spring 的 ApplicationEvent 机制：
+
+```go
+// 发布事件
+ctx.EventBus().Publish(&UserCreatedEvent{UserID: 123})
+
+// 订阅事件
+bus.Subscribe("user.created", func(e event.ApplicationEvent) {
+    evt := e.(*UserCreatedEvent)
+    fmt.Println("User created:", evt.UserID)
+})
+```
+
+---
+
+## 8. Go 惯用法最佳实践
+
+### 8.1 错误处理
+
+```go
+// ✅ 推荐：包装错误，保留上下文
+func CreateUser(name string) error {
+    if err := db.Insert(name); err != nil {
+        return fmt.Errorf("failed to create user %q: %w", name, err)
+    }
+    return nil
+}
+
+// ❌ 不推荐：丢失上下文
+func CreateUser(name string) error {
+    return db.Insert(name) // 错误信息不完整
+}
+```
+
+### 8.2 接口设计
+
+```go
+// ✅ 推荐：小而精的接口
+type Reader interface {
+    Read(p []byte) (n int, err error)
+}
+
+type Writer interface {
+    Write(p []byte) (n int, err error)
+}
+
+// ❌ 不推荐：大而全的接口
+type DataProcessor interface {
+    Read()
+    Write()
+    Process()
+    Validate()
+    Transform()
+}
+```
+
+### 8.3 并发模式
+
+```go
+// ✅ 推荐：使用 context 控制生命周期
+func (s *Server) Start(ctx context.Context) error {
+    go func() {
+        <-ctx.Done()
+        s.shutdown()
+    }()
+    return s.listen()
+}
+
+// ❌ 不推荐：裸 goroutine，无法停止
+func (s *Server) Start() {
+    go s.listen() // 泄漏风险
+}
+```
+
+### 8.4 函数式选项模式
+
+```go
+// ✅ 推荐：灵活且类型安全
+type ServerOption func(*ServerConfig)
+
+func WithPort(port int) ServerOption {
+    return func(cfg *ServerConfig) {
+        cfg.Port = port
+    }
+}
+
+func NewServer(opts ...ServerOption) *Server {
+    cfg := defaultConfig()
+    for _, opt := range opts {
+        opt(&cfg)
+    }
+    return &Server{config: cfg}
+}
+
+// 使用
+server := NewServer(
+    WithPort(8080),
+    WithTimeout(30*time.Second),
+)
+```
+
+---
+
+## 9. 参考文档
+
+- [架构设计文档](ARCHITECTURE.md) — 三层架构、核心模块、接口定义
+- [README.md](README.md) — 项目介绍和快速开始
+- [贡献指南](CONTRIBUTING.md) — 如何参与项目开发
+- [代码风格指南](CODING_STYLE.md) — 命名、注释、组织规范
+- [模块依赖](DEPENDENCIES.md) — 模块依赖图、执行顺序

@@ -6,7 +6,8 @@ import (
 	"testing"
 )
 
-func TestRegisterInstance(t *testing.T) {
+// TestRegisterInstance_Coverage 测试 RegisterInstance
+func TestRegisterInstance_Coverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -79,7 +80,8 @@ func TestRegisterInstance(t *testing.T) {
 	}
 }
 
-func TestListBeansAndInstances(t *testing.T) {
+// TestListBeansAndInstances_Coverage 测试 ListBeans 和 ListInstances
+func TestListBeansAndInstances_Coverage(t *testing.T) {
 	t.Parallel()
 	reg := NewBeanRegistry()
 
@@ -120,7 +122,8 @@ func TestListBeansAndInstances(t *testing.T) {
 	}
 }
 
-func TestRegisterDifferentDefinitionReturnsErrAlreadyExists(t *testing.T) {
+// TestRegisterDifferentDefinitionReturnsErrAlreadyExists_Coverage 测试注册不同定义返回 ErrBeanAlreadyExists
+func TestRegisterDifferentDefinitionReturnsErrAlreadyExists_Coverage(t *testing.T) {
 	t.Parallel()
 	reg := NewBeanRegistry()
 
@@ -138,7 +141,8 @@ func TestRegisterDifferentDefinitionReturnsErrAlreadyExists(t *testing.T) {
 	}
 }
 
-func TestRegisterCustomNameConflict(t *testing.T) {
+// TestRegisterCustomNameConflict_Coverage 测试自定义名称冲突
+func TestRegisterCustomNameConflict_Coverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -172,7 +176,8 @@ func TestRegisterCustomNameConflict(t *testing.T) {
 	}
 }
 
-func TestFuncPtr(t *testing.T) {
+// TestFuncPtr_Coverage 测试 funcPtr 函数
+func TestFuncPtr_Coverage(t *testing.T) {
 	t.Parallel()
 
 	var nilFn func(bean any) error
@@ -201,7 +206,8 @@ func TestFuncPtr(t *testing.T) {
 	}
 }
 
-func TestNormalizeScope(t *testing.T) {
+// TestNormalizeScope_Coverage 测试 normalizeScope 函数
+func TestNormalizeScope_Coverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -225,7 +231,8 @@ func TestNormalizeScope(t *testing.T) {
 	}
 }
 
-func TestSameBeanDefinitionIgnoresEmptyScopeAndFactory(t *testing.T) {
+// TestSameBeanDefinitionIgnoresEmptyScopeAndFactory_Coverage 测试相同 Bean 定义忽略空 Scope 和 Factory
+func TestSameBeanDefinitionIgnoresEmptyScopeAndFactory_Coverage(t *testing.T) {
 	t.Parallel()
 	reg := NewBeanRegistry()
 

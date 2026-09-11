@@ -51,9 +51,7 @@
 package cache
 
 import (
-	"container/list"
 	"context"
-	"sync"
 	"time"
 )
 
@@ -92,45 +90,10 @@ type CacheInspector interface {
 // 返回 nil 值不会被缓存。
 type Getter func(ctx context.Context, key string) (any, error)
 
-// LRUCache LRU（最近最少使用）缓存实现。
+// Clearable 可清空的缓存接口。
 //
-// 基于双向链表和哈希表实现 O(1) 时间复杂度的缓存操作。
-// 支持 TTL 过期淘汰和容量限制淘汰。
-// LRUCache 是并发安全的，所有操作都通过互斥锁保护。
-type LRUCache struct {
-	mu         sync.Mutex
-	capacity   int
-	items      map[string]*list.Element
-	evictList  *list.List
-	onEvict    func(key string, value any)
-	defaultTTL time.Duration
-}
-
-// LRUOption LRU 缓存选项函数。
-type LRUOption func(*LRUCache)
-
-// ShardedLRUCache 分片 LRU 缓存实现。
-//
-// 将全局锁拆分为多个分段锁，提升高并发场景下的性能。
-// 每个分片独立维护自己的 LRU 链表和哈希表。
-type ShardedLRUCache struct {
-	shards     []*lruShard
-	capacity   int
-	shardCount int
-	onEvict    func(key string, value any)
-}
-
-// lruEntry LRU 缓存项内部结构。
-type lruEntry struct {
-	key       string
-	value     any
-	expiresAt time.Time
-}
-
-// lruShard 单个 LRU 分片内部结构。
-type lruShard struct {
-	mu        sync.RWMutex
-	capacity  int
-	items     map[string]*list.Element
-	evictList *list.List
+// 用于支持清空所有缓存项的场景。
+type Clearable interface {
+	// Clear 清空所有缓存项。
+	Clear()
 }

@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ZerologAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ZeroLogEnabled, ConditionTrue),
+			// 约定优于配置：当 zerolog.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ZeroLogEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)), // 基础设施层，最先执行，提供日志能力
 	)

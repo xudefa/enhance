@@ -6,10 +6,10 @@ import (
 )
 
 type testSettable struct {
-	Name   string
-	Count  int64
-	Items  []string
-	Value  interface{}
+	Name  string
+	Count int64
+	Items []string
+	Value interface{}
 }
 
 func TestNewSpelParser(t *testing.T) {

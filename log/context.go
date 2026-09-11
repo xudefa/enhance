@@ -12,6 +12,21 @@ type contextKey struct{}
 // TraceContextKey 追踪 ID 上下文键
 var TraceContextKey = contextKey{}
 
+// ContextLogger 上下文感知日志器
+//
+// 自动从 ctx 中提取 trace_id 等信息并添加到日志中。
+type ContextLogger struct {
+	logger Logger
+}
+
+// DynamicLevelLogger 动态级别日志器
+//
+// 支持运行时动态调整日志级别，无需重启服务。
+type DynamicLevelLogger struct {
+	logger Logger
+	level  *atomic.Int32 // 当前日志级别（指针，子日志器共享）
+}
+
 // WithTraceID 将 trace_id 注入上下文
 //
 // 参数:
@@ -38,13 +53,6 @@ func GetTraceID(ctx context.Context) string {
 	return ""
 }
 
-// ContextLogger 上下文感知日志器
-//
-// 自动从 ctx 中提取 trace_id 等信息并添加到日志中。
-type ContextLogger struct {
-	logger Logger
-}
-
 // NewContextLogger 创建上下文感知日志器
 //
 // 参数:
@@ -54,6 +62,23 @@ type ContextLogger struct {
 //   - *ContextLogger: 上下文日志器实例
 func NewContextLogger(logger Logger) *ContextLogger {
 	return &ContextLogger{logger: logger}
+}
+
+// NewDynamicLevelLogger 创建动态级别日志器
+//
+// 参数:
+//   - logger: 底层日志器
+//   - initialLevel: 初始日志级别
+//
+// 返回:
+//   - *DynamicLevelLogger: 动态级别日志器实例
+func NewDynamicLevelLogger(logger Logger, initialLevel Level) *DynamicLevelLogger {
+	d := &DynamicLevelLogger{
+		logger: logger,
+		level:  &atomic.Int32{},
+	}
+	d.level.Store(int32(initialLevel))
+	return d
 }
 
 // Debug 记录调试日志
@@ -147,51 +172,6 @@ func (l *ContextLogger) With(ctx context.Context, keys ...KeyValue) Logger {
 	}
 	// 如果不支持 With，返回自身
 	return l
-}
-
-// appendContextKeys 从上下文提取键值对
-//
-// 注意：当需要追加 trace_id 时分配新切片，避免与调用方共享底层数组
-// （直接 append 会污染调用方切片预留容量）。
-func appendContextKeys(ctx context.Context, keys []KeyValue) []KeyValue {
-	traceID := GetTraceID(ctx)
-	if traceID == "" {
-		return keys
-	}
-
-	// 如果 keys 的容量足够且没有共享底层数组，可以直接 append
-	// 但为了安全起见，始终创建新切片避免污染调用方
-	result := make([]KeyValue, len(keys)+1)
-	copy(result, keys)
-	result[len(keys)] = KeyValue{Key: "trace_id", Value: traceID}
-	return result
-}
-
-var _ Logger = (*ContextLogger)(nil)
-
-// DynamicLevelLogger 动态级别日志器
-//
-// 支持运行时动态调整日志级别，无需重启服务。
-type DynamicLevelLogger struct {
-	logger Logger
-	level  *atomic.Int32 // 当前日志级别（指针，子日志器共享）
-}
-
-// NewDynamicLevelLogger 创建动态级别日志器
-//
-// 参数:
-//   - logger: 底层日志器
-//   - initialLevel: 初始日志级别
-//
-// 返回:
-//   - *DynamicLevelLogger: 动态级别日志器实例
-func NewDynamicLevelLogger(logger Logger, initialLevel Level) *DynamicLevelLogger {
-	d := &DynamicLevelLogger{
-		logger: logger,
-		level:  &atomic.Int32{},
-	}
-	d.level.Store(int32(initialLevel))
-	return d
 }
 
 // SetLevel 动态设置日志级别
@@ -301,4 +281,23 @@ func (d *DynamicLevelLogger) With(ctx context.Context, keys ...KeyValue) Logger 
 	return d
 }
 
+// appendContextKeys 从上下文提取键值对
+//
+// 注意：当需要追加 trace_id 时分配新切片，避免与调用方共享底层数组
+// （直接 append 会污染调用方切片预留容量）。
+func appendContextKeys(ctx context.Context, keys []KeyValue) []KeyValue {
+	traceID := GetTraceID(ctx)
+	if traceID == "" {
+		return keys
+	}
+
+	// 如果 keys 的容量足够且没有共享底层数组，可以直接 append
+	// 但为了安全起见，始终创建新切片避免污染调用方
+	result := make([]KeyValue, len(keys)+1)
+	copy(result, keys)
+	result[len(keys)] = KeyValue{Key: "trace_id", Value: traceID}
+	return result
+}
+
+var _ Logger = (*ContextLogger)(nil)
 var _ Logger = (*DynamicLevelLogger)(nil)

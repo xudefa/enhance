@@ -25,7 +25,7 @@ func (c *mockFilterChain) DoFilter(_ interface{}, _ interface{}, _ interface{}) 
 	c.called = true
 	return nil
 }
-func (c *mockFilterChain) AddFilter(_ filter.Filter) {}
+func (c *mockFilterChain) AddFilter(_ filter.Filter)   {}
 func (c *mockFilterChain) GetFilters() []filter.Filter { return nil }
 
 func TestNewUsernamePasswordAuthenticationFilterWithDefaults(t *testing.T) {

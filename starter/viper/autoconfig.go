@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ViperAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ViperEnabled, ConditionTrue),
+			// 约定优于配置：当 viper.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ViperEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)

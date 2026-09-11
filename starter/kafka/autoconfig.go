@@ -19,7 +19,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&KafkaAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(KafkaEnabled, ConditionTrue),
+			// 约定优于配置：当 kafka.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(KafkaEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityBusinessLayer)),
 	)

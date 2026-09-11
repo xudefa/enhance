@@ -30,9 +30,36 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// AddPolicyRequest 添加策略请求。
+type AddPolicyRequest struct {
+	Subject string `json:"subject"`
+	Object  string `json:"object"`
+	Action  string `json:"action"`
+}
+
+// RemovePolicyRequest 移除策略请求。
+type RemovePolicyRequest struct {
+	Subject string `json:"subject"`
+	Object  string `json:"object"`
+	Action  string `json:"action"`
+}
+
 // AuthController 认证控制器。
 type AuthController struct {
 	TokenProvider *jwt.DefaultTokenProvider
+}
+
+// ProfileController 用户资料控制器。
+type ProfileController struct {
+}
+
+// AdminController 管理员控制器。
+type AdminController struct {
+}
+
+// CasbinPolicyController Casbin 策略管理控制器。
+type CasbinPolicyController struct {
+	Enforcer security.CasbinEnforcer
 }
 
 // Routes 注册路由。
@@ -86,10 +113,6 @@ func (c *AuthController) Login(ctx mvc.Context) {
 	})
 }
 
-// ProfileController 用户资料控制器。
-type ProfileController struct {
-}
-
 // Routes 注册路由。
 func (c *ProfileController) Routes(router mvc.Router) {
 	router.GET("/api/profile", c.GetProfile)
@@ -114,10 +137,6 @@ func (c *ProfileController) GetProfile(ctx mvc.Context) {
 			"authorities": auth.Authorities(),
 		},
 	})
-}
-
-// AdminController 管理员控制器。
-type AdminController struct {
 }
 
 // Routes 注册路由。
@@ -146,11 +165,6 @@ func (c *AdminController) GetUsers(ctx mvc.Context) {
 	})
 }
 
-// CasbinPolicyController Casbin 策略管理控制器。
-type CasbinPolicyController struct {
-	Enforcer security.CasbinEnforcer
-}
-
 // Routes 注册路由。
 func (c *CasbinPolicyController) Routes(router mvc.Router) {
 	router.GET("/api/casbin/policies", c.GetPolicies)
@@ -173,13 +187,6 @@ func (c *CasbinPolicyController) GetPolicies(ctx mvc.Context) {
 		"code": 0,
 		"data": policies,
 	})
-}
-
-// AddPolicyRequest 添加策略请求。
-type AddPolicyRequest struct {
-	Subject string `json:"subject"`
-	Object  string `json:"object"`
-	Action  string `json:"action"`
 }
 
 // AddPolicy 添加策略。
@@ -205,13 +212,6 @@ func (c *CasbinPolicyController) AddPolicy(ctx mvc.Context) {
 		"code":    0,
 		"message": "策略添加成功",
 	})
-}
-
-// RemovePolicyRequest 移除策略请求。
-type RemovePolicyRequest struct {
-	Subject string `json:"subject"`
-	Object  string `json:"object"`
-	Action  string `json:"action"`
 }
 
 // RemovePolicy 移除策略。

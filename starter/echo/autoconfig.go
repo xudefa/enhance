@@ -24,7 +24,8 @@ var echoAutoConfig = &EchoAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(echoAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(EchoEnabled, ConditionTrue),
+			// 约定优于配置：当 echo.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(EchoEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -169,7 +170,7 @@ func (c *EchoAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *EchoAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(EchoEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(EchoEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetServer 从容器中获取 Echo 服务器实例。

@@ -13,7 +13,7 @@ import (
 
 // appCtxAdapter 适配 DefaultApplicationContext 到 boot.ApplicationContext
 //
-// DefaultApplicationContext.EventBus() 返回 *event.EventBus，
+// DefaultApplicationContext.EventBus() 返回 event.EventBus，
 // 而 boot.ApplicationContext.EventBus() 要求返回 interface{ Publish(...) }，
 // 在 Go 中这被视为不同签名，需要显式适配。
 type appCtxAdapter struct {

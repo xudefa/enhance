@@ -323,3 +323,87 @@ func TestMustBindConfigPrefix_Panic(t *testing.T) {
 		t.Errorf("expected 0 port, got %d", cfg.Port)
 	}
 }
+
+func TestBindConfig_WithTimeDuration(t *testing.T) {
+	t.Parallel()
+
+	type Config struct {
+		Timeout time.Duration `config:"app.timeout"`
+	}
+
+	env := NewMapEnvironment(map[string]string{
+		"app.timeout": "5s",
+	})
+
+	cfg, err := BindConfig[Config](env)
+	if err != nil {
+		t.Fatalf("BindConfig failed: %v", err)
+	}
+
+	if cfg.Timeout != 5*time.Second {
+		t.Errorf("expected Timeout 5s, got %v", cfg.Timeout)
+	}
+}
+
+func TestBindConfig_WithSlice(t *testing.T) {
+	t.Parallel()
+
+	type Config struct {
+		Ports []int `config:"app.ports"`
+	}
+
+	env := NewMapEnvironment(map[string]string{
+		"app.ports": "8080,8081,8082",
+	})
+
+	cfg, err := BindConfig[Config](env)
+	if err != nil {
+		t.Fatalf("BindConfig failed: %v", err)
+	}
+
+	if len(cfg.Ports) != 3 {
+		t.Errorf("expected 3 ports, got %d", len(cfg.Ports))
+	}
+}
+
+func TestBindConfig_WithMapstructureTag(t *testing.T) {
+	t.Parallel()
+
+	type Config struct {
+		Name string `mapstructure:"app.name"`
+	}
+
+	env := NewMapEnvironment(map[string]string{
+		"app.name": "mapstructure-test",
+	})
+
+	cfg, err := BindConfig[Config](env)
+	if err != nil {
+		t.Fatalf("BindConfig failed: %v", err)
+	}
+
+	if cfg.Name != "mapstructure-test" {
+		t.Errorf("expected Name 'mapstructure-test', got %s", cfg.Name)
+	}
+}
+
+func TestBindConfig_WithEnvTag(t *testing.T) {
+	t.Parallel()
+
+	type Config struct {
+		Name string `env:"APP_NAME"`
+	}
+
+	env := NewMapEnvironment(map[string]string{
+		"APP_NAME": "env-test",
+	})
+
+	cfg, err := BindConfig[Config](env)
+	if err != nil {
+		t.Fatalf("BindConfig failed: %v", err)
+	}
+
+	if cfg.Name != "env-test" {
+		t.Errorf("expected Name 'env-test', got %s", cfg.Name)
+	}
+}

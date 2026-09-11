@@ -679,7 +679,9 @@ func TestValidateEdgeCases(t *testing.T) {
 	t.Run("nil pointer to struct", func(t *testing.T) {
 		t.Parallel()
 		v := NewTagValidator()
-		type S struct{ Name string `validate:"required"` }
+		type S struct {
+			Name string `validate:"required"`
+		}
 		var s *S
 		err := v.Validate(s)
 		if err != nil {
@@ -781,10 +783,10 @@ func TestRequiredValidationEdgeCases(t *testing.T) {
 	v := NewTagValidator()
 
 	type S struct {
-		BoolVal    bool   `validate:"required"`
-		FloatVal   float64 `validate:"required"`
-		UintVal    uint   `validate:"required"`
-		StringVal  string `validate:"required"`
+		BoolVal   bool    `validate:"required"`
+		FloatVal  float64 `validate:"required"`
+		UintVal   uint    `validate:"required"`
+		StringVal string  `validate:"required"`
 	}
 
 	t.Run("zero values fail required", func(t *testing.T) {

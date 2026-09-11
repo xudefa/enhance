@@ -39,7 +39,7 @@ func (b *EventBusBuilder) OnApplicationStopped(listener EventListener) *EventBus
 }
 
 // Build 构建事件总线
-func (b *EventBusBuilder) Build() *EventBus {
+func (b *EventBusBuilder) Build() EventBus {
 	bus := NewEventBus()
 
 	// 注册所有监听器
@@ -54,7 +54,7 @@ func (b *EventBusBuilder) Build() *EventBus {
 
 // AsyncPublisherBuilder 异步事件发布器构建器
 type AsyncPublisherBuilder struct {
-	bus         *EventBus
+	bus         EventBus
 	workerCount int
 	errHandler  func(error, ApplicationEvent)
 }
@@ -67,7 +67,7 @@ func NewAsyncPublisherBuilder() *AsyncPublisherBuilder {
 }
 
 // Bus 设置事件总线
-func (b *AsyncPublisherBuilder) Bus(bus *EventBus) *AsyncPublisherBuilder {
+func (b *AsyncPublisherBuilder) Bus(bus EventBus) *AsyncPublisherBuilder {
 	b.bus = bus
 	return b
 }
@@ -145,7 +145,7 @@ func (b *BaseEventBuilder) Build() *BaseEvent {
 }
 
 // Publish 发布事件到事件总线
-func (b *BaseEventBuilder) Publish(bus *EventBus) {
+func (b *BaseEventBuilder) Publish(bus EventBus) {
 	bus.Publish(b.Build())
 }
 

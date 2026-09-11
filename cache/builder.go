@@ -100,14 +100,8 @@ func (h *CacheHelper) InvalidateAll(ctx context.Context, keys ...string) error {
 
 // Clear 清空所有缓存
 func (h *CacheHelper) Clear(ctx context.Context) error {
-	// 尝试 LRU 缓存的 Clear 方法
-	if lru, ok := h.cache.(*LRUCache); ok {
-		lru.Clear()
-		return nil
-	}
-	// 尝试 ShardedLRUCache 的 Clear 方法
-	if slru, ok := h.cache.(*ShardedLRUCache); ok {
-		slru.Clear()
+	if clearable, ok := h.cache.(Clearable); ok {
+		clearable.Clear()
 		return nil
 	}
 	return fmt.Errorf("cache does not support Clear operation")

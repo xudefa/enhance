@@ -49,7 +49,8 @@ var asynqAutoConfig = &AsynqAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(asynqAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(AsynqEnabled, ConditionTrue),
+			// 约定优于配置：当 asynq.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(AsynqEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityTaskLayer)),
 	)
@@ -165,7 +166,7 @@ func (c *AsynqAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *AsynqAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(AsynqEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(AsynqEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetClient 获取 Asynq Client 实例。

@@ -20,8 +20,73 @@ const DefaultRolePrefix = "ROLE_"
 // WebExpressionVoter Web表达式投票者
 type WebExpressionVoter struct{}
 
+// RoleVoter 角色投票者
+type RoleVoter struct {
+	rolePrefix string
+}
+
+// AuthenticatedVoter 认证投票者
+type AuthenticatedVoter struct{}
+
+// AffirmativeBased 肯定优先访问决策管理器
+type AffirmativeBased struct {
+	decisionVoters             []AccessDecisionVoter
+	allowIfAllAbstainDecisions bool
+}
+
+// UnanimousBased 一致通过访问决策管理器
+type UnanimousBased struct {
+	decisionVoters             []AccessDecisionVoter
+	allowIfAllAbstainDecisions bool
+}
+
+// ConsensusBased 共识优先访问决策管理器
+type ConsensusBased struct {
+	decisionVoters             []AccessDecisionVoter
+	allowIfEqualGrantedDenied  bool
+	allowIfAllAbstainDecisions bool
+}
+
+// NewWebExpressionVoter 创建Web表达式投票者
 func NewWebExpressionVoter() *WebExpressionVoter {
 	return &WebExpressionVoter{}
+}
+
+// NewRoleVoter 创建角色投票者
+func NewRoleVoter() *RoleVoter {
+	return &RoleVoter{
+		rolePrefix: DefaultRolePrefix,
+	}
+}
+
+// NewAuthenticatedVoter 创建认证投票者
+func NewAuthenticatedVoter() *AuthenticatedVoter {
+	return &AuthenticatedVoter{}
+}
+
+// NewAffirmativeBased 创建肯定优先决策管理器
+func NewAffirmativeBased(voters ...AccessDecisionVoter) *AffirmativeBased {
+	return &AffirmativeBased{
+		decisionVoters:             voters,
+		allowIfAllAbstainDecisions: false,
+	}
+}
+
+// NewUnanimousBased 创建一致通过决策管理器
+func NewUnanimousBased(voters ...AccessDecisionVoter) *UnanimousBased {
+	return &UnanimousBased{
+		decisionVoters:             voters,
+		allowIfAllAbstainDecisions: false,
+	}
+}
+
+// NewConsensusBased 创建共识优先决策管理器
+func NewConsensusBased(voters ...AccessDecisionVoter) *ConsensusBased {
+	return &ConsensusBased{
+		decisionVoters:             voters,
+		allowIfEqualGrantedDenied:  false,
+		allowIfAllAbstainDecisions: false,
+	}
 }
 
 // Vote 投票决定访问权限
@@ -143,17 +208,6 @@ func (v *WebExpressionVoter) hasAnyAuthority(authentication authorization.Authen
 	return false
 }
 
-// RoleVoter 角色投票者
-type RoleVoter struct {
-	rolePrefix string
-}
-
-func NewRoleVoter() *RoleVoter {
-	return &RoleVoter{
-		rolePrefix: DefaultRolePrefix,
-	}
-}
-
 // Vote 投票决定访问权限
 func (v *RoleVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
 	if len(attributes) == 0 {
@@ -194,13 +248,6 @@ func (v *RoleVoter) SetRolePrefix(prefix string) {
 	v.rolePrefix = prefix
 }
 
-// AuthenticatedVoter 认证投票者
-type AuthenticatedVoter struct{}
-
-func NewAuthenticatedVoter() *AuthenticatedVoter {
-	return &AuthenticatedVoter{}
-}
-
 // Vote 投票决定访问权限
 func (v *AuthenticatedVoter) Vote(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) int {
 	if len(attributes) == 0 {
@@ -229,19 +276,6 @@ func (v *AuthenticatedVoter) Vote(ctx context.Context, authentication authorizat
 // Supports 是否支持该属性
 func (v *AuthenticatedVoter) Supports(attribute string) bool {
 	return true
-}
-
-// AffirmativeBased 肯定优先访问决策管理器
-type AffirmativeBased struct {
-	decisionVoters             []AccessDecisionVoter
-	allowIfAllAbstainDecisions bool
-}
-
-func NewAffirmativeBased(voters ...AccessDecisionVoter) *AffirmativeBased {
-	return &AffirmativeBased{
-		decisionVoters:             voters,
-		allowIfAllAbstainDecisions: false,
-	}
 }
 
 // Decide 决定是否授予访问权限
@@ -289,19 +323,6 @@ func (m *AffirmativeBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
 }
 
-// UnanimousBased 一致通过访问决策管理器
-type UnanimousBased struct {
-	decisionVoters             []AccessDecisionVoter
-	allowIfAllAbstainDecisions bool
-}
-
-func NewUnanimousBased(voters ...AccessDecisionVoter) *UnanimousBased {
-	return &UnanimousBased{
-		decisionVoters:             voters,
-		allowIfAllAbstainDecisions: false,
-	}
-}
-
 // Decide 决定是否授予访问权限
 func (m *UnanimousBased) Decide(ctx context.Context, authentication authorization.Authentication, resource string, attributes []string) error {
 	deny := 0
@@ -345,21 +366,6 @@ func (m *UnanimousBased) AddVoter(voter AccessDecisionVoter) {
 // SetAllowIfAllAbstainDecisions 设置当所有投票者都弃权时是否允许访问。
 func (m *UnanimousBased) SetAllowIfAllAbstainDecisions(allow bool) {
 	m.allowIfAllAbstainDecisions = allow
-}
-
-// ConsensusBased 共识优先访问决策管理器
-type ConsensusBased struct {
-	decisionVoters             []AccessDecisionVoter
-	allowIfEqualGrantedDenied  bool
-	allowIfAllAbstainDecisions bool
-}
-
-func NewConsensusBased(voters ...AccessDecisionVoter) *ConsensusBased {
-	return &ConsensusBased{
-		decisionVoters:             voters,
-		allowIfEqualGrantedDenied:  false,
-		allowIfAllAbstainDecisions: false,
-	}
 }
 
 // Decide 决定是否授予访问权限

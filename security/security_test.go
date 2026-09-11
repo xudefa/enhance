@@ -225,7 +225,7 @@ func TestConsensusBased_Supports(t *testing.T) {
 	}
 }
 
-func TestConsensusBased_AddVoter(t *testing.T) {
+func TestConsensusBased_AddVoter_Coverage(t *testing.T) {
 	t.Parallel()
 
 	manager := NewConsensusBased()

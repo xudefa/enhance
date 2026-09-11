@@ -20,7 +20,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&GormAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(GORMEnabled, ConditionTrue),
+			// 约定优于配置：当 gorm.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(GORMEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)), // 数据层，在日志之后、安全组件之前执行
 	)

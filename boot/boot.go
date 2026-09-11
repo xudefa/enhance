@@ -80,6 +80,11 @@ func (b *Boot) Start() (err error) {
 	// 创建应用根 context，在 Stop() 时取消
 	b.rootCtx, b.rootCancel = context.WithCancel(context.Background())
 
+	// 启动报告：开始计时
+	report := GetStartupReport()
+	report.SetAppInfo(b.config.AppName, b.config.Version)
+	report.StartTiming()
+
 	// 启动失败时重置状态，支持失败后重试 Start；同时取消并清理根 context，避免资源泄漏
 	defer func() {
 		if err != nil {
@@ -140,9 +145,16 @@ func (b *Boot) Start() (err error) {
 		if reportEnabled {
 			GetAutoConfigReport().Print()
 		}
+
+		// 收集启动报告信息
+		report.SetAutoConfigCount(len(entries))
+		for _, entry := range entries {
+			report.AddAutoConfig(fmt.Sprintf("%T", entry.Config))
+		}
 	}
 
 	// 安装显式模块（Go 风格组合）
+	moduleCount := 0
 	for _, module := range b.config.Modules {
 		// 检查模块条件
 		if !b.moduleMatches(module) {
@@ -150,6 +162,10 @@ func (b *Boot) Start() (err error) {
 		}
 		if err := module.Install(b.ctx.Container()); err != nil {
 			return b.reportError("初始化", fmt.Errorf("模块 %s 安装失败: %w", module.ModuleName(), err))
+		}
+		moduleCount++
+		if module.ModuleName() != "" {
+			report.AddModule(module.ModuleName())
 		}
 		// 收集模块的 Starter
 		if b.config.Starters {
@@ -160,6 +176,7 @@ func (b *Boot) Start() (err error) {
 			b.hooks.Register(h)
 		}
 	}
+	report.SetModuleCount(moduleCount)
 
 	// 注册全局钩子
 	for _, h := range lifecycle.GlobalHookRegistry().GetAll() {
@@ -197,6 +214,7 @@ func (b *Boot) Start() (err error) {
 
 	if b.config.Starters {
 		started := make([]Starter, 0, len(b.starters))
+		starterCount := 0
 		for _, s := range b.starters {
 			if !b.starterMatches(s) {
 				continue
@@ -211,7 +229,10 @@ func (b *Boot) Start() (err error) {
 				return b.reportError("初始化", fmt.Errorf("启动器 %s 启动失败: %w", s.Name(), err))
 			}
 			started = append(started, s)
+			starterCount++
+			report.AddStarter(s.Name())
 		}
+		report.SetStarterCount(starterCount)
 		b.startersStarted = true
 	}
 
@@ -238,6 +259,34 @@ func (b *Boot) Start() (err error) {
 
 	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationStarted})
 	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationReady})
+
+	// 初始化并启动插件（如果配置了插件）
+	if len(b.config.Plugins) > 0 {
+		pm := NewPluginManager()
+		pm.SetContext(newPluginAppCtx(b.ctx, b.rootCtx))
+
+		// 注册所有插件
+		for _, plugin := range b.config.Plugins {
+			if err := pm.Register(plugin); err != nil {
+				return b.reportError("插件注册", fmt.Errorf("插件 %s 注册失败: %w", plugin.Name(), err))
+			}
+		}
+
+		// 初始化插件
+		if err := pm.InitAll(); err != nil {
+			return b.reportError("插件初始化", fmt.Errorf("插件初始化失败: %w", err))
+		}
+
+		// 启动插件
+		if err := pm.StartAll(); err != nil {
+			return b.reportError("插件启动", fmt.Errorf("插件启动失败: %w", err))
+		}
+	}
+
+	// 停止计时并打印启动报告
+	report.StopTiming()
+	report.SetBeanCount(len(b.ctx.Container().ListBeans()))
+	report.Print()
 
 	return nil
 }

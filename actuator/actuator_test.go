@@ -112,6 +112,7 @@ func TestActuator_NilContext(t *testing.T) {
 	act := &Actuator{}
 
 	t.Run("EnviHandler returns 500", func(t *testing.T) {
+		t.Parallel()
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/actuator/env", nil)
 		act.EnvHandler(w, r)
@@ -121,6 +122,7 @@ func TestActuator_NilContext(t *testing.T) {
 	})
 
 	t.Run("BeansHandler returns 500", func(t *testing.T) {
+		t.Parallel()
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodGet, "/actuator/beans", nil)
 		act.BeansHandler(w, r)
@@ -487,6 +489,7 @@ func TestMetricsRegistry(t *testing.T) {
 func TestDatabaseHealthIndicator(t *testing.T) {
 	t.Parallel()
 	t.Run("nil check function returns unknown", func(t *testing.T) {
+		t.Parallel()
 		ind := NewDatabaseHealthIndicator(nil)
 		h := ind.Health(context.Background())
 		if h.Status != health.StatusUnknown {
@@ -495,6 +498,7 @@ func TestDatabaseHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("successful check returns up", func(t *testing.T) {
+		t.Parallel()
 		ind := NewDatabaseHealthIndicator(func(ctx context.Context) error {
 			return nil
 		})
@@ -505,6 +509,7 @@ func TestDatabaseHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("failed check returns down", func(t *testing.T) {
+		t.Parallel()
 		ind := NewDatabaseHealthIndicator(func(ctx context.Context) error {
 			return assertAnError("connection refused")
 		})
@@ -521,6 +526,7 @@ func TestDatabaseHealthIndicator(t *testing.T) {
 func TestRedisHealthIndicator(t *testing.T) {
 	t.Parallel()
 	t.Run("nil check function returns unknown", func(t *testing.T) {
+		t.Parallel()
 		ind := NewRedisHealthIndicator(nil)
 		h := ind.Health(context.Background())
 		if h.Status != health.StatusUnknown {
@@ -529,6 +535,7 @@ func TestRedisHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("successful check returns up", func(t *testing.T) {
+		t.Parallel()
 		ind := NewRedisHealthIndicator(func(ctx context.Context) error {
 			return nil
 		})
@@ -539,6 +546,7 @@ func TestRedisHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("failed check returns down", func(t *testing.T) {
+		t.Parallel()
 		ind := NewRedisHealthIndicator(func(ctx context.Context) error {
 			return assertAnError("timeout")
 		})

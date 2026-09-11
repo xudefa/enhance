@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestAdminServer_GetApplication_ByID(t *testing.T) {
+func TestAdminServer_GetApplication_ByID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -35,7 +35,7 @@ func TestAdminServer_GetApplication_ByID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetApplication_ByQueryParam(t *testing.T) {
+func TestAdminServer_GetApplication_ByQueryParam_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -53,7 +53,7 @@ func TestAdminServer_GetApplication_ByQueryParam(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetApplication_MissingID(t *testing.T) {
+func TestAdminServer_GetApplication_MissingID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -68,7 +68,7 @@ func TestAdminServer_GetApplication_MissingID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetApplication_NotFound(t *testing.T) {
+func TestAdminServer_GetApplication_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -83,7 +83,7 @@ func TestAdminServer_GetApplication_NotFound(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetInstance_ByID(t *testing.T) {
+func TestAdminServer_GetInstance_ByID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -110,7 +110,7 @@ func TestAdminServer_GetInstance_ByID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetInstance_ByQueryParam(t *testing.T) {
+func TestAdminServer_GetInstance_ByQueryParam_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -128,7 +128,7 @@ func TestAdminServer_GetInstance_ByQueryParam(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetInstance_MissingID(t *testing.T) {
+func TestAdminServer_GetInstance_MissingID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -143,7 +143,7 @@ func TestAdminServer_GetInstance_MissingID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetInstance_NotFound(t *testing.T) {
+func TestAdminServer_GetInstance_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -158,7 +158,7 @@ func TestAdminServer_GetInstance_NotFound(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetHealth_NoHealth(t *testing.T) {
+func TestAdminServer_GetHealth_NoHealth_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -176,7 +176,7 @@ func TestAdminServer_GetHealth_NoHealth(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetHealth_NotFound(t *testing.T) {
+func TestAdminServer_GetHealth_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -191,7 +191,7 @@ func TestAdminServer_GetHealth_NotFound(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetHealth_MissingID(t *testing.T) {
+func TestAdminServer_GetHealth_MissingID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -206,7 +206,7 @@ func TestAdminServer_GetHealth_MissingID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetMetrics_NotFound(t *testing.T) {
+func TestAdminServer_GetMetrics_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -221,7 +221,7 @@ func TestAdminServer_GetMetrics_NotFound(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetMetrics_MissingID(t *testing.T) {
+func TestAdminServer_GetMetrics_MissingID_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -236,7 +236,7 @@ func TestAdminServer_GetMetrics_MissingID(t *testing.T) {
 	}
 }
 
-func TestAdminServer_GetMetrics_ByQueryParam(t *testing.T) {
+func TestAdminServer_GetMetrics_ByQueryParam_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	instance := NewApplicationInstance("my-app", "http://localhost:8080")
@@ -256,7 +256,7 @@ func TestAdminServer_GetMetrics_ByQueryParam(t *testing.T) {
 	}
 }
 
-func TestAdminServer_Register_InvalidBody(t *testing.T) {
+func TestAdminServer_Register_InvalidBody_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -271,7 +271,7 @@ func TestAdminServer_Register_InvalidBody(t *testing.T) {
 	}
 }
 
-func TestAdminServer_Register_MethodNotAllowed(t *testing.T) {
+func TestAdminServer_Register_MethodNotAllowed_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -286,7 +286,7 @@ func TestAdminServer_Register_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestAdminServer_Deregister_InvalidBody(t *testing.T) {
+func TestAdminServer_Deregister_InvalidBody_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -301,7 +301,7 @@ func TestAdminServer_Deregister_InvalidBody(t *testing.T) {
 	}
 }
 
-func TestAdminServer_Deregister_MethodNotAllowed(t *testing.T) {
+func TestAdminServer_Deregister_MethodNotAllowed_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -316,7 +316,7 @@ func TestAdminServer_Deregister_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestAdminServer_Register_WithStatusAndMetrics(t *testing.T) {
+func TestAdminServer_Register_WithStatusAndMetrics_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -355,7 +355,7 @@ func TestAdminServer_Register_WithStatusAndMetrics(t *testing.T) {
 	}
 }
 
-func TestApplicationRegistry_UpdateHealth_NotFound(t *testing.T) {
+func TestApplicationRegistry_UpdateHealth_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 
@@ -365,7 +365,7 @@ func TestApplicationRegistry_UpdateHealth_NotFound(t *testing.T) {
 	}
 }
 
-func TestApplicationRegistry_UpdateMetrics_NotFound(t *testing.T) {
+func TestApplicationRegistry_UpdateMetrics_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 
@@ -375,7 +375,7 @@ func TestApplicationRegistry_UpdateMetrics_NotFound(t *testing.T) {
 	}
 }
 
-func TestApplicationInstance_AddMetric_NilMetrics(t *testing.T) {
+func TestApplicationInstance_AddMetric_NilMetrics_Coverage(t *testing.T) {
 	t.Parallel()
 	instance := &ApplicationInstance{
 		ID:            "test",
@@ -399,7 +399,7 @@ func TestApplicationInstance_AddMetric_NilMetrics(t *testing.T) {
 	}
 }
 
-func TestApplicationInstance_GetMetric_NotFound(t *testing.T) {
+func TestApplicationInstance_GetMetric_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	instance := NewApplicationInstance("app", "http://localhost:8080")
 
@@ -409,7 +409,7 @@ func TestApplicationInstance_GetMetric_NotFound(t *testing.T) {
 	}
 }
 
-func TestApplicationRegistry_UpdateApplicationStatus_AllUnknown(t *testing.T) {
+func TestApplicationRegistry_UpdateApplicationStatus_AllUnknown_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 
@@ -424,7 +424,7 @@ func TestApplicationRegistry_UpdateApplicationStatus_AllUnknown(t *testing.T) {
 	}
 }
 
-func TestAdminServer_OverallHealth_Empty(t *testing.T) {
+func TestAdminServer_OverallHealth_Empty_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 	server := NewAdminServer(registry)
@@ -439,7 +439,7 @@ func TestAdminServer_OverallHealth_Empty(t *testing.T) {
 	}
 }
 
-func TestApplicationRegistry_Deregister_OneOfMany(t *testing.T) {
+func TestApplicationRegistry_Deregister_OneOfMany_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 
@@ -464,7 +464,7 @@ func TestApplicationRegistry_Deregister_OneOfMany(t *testing.T) {
 	}
 }
 
-func TestApplicationRegistry_Deregister_AppDeletedWhenEmpty(t *testing.T) {
+func TestApplicationRegistry_Deregister_AppDeletedWhenEmpty_Coverage(t *testing.T) {
 	t.Parallel()
 	registry := NewApplicationRegistry()
 

@@ -7,10 +7,46 @@ import (
 )
 
 // NewEventBus 创建新的事件总线实例。
-func NewEventBus() *EventBus {
-	return &EventBus{
+func NewEventBus() EventBus {
+	return &eventBus{
 		listeners: sync.Map{},
 	}
+}
+
+// eventBus 事件总线实现。
+//
+// 负责事件的发布与订阅管理，支持多监听器注册。
+// 线程安全，支持并发发布和订阅。
+// 使用 sync.Map 优化读多写少场景的性能。
+//
+// # 性能优化
+//
+//   - 使用 sync.Map 存储监听器，无锁读取
+//   - 使用 CAS 操作实现无锁订阅更新
+//   - 避免 range 分配迭代器，使用索引遍历
+//
+// # 并发安全
+//
+// eventBus 的所有方法都是并发安全的。
+// 订阅和取消订阅使用 CAS 操作实现无锁更新，
+// 发布事件使用无锁读取，性能优异。
+type eventBus struct {
+	listeners sync.Map // map[string]*listenerList
+}
+
+// Type 返回事件类型字符串。
+func (e *BaseEvent) Type() string {
+	return e.EventType
+}
+
+// Timestamp 返回事件发生的时间戳。
+//
+// 如果 EventTime 未设置（零值），自动返回当前时间。
+func (e *BaseEvent) Timestamp() time.Time {
+	if e.EventTime.IsZero() {
+		return time.Now()
+	}
+	return e.EventTime
 }
 
 // Publish 发布事件，通知所有订阅了该事件类型的监听器。
@@ -31,7 +67,7 @@ func NewEventBus() *EventBus {
 // 性能提示:
 //   - 发布操作是无锁的，性能优异
 //   - 监听器数量较多时，考虑使用 AsyncEventBus
-func (b *EventBus) Publish(event ApplicationEvent) {
+func (b *eventBus) Publish(event ApplicationEvent) {
 	if event == nil {
 		return
 	}
@@ -67,7 +103,7 @@ func (b *EventBus) Publish(event ApplicationEvent) {
 //   - 首次订阅使用 LoadOrStore 快速路径，无锁
 //   - 后续订阅使用 CAS 重试，保证并发安全
 //   - 避免在事件处理函数中调用 Subscribe，可能导致死锁
-func (b *EventBus) Subscribe(eventType string, listener EventListener) {
+func (b *eventBus) Subscribe(eventType string, listener EventListener) {
 	if listener == nil {
 		return
 	}
@@ -102,7 +138,7 @@ func (b *EventBus) Subscribe(eventType string, listener EventListener) {
 // 性能提示:
 //   - 取消订阅需要遍历监听器列表，O(n) 复杂度
 //   - 频繁取消订阅的场景，考虑使用一次性监听器
-func (b *EventBus) Unsubscribe(eventType string, target EventListener) {
+func (b *eventBus) Unsubscribe(eventType string, target EventListener) {
 	if target == nil {
 		return
 	}
@@ -138,33 +174,4 @@ func (b *EventBus) Unsubscribe(eventType string, target EventListener) {
 		// 未找到目标监听器
 		return
 	}
-}
-
-// 可直接使用，也支持嵌入到自定义事件结构体中。
-// 如果 EventTime 未设置，Timestamp() 会自动返回当前时间。
-//
-// # 使用示例
-//
-//	// 直接使用
-//	evt := &event.BaseEvent{EventType: "user.created"}
-//
-//	// 嵌入到自定义事件
-//	type UserCreatedEvent struct {
-//	    event.BaseEvent
-//	    UserID int
-//	}
-
-// Type 返回事件类型字符串。
-func (e *BaseEvent) Type() string {
-	return e.EventType
-}
-
-// Timestamp 返回事件发生的时间戳。
-//
-// 如果 EventTime 未设置（零值），自动返回当前时间。
-func (e *BaseEvent) Timestamp() time.Time {
-	if e.EventTime.IsZero() {
-		return time.Now()
-	}
-	return e.EventTime
 }

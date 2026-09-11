@@ -4,6 +4,98 @@ import (
 	"testing"
 )
 
+func TestOnPropertyOrDefault_String(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue string
+		vals         []string
+		want         string
+	}{
+		{"with value", "gin.enabled", "true", []string{"true"}, "OnPropertyOrDefault(gin.enabled=true, default=true)"},
+		{"without value", "gin.enabled", "true", nil, "OnPropertyOrDefault(gin.enabled, default=true)"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := OnPropertyOrDefault(tt.key, tt.defaultValue, tt.vals...)
+			if got := c.String(); got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOnPropertyOrDefault_Matches(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue string
+		expectedVal  string
+		propValue    any
+		propExists   bool
+		want         bool
+	}{
+		{
+			name:         "property exists and matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    "true",
+			propExists:   true,
+			want:         true,
+		},
+		{
+			name:         "property exists but not matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    "false",
+			propExists:   true,
+			want:         false,
+		},
+		{
+			name:         "property not exists use default matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    nil,
+			propExists:   false,
+			want:         true,
+		},
+		{
+			name:         "property not exists use default not matches",
+			key:          "gin.enabled",
+			defaultValue: "false",
+			expectedVal:  "true",
+			propValue:    nil,
+			propExists:   false,
+			want:         false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &mockConditionContext{
+				envFn: func(key string) (any, bool) {
+					if key == tt.key {
+						return tt.propValue, tt.propExists
+					}
+					return nil, false
+				},
+			}
+			c := OnPropertyOrDefault(tt.key, tt.defaultValue, tt.expectedVal)
+			if got := c.Matches(ctx); got != tt.want {
+				t.Errorf("Matches() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestOnProperty_String(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

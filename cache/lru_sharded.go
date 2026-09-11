@@ -1,12 +1,31 @@
-// Package cache 提供缓存抽象层，用于 enhance 框架。
 package cache
 
 import (
 	"container/list"
 	"context"
 	"hash/fnv"
+	"sync"
 	"time"
 )
+
+// ShardedLRUCache 分片 LRU 缓存实现。
+//
+// 将全局锁拆分为多个分段锁，提升高并发场景下的性能。
+// 每个分片独立维护自己的 LRU 链表和哈希表。
+type ShardedLRUCache struct {
+	shards     []*lruShard
+	capacity   int
+	shardCount int
+	onEvict    func(key string, value any)
+}
+
+// lruShard 单个 LRU 分片内部结构。
+type lruShard struct {
+	mu        sync.RWMutex
+	capacity  int
+	items     map[string]*list.Element
+	evictList *list.List
+}
 
 // NewShardedLRUCache 创建分片 LRU 缓存
 //

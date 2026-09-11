@@ -24,7 +24,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&OtelAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(OtelEnabled, ConditionTrue),
+			// 约定优于配置：当 otel.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(OtelEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityMonitoringLayer)),
 	)

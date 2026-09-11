@@ -12,6 +12,16 @@ func NewEventBusWithOrdering() *EventBusWithOrdering {
 	return &EventBusWithOrdering{}
 }
 
+// NewLegacyEventBusAdapter 创建适配器。
+func NewLegacyEventBusAdapter(bus *EventBusWithOrdering) *LegacyEventBusAdapter {
+	return &LegacyEventBusAdapter{bus: bus}
+}
+
+// NewListenerConfig 创建监听器配置
+func NewListenerConfig(handler EventListener) ListenerConfig {
+	return ListenerConfig{Handler: handler}
+}
+
 // Subscribe 订阅事件（向后兼容，等价于 Order=0 无条件的监听器）
 func (b *EventBusWithOrdering) Subscribe(eventType string, listener EventListener) {
 	b.SubscribeWithConfig(eventType, ListenerConfig{
@@ -267,11 +277,6 @@ func (b *EventBusWithOrdering) ClearAll() {
 	})
 }
 
-// NewLegacyEventBusAdapter 创建适配器。
-func NewLegacyEventBusAdapter(bus *EventBusWithOrdering) *LegacyEventBusAdapter {
-	return &LegacyEventBusAdapter{bus: bus}
-}
-
 // Publish 转发到 EventBusWithOrdering
 func (a *LegacyEventBusAdapter) Publish(event ApplicationEvent) {
 	a.bus.Publish(event)
@@ -285,13 +290,6 @@ func (a *LegacyEventBusAdapter) Subscribe(eventType string, listener EventListen
 // Unsubscribe 转发到 EventBusWithOrdering
 func (a *LegacyEventBusAdapter) Unsubscribe(eventType string, target EventListener) {
 	a.bus.Unsubscribe(eventType, target)
-}
-
-// 便捷构造函数
-
-// NewListenerConfig 创建监听器配置
-func NewListenerConfig(handler EventListener) ListenerConfig {
-	return ListenerConfig{Handler: handler}
 }
 
 // WithOrder 设置优先级

@@ -24,7 +24,8 @@ func (h *recordingHandler) RegisterResolver(_ ExceptionResolver) {}
 
 func (h *recordingHandler) RegisterException(_ reflect.Type, _ ExceptionResolver) {}
 
-func (h *recordingHandler) RegisterHandlerFunc(_ reflect.Type, _ func(context.Context, error) *ErrorResponse) {}
+func (h *recordingHandler) RegisterHandlerFunc(_ reflect.Type, _ func(context.Context, error) *ErrorResponse) {
+}
 
 func (h *recordingHandler) IncludeStackTrace() bool { return h.includeStack }
 

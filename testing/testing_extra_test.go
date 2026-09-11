@@ -231,7 +231,7 @@ func TestMock_AssertExpectations_Fail(t *testing.T) {
 	}
 }
 
-func TestTestContext_Register(t *testing.T) {
+func TestTestContext_Register_Extra(t *testing.T) {
 	t.Parallel()
 	ctx := NewTestContext(t)
 	type testBean struct{ Name string }
@@ -294,7 +294,7 @@ func TestMock_ExpectTimes_NotEnoughCalls(t *testing.T) {
 	}
 }
 
-func TestTestContext_Fatalf_Coverage(t *testing.T) {
+func TestTestContext_Fatalf(t *testing.T) {
 	t.Parallel()
 	t.Skip("Fatalf delegates to testing.T.Fatalf which calls runtime.Goexit")
 }

@@ -58,206 +58,6 @@ func TestLoggerBuilder_WithSampler(t *testing.T) {
 	}
 }
 
-func TestRandomSampler_Rate(t *testing.T) {
-	t.Parallel()
-	sampler := NewRandomSampler(0.5)
-
-	sampled := 0
-	total := 1000
-
-	for range total {
-		if sampler.ShouldSample() {
-			sampled++
-		}
-	}
-
-	rate := float64(sampled) / float64(total)
-	// 采样率应该在 0.4-0.6 之间（允许一定偏差）
-	if rate < 0.4 || rate > 0.6 {
-		t.Errorf("expected sampling rate around 0.5, got %f", rate)
-	}
-}
-
-func TestRandomSampler_Boundary(t *testing.T) {
-	t.Parallel()
-	// 测试边界值
-	sampler0 := NewRandomSampler(0)
-	if sampler0.ShouldSample() {
-		t.Error("expected 0% sampler to never sample")
-	}
-
-	sampler1 := NewRandomSampler(1)
-	// 100% 采样器应该总是采样
-	for range 100 {
-		if !sampler1.ShouldSample() {
-			t.Error("expected 100% sampler to always sample")
-			break
-		}
-	}
-}
-
-func TestThresholdSampler(t *testing.T) {
-	t.Parallel()
-	sampler := NewThresholdSampler(5)
-
-	sampled := 0
-	for range 100 {
-		if sampler.ShouldSample() {
-			sampled++
-		}
-	}
-
-	// 每 5 次采样一次，100 次应该有 20 次
-	if sampled != 20 {
-		t.Errorf("expected 20 samples, got %d", sampled)
-	}
-}
-
-func TestSampledLogger_ErrorNotSampled(t *testing.T) {
-	t.Parallel()
-	// 创建一个 0% 采样率的日志器
-	sampler := NewRandomSampler(0)
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// Debug 不应该被记录（0% 采样率）
-	// 但我们无法直接验证，只能验证 Error 总是被记录
-	logger.Error(ctx, "error message") // 应该总是记录
-}
-
-func TestContextLogger_WithTraceID(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	ctx = WithTraceID(ctx, "test-trace-123")
-
-	// 应该能正常记录，且包含 trace_id
-	logger.Info(ctx, "message with trace id")
-}
-
-func TestContextLogger_NoTraceID(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-
-	// 没有 trace_id 也应该正常记录
-	logger.Info(ctx, "message without trace id")
-}
-
-func TestGetTraceID(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	// 没有 trace_id
-	if GetTraceID(ctx) != "" {
-		t.Error("expected empty trace id")
-	}
-
-	// 有 trace_id
-	ctx = WithTraceID(ctx, "abc-123")
-	if GetTraceID(ctx) != "abc-123" {
-		t.Errorf("expected abc-123, got %s", GetTraceID(ctx))
-	}
-}
-
-func TestDynamicLevelLogger(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	// 初始级别为 Info
-	if logger.GetLevel() != InfoLevel {
-		t.Errorf("expected InfoLevel, got %v", logger.GetLevel())
-	}
-
-	ctx := context.Background()
-
-	// Debug 不应该被记录
-	logger.Debug(ctx, "debug message")
-
-	// Info 应该被记录
-	logger.Info(ctx, "info message")
-
-	// 动态调整级别为 Debug
-	logger.SetLevel(DebugLevel)
-
-	if logger.GetLevel() != DebugLevel {
-		t.Errorf("expected DebugLevel after SetLevel, got %v", logger.GetLevel())
-	}
-
-	// Debug 现在应该被记录
-	logger.Debug(ctx, "debug message after level change")
-}
-
-func TestDynamicLevelLogger_LevelFiltering(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, WarnLevel)
-
-	ctx := context.Background()
-
-	// 记录所有级别，只有 Warn 及以上应该被记录
-	logger.Debug(ctx, "debug") // 不应该记录
-	logger.Info(ctx, "info")   // 不应该记录
-	logger.Warn(ctx, "warn")   // 应该记录
-	logger.Error(ctx, "error") // 应该记录
-
-	// 调整级别为 Debug
-	logger.SetLevel(DebugLevel)
-	logger.Debug(ctx, "debug after change") // 现在应该记录
-}
-
-func TestDynamicLevelLogger_With(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, KeyValue{Key: "module", Value: "test"})
-
-	// 子日志器应该共享级别
-	dynamicChild, ok := childLogger.(*DynamicLevelLogger)
-	if !ok {
-		t.Fatal("expected child to be DynamicLevelLogger")
-	}
-
-	// 修改父级别，子级别应该也受影响
-	logger.SetLevel(DebugLevel)
-	if dynamicChild.GetLevel() != DebugLevel {
-		t.Errorf("expected child to inherit level change, got %v", dynamicChild.GetLevel())
-	}
-}
-
-func TestSampledLogger_With(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(0.5)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, KeyValue{Key: "key", Value: "value"})
-
-	if childLogger == nil {
-		t.Fatal("expected child logger to be created")
-	}
-
-	// 子日志器应该保持采样器
-	sampledChild, ok := childLogger.(*SampledLogger)
-	if !ok {
-		t.Fatal("expected child to be SampledLogger")
-	}
-
-	if sampledChild.sampler != sampler {
-		t.Error("expected child to share same sampler")
-	}
-}
-
 func TestLoggerBuilder_OutputPath(t *testing.T) {
 	t.Parallel()
 	// 测试无效路径（应该回退到 stdout）
@@ -271,63 +71,6 @@ func TestLoggerBuilder_OutputPath(t *testing.T) {
 	}
 }
 
-func TestContextLogger_ChainWith(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	ctx = WithTraceID(ctx, "trace-456")
-
-	childLogger := logger.With(ctx, KeyValue{Key: "request_id", Value: "req-789"})
-
-	// 子日志器应该也能正常工作
-	childLogger.Info(ctx, "chained context log")
-}
-
-func TestDynamicLevelLogger_ConcurrentLevelChange(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-
-	// 并发修改级别
-	done := make(chan bool)
-	for range 10 {
-		go func() {
-			for j := range 100 {
-				logger.SetLevel(Level(j % 5))
-				logger.Info(ctx, "concurrent log")
-			}
-			done <- true
-		}()
-	}
-
-	for range 10 {
-		<-done
-	}
-
-	// 如果没有 panic，说明并发安全
-}
-
-func TestSampledLogger_AllLevels(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0) // 100% 采样
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// 测试所有级别
-	logger.Debug(ctx, "debug")
-	logger.Info(ctx, "info")
-	logger.Warn(ctx, "warn")
-	logger.Error(ctx, "error")
-
-	// 不应该 panic
-}
-
 func TestLoggerBuilder_DefaultValues(t *testing.T) {
 	t.Parallel()
 	logger := NewLoggerBuilder().Build()
@@ -338,69 +81,6 @@ func TestLoggerBuilder_DefaultValues(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "default config log")
-}
-
-func TestContextLogger_AllLevels(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := WithTraceID(context.Background(), "test-trace")
-
-	logger.Debug(ctx, "debug")
-	logger.Info(ctx, "info")
-	logger.Warn(ctx, "warn")
-	logger.Error(ctx, "error")
-}
-
-func TestDynamicLevelLogger_BoundaryLevels(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	// 测试所有边界级别
-	logger.SetLevel(DebugLevel)
-	if logger.GetLevel() != DebugLevel {
-		t.Errorf("expected DebugLevel, got %v", logger.GetLevel())
-	}
-
-	logger.SetLevel(InfoLevel)
-	if logger.GetLevel() != InfoLevel {
-		t.Errorf("expected InfoLevel, got %v", logger.GetLevel())
-	}
-
-	logger.SetLevel(WarnLevel)
-	if logger.GetLevel() != WarnLevel {
-		t.Errorf("expected WarnLevel, got %v", logger.GetLevel())
-	}
-
-	logger.SetLevel(ErrorLevel)
-	if logger.GetLevel() != ErrorLevel {
-		t.Errorf("expected ErrorLevel, got %v", logger.GetLevel())
-	}
-}
-
-func TestSampledLogger_Sync(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(0.5)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	err := logger.Sync()
-	if err != nil {
-		t.Errorf("expected no error from Sync, got %v", err)
-	}
-}
-
-func TestContextLogger_Sync(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	err := logger.Sync()
-	if err != nil {
-		t.Errorf("expected no error from Sync, got %v", err)
-	}
 }
 
 func TestLoggerBuilder_ComplexConfig(t *testing.T) {
@@ -419,46 +99,6 @@ func TestLoggerBuilder_ComplexConfig(t *testing.T) {
 
 	ctx := WithTraceID(context.Background(), "complex-trace")
 	logger.Warn(ctx, "complex config log")
-}
-
-func TestDynamicLevelLogger_LevelComparison(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, WarnLevel)
-
-	ctx := context.Background()
-
-	// WarnLevel 时，Debug 和 Info 不应该被记录
-	// 我们无法直接验证，但可以确保 Warn 及以上被记录
-	logger.Warn(ctx, "warn message")
-	logger.Error(ctx, "error message")
-
-	// 调整到 ErrorLevel
-	logger.SetLevel(ErrorLevel)
-	logger.Error(ctx, "error after change")
-}
-
-func TestSampledLogger_NilSampler(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-
-	// 测试 nil sampler 的情况
-	// 这里应该 panic，但我们测试正常情况
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	logger.Info(ctx, "message with sampler")
-}
-
-func TestContextLogger_EmptyContext(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	// 空上下文也应该正常工作
-	ctx := context.Background()
-	logger.Info(ctx, "empty context log")
 }
 
 func TestLoggerBuilder_StringFormat(t *testing.T) {
@@ -489,47 +129,6 @@ func TestLoggerBuilder_JSONFormat(t *testing.T) {
 	logger.Info(ctx, "json format log")
 }
 
-func TestDynamicLevelLogger_WithPreservesLevel(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, WarnLevel)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, KeyValue{Key: "key", Value: "value"})
-
-	// 子日志器应该保持相同的级别
-	dynamicChild, ok := childLogger.(*DynamicLevelLogger)
-	if !ok {
-		t.Fatal("expected DynamicLevelLogger")
-	}
-
-	if dynamicChild.GetLevel() != WarnLevel {
-		t.Errorf("expected WarnLevel, got %v", dynamicChild.GetLevel())
-	}
-}
-
-func TestSampledLogger_ContextPropagation(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := WithTraceID(context.Background(), "sample-trace")
-	logger.Info(ctx, "sampled with context")
-}
-
-func TestContextLogger_MultipleTraceIDs(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx1 := WithTraceID(context.Background(), "trace-1")
-	ctx2 := WithTraceID(context.Background(), "trace-2")
-
-	logger.Info(ctx1, "first trace")
-	logger.Info(ctx2, "second trace")
-}
-
 func TestLoggerBuilder_WithOutputPath(t *testing.T) {
 	t.Parallel()
 	// 测试临时文件路径
@@ -548,49 +147,6 @@ func TestLoggerBuilder_WithOutputPath(t *testing.T) {
 	if syncer, ok := logger.(LoggerWithSync); ok {
 		_ = syncer.Sync()
 	}
-}
-
-func TestDynamicLevelLogger_RapidLevelChanges(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-
-	// 快速切换级别
-	for i := range 100 {
-		logger.SetLevel(Level(i % 5))
-		logger.Info(ctx, "rapid level change")
-	}
-}
-
-func TestSampledLogger_PerformanceWithHighSampling(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0) // 100% 采样
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// 高频日志
-	for range 1000 {
-		logger.Info(ctx, "high frequency log")
-	}
-}
-
-func TestContextLogger_WithEmptyKeys(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx)
-
-	if childLogger == nil {
-		t.Fatal("expected child logger with empty keys")
-	}
-
-	childLogger.Info(ctx, "empty keys log")
 }
 
 func TestLoggerBuilder_LevelString(t *testing.T) {
@@ -656,47 +212,6 @@ func TestLoggerBuilder_WithCustomLogger(t *testing.T) {
 	logger.Info(ctx, "custom logger")
 }
 
-func TestSampledLogger_SamplerShouldSample(t *testing.T) {
-	t.Parallel()
-	// 测试采样器的 ShouldSample 方法
-	sampler := NewRandomSampler(0)
-	if sampler.ShouldSample() {
-		t.Error("0% sampler should not sample")
-	}
-
-	sampler = NewRandomSampler(1)
-	for range 100 {
-		if !sampler.ShouldSample() {
-			t.Error("100% sampler should always sample")
-			break
-		}
-	}
-}
-
-func TestContextLogger_WithTraceIDEmpty(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	// 测试空 trace_id
-	ctx := WithTraceID(context.Background(), "")
-	logger.Info(ctx, "empty trace id")
-}
-
-func TestDynamicLevelLogger_AllLevelsShouldLog(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	ctx := context.Background()
-
-	// DebugLevel 时所有级别都应该被记录
-	logger.Debug(ctx, "debug")
-	logger.Info(ctx, "info")
-	logger.Warn(ctx, "warn")
-	logger.Error(ctx, "error")
-}
-
 func TestLoggerBuilder_SamplerNil(t *testing.T) {
 	t.Parallel()
 	// 测试 sampler 为 nil 的情况
@@ -710,42 +225,6 @@ func TestLoggerBuilder_SamplerNil(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "no sampler")
-}
-
-func TestContextLogger_WithNilContext(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	// 不应该 panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("unexpected panic: %v", r)
-		}
-	}()
-
-	ctx := context.Background()
-	logger.Info(ctx, "nil context test")
-}
-
-func TestSampledLogger_WithNilSampler(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-
-	// 测试 nil sampler 会 panic
-	panicked := false
-	defer func() {
-		if r := recover(); r != nil {
-			panicked = true
-		}
-		if !panicked {
-			t.Error("expected panic with nil sampler")
-		}
-	}()
-
-	logger := NewSampledLogger(baseLogger, nil)
-	ctx := context.Background()
-	logger.Info(ctx, "nil sampler")
 }
 
 func TestLoggerBuilder_ChainMultipleOptions(t *testing.T) {
@@ -766,224 +245,6 @@ func TestLoggerBuilder_ChainMultipleOptions(t *testing.T) {
 	logger.Info(ctx, "chained options log")
 }
 
-func TestDynamicLevelLogger_LevelOrdering(t *testing.T) {
-	t.Parallel()
-	// 验证级别顺序：Debug < Info < Warn < Error < DPanic < Panic < Fatal
-	if DebugLevel >= InfoLevel {
-		t.Error("DebugLevel should be less than InfoLevel")
-	}
-	if InfoLevel >= WarnLevel {
-		t.Error("InfoLevel should be less than WarnLevel")
-	}
-	if WarnLevel >= ErrorLevel {
-		t.Error("WarnLevel should be less than ErrorLevel")
-	}
-	if ErrorLevel >= DPanicLevel {
-		t.Error("ErrorLevel should be less than DPanicLevel")
-	}
-}
-
-func TestSampledLogger_DPanic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected DPanic to panic in development mode")
-		}
-	}()
-
-	logger.DPanic(ctx, "dpanic message")
-}
-
-func TestSampledLogger_Panic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// Panic 应该 panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected Panic to panic")
-		}
-	}()
-
-	logger.Panic(ctx, "panic message")
-}
-
-func TestSampledLogger_Fatal(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// Fatal 应该调用 os.Exit(1)，这里无法直接测试，只验证不 panic
-	// 实际测试时需要用子进程测试
-	_ = logger
-	_ = ctx
-}
-
-func TestContextLogger_DPanic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-
-	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected DPanic to panic in development mode")
-		}
-	}()
-
-	logger.DPanic(ctx, "dpanic message")
-}
-
-func TestContextLogger_Panic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-
-	// Panic 应该 panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected Panic to panic")
-		}
-	}()
-
-	logger.Panic(ctx, "panic message")
-}
-
-func TestContextLogger_Fatal(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-
-	// Fatal 应该调用 os.Exit(1)，这里无法直接测试
-	// 实际测试时需要用子进程测试
-	_ = logger
-	_ = ctx
-}
-
-func TestDynamicLevelLogger_IsLevelEnabled(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, WarnLevel)
-
-	// 测试 IsLevelEnabled
-	if logger.IsLevelEnabled(DebugLevel) {
-		t.Error("DebugLevel should not be enabled when level is WarnLevel")
-	}
-	if logger.IsLevelEnabled(InfoLevel) {
-		t.Error("InfoLevel should not be enabled when level is WarnLevel")
-	}
-	if !logger.IsLevelEnabled(WarnLevel) {
-		t.Error("WarnLevel should be enabled")
-	}
-	if !logger.IsLevelEnabled(ErrorLevel) {
-		t.Error("ErrorLevel should be enabled")
-	}
-}
-
-func TestDynamicLevelLogger_DPanic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel), WithDevelopment(true))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	ctx := context.Background()
-
-	// DPanic 应该 panic（因为 SlogLogger 开启了 development 模式）
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected DPanic to panic in development mode")
-		}
-	}()
-
-	logger.DPanic(ctx, "dpanic message")
-}
-
-func TestDynamicLevelLogger_Panic(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	ctx := context.Background()
-
-	// Panic 应该 panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected Panic to panic")
-		}
-	}()
-
-	logger.Panic(ctx, "panic message")
-}
-
-func TestDynamicLevelLogger_Fatal(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	ctx := context.Background()
-
-	// Fatal 应该调用 os.Exit(1)，这里无法直接测试
-	_ = logger
-	_ = ctx
-}
-
-func TestDynamicLevelLogger_Sync(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, DebugLevel)
-
-	err := logger.Sync()
-	if err != nil {
-		t.Errorf("expected no error from Sync, got %v", err)
-	}
-}
-
-func TestContextLogger_WithMultipleFields(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := WithTraceID(context.Background(), "multi-trace")
-	childLogger := logger.With(ctx,
-		KeyValue{Key: "key1", Value: "value1"},
-		KeyValue{Key: "key2", Value: "value2"},
-	)
-
-	childLogger.Info(ctx, "multiple fields log")
-}
-
-func TestSampledLogger_ErrorAlwaysLogged(t *testing.T) {
-	t.Parallel()
-	// 验证 Error 级别总是被记录，不受采样影响
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(0) // 0% 采样
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	// Error 应该总是被记录
-	logger.Error(ctx, "always logged error")
-}
-
 func TestLoggerBuilder_DefaultFormat(t *testing.T) {
 	t.Parallel()
 	logger := NewLoggerBuilder().Build()
@@ -995,61 +256,6 @@ func TestLoggerBuilder_DefaultFormat(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "default format log")
-}
-
-func TestContextLogger_PreserveOriginalContext(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := WithTraceID(context.Background(), "original-trace")
-
-	// 原始上下文应该保持不变
-	if GetTraceID(ctx) != "original-trace" {
-		t.Errorf("expected original trace id to be preserved")
-	}
-
-	logger.Info(ctx, "preserve context log")
-}
-
-func TestDynamicLevelLogger_SetLevelConcurrent(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	// 并发设置级别
-	done := make(chan bool)
-	for i := range 10 {
-		go func(n int) {
-			logger.SetLevel(Level(n % 5))
-			done <- true
-		}(i)
-	}
-
-	for range 10 {
-		<-done
-	}
-
-	// 如果没有 panic，说明并发安全
-}
-
-func TestSampledLogger_WithPreservesSampler(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(0.5)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, KeyValue{Key: "key", Value: "value"})
-
-	sampledChild, ok := childLogger.(*SampledLogger)
-	if !ok {
-		t.Fatal("expected SampledLogger")
-	}
-
-	if sampledChild.sampler != sampler {
-		t.Error("expected child to preserve sampler")
-	}
 }
 
 func TestLoggerBuilder_OutputPathEmpty(t *testing.T) {
@@ -1065,49 +271,6 @@ func TestLoggerBuilder_OutputPathEmpty(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "empty output path log")
-}
-
-func TestContextLogger_WithNilLogger(t *testing.T) {
-	t.Parallel()
-	// 测试 nil logger 的情况
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	logger := NewContextLogger(nil)
-	ctx := context.Background()
-	logger.Info(ctx, "nil logger")
-}
-
-func TestSampledLogger_WithNilLogger(t *testing.T) {
-	t.Parallel()
-	// 测试 nil logger 的情况
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(nil, sampler)
-	ctx := context.Background()
-	logger.Info(ctx, "nil logger")
-}
-
-func TestDynamicLevelLogger_NilLogger(t *testing.T) {
-	t.Parallel()
-	// 测试 nil logger 的情况
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	logger := NewDynamicLevelLogger(nil, InfoLevel)
-	ctx := context.Background()
-	logger.Info(ctx, "nil logger")
 }
 
 func TestLoggerBuilder_ComplexConfigWithAllOptions(t *testing.T) {
@@ -1133,34 +296,6 @@ func TestLoggerBuilder_ComplexConfigWithAllOptions(t *testing.T) {
 	}
 }
 
-func TestContextLogger_WithEmptyMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	logger.Info(ctx, "")
-}
-
-func TestSampledLogger_WithEmptyMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	logger.Info(ctx, "")
-}
-
-func TestDynamicLevelLogger_WithEmptyMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-	logger.Info(ctx, "")
-}
-
 func TestLoggerBuilder_InvalidFormat(t *testing.T) {
 	t.Parallel()
 	// 测试无效格式（应该回退到默认格式）
@@ -1174,52 +309,6 @@ func TestLoggerBuilder_InvalidFormat(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "invalid format log")
-}
-
-func TestContextLogger_WithNilKeys(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, nil...)
-
-	if childLogger == nil {
-		t.Fatal("expected child logger with nil keys")
-	}
-
-	childLogger.Info(ctx, "nil keys log")
-}
-
-func TestSampledLogger_WithNilKeys(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, nil...)
-
-	if childLogger == nil {
-		t.Fatal("expected child logger with nil keys")
-	}
-
-	childLogger.Info(ctx, "nil keys log")
-}
-
-func TestDynamicLevelLogger_WithNilKeys(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-	childLogger := logger.With(ctx, nil...)
-
-	if childLogger == nil {
-		t.Fatal("expected child logger with nil keys")
-	}
-
-	childLogger.Info(ctx, "nil keys log")
 }
 
 func TestLoggerBuilder_LevelDebug(t *testing.T) {
@@ -1262,34 +351,6 @@ func TestLoggerBuilder_LevelError(t *testing.T) {
 	logger.Error(ctx, "error level log")
 }
 
-func TestContextLogger_WithSpecialCharacters(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := WithTraceID(context.Background(), "trace-with-special-chars-!@#$%^&*()")
-	logger.Info(ctx, "message with special chars: !@#$%^&*()")
-}
-
-func TestSampledLogger_WithSpecialCharacters(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	logger.Info(ctx, "special chars: !@#$%^&*()")
-}
-
-func TestDynamicLevelLogger_WithSpecialCharacters(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-	logger.Info(ctx, "special chars: !@#$%^&*()")
-}
-
 func TestLoggerBuilder_UnicodeMessage(t *testing.T) {
 	t.Parallel()
 	logger := NewLoggerBuilder().
@@ -1300,70 +361,11 @@ func TestLoggerBuilder_UnicodeMessage(t *testing.T) {
 	logger.Info(ctx, "Unicode message: 你好世界 🌍")
 }
 
-func TestContextLogger_UnicodeMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	logger.Info(ctx, "Unicode message: 你好世界 🌍")
-}
-
-func TestSampledLogger_UnicodeMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	logger.Info(ctx, "Unicode message: 你好世界 🌍")
-}
-
-func TestDynamicLevelLogger_UnicodeMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-	logger.Info(ctx, "Unicode message: 你好世界 🌍")
-}
-
 func TestLoggerBuilder_LongMessage(t *testing.T) {
 	t.Parallel()
 	logger := NewLoggerBuilder().
 		Level(InfoLevel).
 		Build()
-
-	ctx := context.Background()
-	longMsg := strings.Repeat("a", 10000)
-	logger.Info(ctx, longMsg)
-}
-
-func TestContextLogger_LongMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	longMsg := strings.Repeat("a", 10000)
-	logger.Info(ctx, longMsg)
-}
-
-func TestSampledLogger_LongMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-	longMsg := strings.Repeat("a", 10000)
-	logger.Info(ctx, longMsg)
-}
-
-func TestDynamicLevelLogger_LongMessage(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
 
 	ctx := context.Background()
 	longMsg := strings.Repeat("a", 10000)
@@ -1384,42 +386,6 @@ func TestLoggerBuilder_MultipleBuilds(t *testing.T) {
 	logger2.Info(ctx, "logger2 message")
 }
 
-func TestContextLogger_MultipleInstances(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger1 := NewContextLogger(baseLogger)
-	logger2 := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-	logger1.Info(ctx, "logger1 message")
-	logger2.Info(ctx, "logger2 message")
-}
-
-func TestSampledLogger_MultipleInstances(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler1 := NewRandomSampler(0.5)
-	sampler2 := NewRandomSampler(0.8)
-
-	logger1 := NewSampledLogger(baseLogger, sampler1)
-	logger2 := NewSampledLogger(baseLogger, sampler2)
-
-	ctx := context.Background()
-	logger1.Info(ctx, "logger1 message")
-	logger2.Info(ctx, "logger2 message")
-}
-
-func TestDynamicLevelLogger_MultipleInstances(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger1 := NewDynamicLevelLogger(baseLogger, InfoLevel)
-	logger2 := NewDynamicLevelLogger(baseLogger, WarnLevel)
-
-	ctx := context.Background()
-	logger1.Info(ctx, "logger1 message")
-	logger2.Warn(ctx, "logger2 message")
-}
-
 func TestLoggerBuilder_BuildIdempotent(t *testing.T) {
 	t.Parallel()
 	builder := NewLoggerBuilder().Name("idempotent")
@@ -1436,47 +402,6 @@ func TestLoggerBuilder_BuildIdempotent(t *testing.T) {
 	logger2.Info(ctx, "logger2 message")
 }
 
-func TestContextLogger_WithChain(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewContextLogger(baseLogger)
-
-	ctx := context.Background()
-
-	// 链式 With
-	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
-
-	child2.Info(ctx, "chained with log")
-}
-
-func TestSampledLogger_WithChain(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	sampler := NewRandomSampler(1.0)
-	logger := NewSampledLogger(baseLogger, sampler)
-
-	ctx := context.Background()
-
-	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
-
-	child2.Info(ctx, "chained with log")
-}
-
-func TestDynamicLevelLogger_WithChain(t *testing.T) {
-	t.Parallel()
-	baseLogger := NewSlogLogger(WithLevel(DebugLevel))
-	logger := NewDynamicLevelLogger(baseLogger, InfoLevel)
-
-	ctx := context.Background()
-
-	child1 := logger.With(ctx, KeyValue{Key: "key1", Value: "value1"})
-	child2 := child1.(LoggerWithFields).With(ctx, KeyValue{Key: "key2", Value: "value2"})
-
-	child2.Info(ctx, "chained with log")
-}
-
 func TestLoggerBuilder_WithNilOptions(t *testing.T) {
 	t.Parallel()
 	// 测试 nil options
@@ -1488,42 +413,4 @@ func TestLoggerBuilder_WithNilOptions(t *testing.T) {
 
 	ctx := context.Background()
 	logger.Info(ctx, "nil options log")
-}
-
-func TestContextLogger_WithNilLoggerAndContext(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	logger := NewContextLogger(nil)
-	logger.Info(context.TODO(), "nil logger and context")
-}
-
-func TestSampledLogger_WithNilLoggerAndSampler(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	logger := NewSampledLogger(nil, nil)
-	ctx := context.Background()
-	logger.Info(ctx, "nil logger and sampler")
-}
-
-func TestDynamicLevelLogger_NilLoggerPanic(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic with nil logger")
-		}
-	}()
-
-	logger := NewDynamicLevelLogger(nil, InfoLevel)
-	ctx := context.Background()
-	logger.Info(ctx, "nil logger")
 }

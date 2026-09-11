@@ -17,8 +17,9 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&JwtAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(SecurityEnabled, ConditionTrue),
-			condition.OnProperty(JWTEnabled, ConditionTrue),
+			// 约定优于配置：当 security.enabled 和 security.jwt.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(SecurityEnabled, ConditionTrue, ConditionTrue),
+			condition.OnPropertyOrDefault(JWTEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityAuthentication)), // 认证层，在安全核心之前执行
 	)

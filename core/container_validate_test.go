@@ -39,7 +39,9 @@ func TestValidate_AllDepsRegistered(t *testing.T) {
 	container := NewContainer()
 
 	type Dep struct{ Name string }
-	type Svc struct{ D *Dep `inject:""` }
+	type Svc struct {
+		D *Dep `inject:""`
+	}
 
 	_ = Register[*Dep](container)
 	_ = Register[*Svc](container)
@@ -55,7 +57,9 @@ func TestValidate_MissingDep(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	type Svc struct{ D *TestService `inject:""` }
+	type Svc struct {
+		D *TestService `inject:""`
+	}
 	_ = Register[*Svc](container)
 
 	ext := container.(ContainerExt)
@@ -105,7 +109,9 @@ func TestValidate_WithParentContainer(t *testing.T) {
 	childExt := child.(ContainerExt)
 	childExt.SetParent(parent)
 
-	type Svc struct{ S *TestService `inject:""` }
+	type Svc struct {
+		S *TestService `inject:""`
+	}
 	_ = Register[*Svc](child)
 
 	err := childExt.Validate()
@@ -130,7 +136,9 @@ func TestValidate_ParentNotContainerExt(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
 
-	type Svc struct{ D *TestService `inject:""` }
+	type Svc struct {
+		D *TestService `inject:""`
+	}
 	_ = Register[*Svc](container)
 
 	// parent without ContainerExt interface - no parent set, should still error

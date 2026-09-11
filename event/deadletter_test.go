@@ -57,6 +57,7 @@ func TestRetryPolicy_CalculateDelay(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			delay := tt.policy.CalculateDelay(tt.attempt)
 			if delay < tt.minDelay {
 				t.Errorf("expected delay >= %v, got %v", tt.minDelay, delay)

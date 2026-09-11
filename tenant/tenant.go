@@ -17,11 +17,149 @@ type headerResolverImpl struct {
 	headerName string
 }
 
+// subdomainResolverImpl TenantResolver 接口的基于子域名的实现。
+type subdomainResolverImpl struct {
+	baseDomain string
+}
+
+// JWTExtractor 从 HTTP 请求头中提取 JWT claims 并存入 context。
+type JWTExtractor struct {
+	parse func(authHeader string) (map[string]any, error)
+}
+
+// jwtResolverImpl TenantResolver 接口的基于 JWT 的实现。
+type jwtResolverImpl struct {
+	claimName string
+}
+
+// pathResolverImpl TenantResolver 接口的基于路径的实现。
+type pathResolverImpl struct {
+	segmentIndex int
+}
+
+// tenantManagerImpl TenantManager 接口的默认实现。
+type tenantManagerImpl struct {
+	mu            sync.RWMutex
+	resolver      TenantResolver
+	tenants       map[string]*Tenant
+	currentTenant *Tenant
+}
+
+// tenantMiddlewareImpl TenantMiddleware 接口的默认实现。
+type tenantMiddlewareImpl struct {
+	manager TenantManager
+}
+
+// tenantIsolationImpl TenantIsolation 接口的默认实现。
+type tenantIsolationImpl struct {
+	manager TenantManager
+}
+
+// tenantRegistryImpl TenantRegistry 接口的默认实现。
+type tenantRegistryImpl struct {
+	mu      sync.RWMutex
+	tenants map[string]*Tenant
+}
+
+// tenantProviderImpl TenantProvider 接口的默认实现。
+type tenantProviderImpl struct {
+	manager TenantManager
+}
+
 // NewHeaderResolver 创建基于请求头的租户解析器。
 func NewHeaderResolver(headerName string) TenantResolver {
 	return &headerResolverImpl{
 		headerName: headerName,
 	}
+}
+
+// NewSubdomainResolver 创建基于子域名的租户解析器。
+func NewSubdomainResolver(baseDomain string) TenantResolver {
+	return &subdomainResolverImpl{
+		baseDomain: baseDomain,
+	}
+}
+
+// NewJWTExtractor 创建 JWT 提取器。
+//
+// parseFunc 接收 Authorization 头的值（如 "Bearer eyJ..."），返回解析后的 claims。
+func NewJWTExtractor(parseFunc func(authHeader string) (map[string]any, error)) *JWTExtractor {
+	return &JWTExtractor{parse: parseFunc}
+}
+
+// NewJWTResolver 创建基于 JWT 的租户解析器。
+func NewJWTResolver(claimName string) TenantResolver {
+	return &jwtResolverImpl{
+		claimName: claimName,
+	}
+}
+
+// NewPathResolver 创建基于路径的租户解析器。
+func NewPathResolver(segmentIndex int) TenantResolver {
+	return &pathResolverImpl{
+		segmentIndex: segmentIndex,
+	}
+}
+
+// NewTenantManager 创建租户管理器。
+func NewTenantManager(resolver TenantResolver) TenantManager {
+	return &tenantManagerImpl{
+		resolver: resolver,
+		tenants:  make(map[string]*Tenant),
+	}
+}
+
+// NewTenantMiddleware 创建租户中间件。
+func NewTenantMiddleware(manager TenantManager) TenantMiddleware {
+	return &tenantMiddlewareImpl{
+		manager: manager,
+	}
+}
+
+// NewTenantIsolation 创建租户隔离器。
+func NewTenantIsolation(manager TenantManager) TenantIsolation {
+	return &tenantIsolationImpl{
+		manager: manager,
+	}
+}
+
+// NewTenantRegistry 创建租户注册表。
+func NewTenantRegistry() TenantRegistry {
+	return &tenantRegistryImpl{
+		tenants: make(map[string]*Tenant),
+	}
+}
+
+// NewTenantProvider 创建租户提供者。
+func NewTenantProvider(manager TenantManager) TenantProvider {
+	return &tenantProviderImpl{
+		manager: manager,
+	}
+}
+
+// SetJWTClaims 将 JWT claims 存入 context。
+func SetJWTClaims(ctx context.Context, claims map[string]any) context.Context {
+	return context.WithValue(ctx, jwtClaimsKey{}, claims)
+}
+
+// ExtractJWTClaims 从 context 提取 JWT claims。
+func ExtractJWTClaims(ctx context.Context) (map[string]any, bool) {
+	claims, ok := ctx.Value(jwtClaimsKey{}).(map[string]any)
+	return claims, ok
+}
+
+// TenantFromContext 从 context 获取租户。
+func TenantFromContext(ctx context.Context) (*Tenant, bool) {
+	tenant, ok := ctx.Value(tenantContextKey{}).(*Tenant)
+	return tenant, ok
+}
+
+// SetTenantToContext 将租户存入 context。
+//
+// 推荐使用 context 传递当前租户，而非 SetCurrentTenant 的进程级状态，
+// 以保证并发请求之间互不串扰。
+func SetTenantToContext(ctx context.Context, tenant *Tenant) context.Context {
+	return context.WithValue(ctx, tenantContextKey{}, tenant)
 }
 
 // Resolve 实现 TenantResolver 接口。
@@ -31,18 +169,6 @@ func (r *headerResolverImpl) Resolve(req *http.Request) (string, error) {
 		return "", fmt.Errorf("tenant ID not found in header %s", r.headerName)
 	}
 	return tenantID, nil
-}
-
-// subdomainResolverImpl TenantResolver 接口的基于子域名的实现。
-type subdomainResolverImpl struct {
-	baseDomain string
-}
-
-// NewSubdomainResolver 创建基于子域名的租户解析器。
-func NewSubdomainResolver(baseDomain string) TenantResolver {
-	return &subdomainResolverImpl{
-		baseDomain: baseDomain,
-	}
 }
 
 // Resolve 实现 TenantResolver 接口。
@@ -59,29 +185,6 @@ func (r *subdomainResolverImpl) Resolve(req *http.Request) (string, error) {
 	}
 
 	return subdomain, nil
-}
-
-// SetJWTClaims 将 JWT claims 存入 context。
-func SetJWTClaims(ctx context.Context, claims map[string]any) context.Context {
-	return context.WithValue(ctx, jwtClaimsKey{}, claims)
-}
-
-// ExtractJWTClaims 从 context 提取 JWT claims。
-func ExtractJWTClaims(ctx context.Context) (map[string]any, bool) {
-	claims, ok := ctx.Value(jwtClaimsKey{}).(map[string]any)
-	return claims, ok
-}
-
-// JWTExtractor 从 HTTP 请求头中提取 JWT claims 并存入 context。
-type JWTExtractor struct {
-	parse func(authHeader string) (map[string]any, error)
-}
-
-// NewJWTExtractor 创建 JWT 提取器。
-//
-// parseFunc 接收 Authorization 头的值（如 "Bearer eyJ..."），返回解析后的 claims。
-func NewJWTExtractor(parseFunc func(authHeader string) (map[string]any, error)) *JWTExtractor {
-	return &JWTExtractor{parse: parseFunc}
 }
 
 // Handle 返回 HTTP 中间件，从 Authorization 头提取 JWT claims 并存入 context。
@@ -102,18 +205,6 @@ func (e *JWTExtractor) Handle(next http.Handler) http.Handler {
 	})
 }
 
-// jwtResolverImpl TenantResolver 接口的基于 JWT 的实现。
-type jwtResolverImpl struct {
-	claimName string
-}
-
-// NewJWTResolver 创建基于 JWT 的租户解析器。
-func NewJWTResolver(claimName string) TenantResolver {
-	return &jwtResolverImpl{
-		claimName: claimName,
-	}
-}
-
 // Resolve 实现 TenantResolver 接口。
 func (r *jwtResolverImpl) Resolve(req *http.Request) (string, error) {
 	// 从 context 中获取 JWT claims
@@ -130,18 +221,6 @@ func (r *jwtResolverImpl) Resolve(req *http.Request) (string, error) {
 	return tenantID, nil
 }
 
-// pathResolverImpl TenantResolver 接口的基于路径的实现。
-type pathResolverImpl struct {
-	segmentIndex int
-}
-
-// NewPathResolver 创建基于路径的租户解析器。
-func NewPathResolver(segmentIndex int) TenantResolver {
-	return &pathResolverImpl{
-		segmentIndex: segmentIndex,
-	}
-}
-
 // Resolve 实现 TenantResolver 接口。
 func (r *pathResolverImpl) Resolve(req *http.Request) (string, error) {
 	path := req.URL.Path
@@ -152,22 +231,6 @@ func (r *pathResolverImpl) Resolve(req *http.Request) (string, error) {
 	}
 
 	return segments[r.segmentIndex], nil
-}
-
-// tenantManagerImpl TenantManager 接口的默认实现。
-type tenantManagerImpl struct {
-	mu            sync.RWMutex
-	resolver      TenantResolver
-	tenants       map[string]*Tenant
-	currentTenant *Tenant
-}
-
-// NewTenantManager 创建租户管理器。
-func NewTenantManager(resolver TenantResolver) TenantManager {
-	return &tenantManagerImpl{
-		resolver: resolver,
-		tenants:  make(map[string]*Tenant),
-	}
 }
 
 // RegisterTenant 注册租户。
@@ -232,18 +295,6 @@ func (m *tenantManagerImpl) ResolveFromRequest(req *http.Request) (string, error
 	return m.resolver.Resolve(req)
 }
 
-// tenantMiddlewareImpl TenantMiddleware 接口的默认实现。
-type tenantMiddlewareImpl struct {
-	manager TenantManager
-}
-
-// NewTenantMiddleware 创建租户中间件。
-func NewTenantMiddleware(manager TenantManager) TenantMiddleware {
-	return &tenantMiddlewareImpl{
-		manager: manager,
-	}
-}
-
 // Handle 处理 HTTP 请求。
 func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -275,32 +326,6 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 	})
 }
 
-// TenantFromContext 从 context 获取租户。
-func TenantFromContext(ctx context.Context) (*Tenant, bool) {
-	tenant, ok := ctx.Value(tenantContextKey{}).(*Tenant)
-	return tenant, ok
-}
-
-// SetTenantToContext 将租户存入 context。
-//
-// 推荐使用 context 传递当前租户，而非 SetCurrentTenant 的进程级状态，
-// 以保证并发请求之间互不串扰。
-func SetTenantToContext(ctx context.Context, tenant *Tenant) context.Context {
-	return context.WithValue(ctx, tenantContextKey{}, tenant)
-}
-
-// tenantIsolationImpl TenantIsolation 接口的默认实现。
-type tenantIsolationImpl struct {
-	manager TenantManager
-}
-
-// NewTenantIsolation 创建租户隔离器。
-func NewTenantIsolation(manager TenantManager) TenantIsolation {
-	return &tenantIsolationImpl{
-		manager: manager,
-	}
-}
-
 // IsolateDatabase 数据库隔离。
 func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
 	tenant, err := i.manager.GetTenant(tenantID)
@@ -328,19 +353,6 @@ func (i *tenantIsolationImpl) IsolateSchema(tenantID string) (string, error) {
 // IsolateRow 行级隔离。
 func (i *tenantIsolationImpl) IsolateRow(tenantID string) string {
 	return tenantID
-}
-
-// tenantRegistryImpl TenantRegistry 接口的默认实现。
-type tenantRegistryImpl struct {
-	mu      sync.RWMutex
-	tenants map[string]*Tenant
-}
-
-// NewTenantRegistry 创建租户注册表。
-func NewTenantRegistry() TenantRegistry {
-	return &tenantRegistryImpl{
-		tenants: make(map[string]*Tenant),
-	}
 }
 
 // Add 添加租户。
@@ -391,18 +403,6 @@ func (r *tenantRegistryImpl) Count() int {
 	defer r.mu.RUnlock()
 
 	return len(r.tenants)
-}
-
-// tenantProviderImpl TenantProvider 接口的默认实现。
-type tenantProviderImpl struct {
-	manager TenantManager
-}
-
-// NewTenantProvider 创建租户提供者。
-func NewTenantProvider(manager TenantManager) TenantProvider {
-	return &tenantProviderImpl{
-		manager: manager,
-	}
 }
 
 // GetCurrentTenantID 获取当前租户 ID。

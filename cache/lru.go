@@ -1,11 +1,35 @@
-// Package cache 提供缓存抽象层，用于 enhance 框架。
 package cache
 
 import (
 	"container/list"
 	"context"
+	"sync"
 	"time"
 )
+
+// LRUOption LRU 缓存选项函数。
+type LRUOption func(*LRUCache)
+
+// LRUCache LRU（最近最少使用）缓存实现。
+//
+// 基于双向链表和哈希表实现 O(1) 时间复杂度的缓存操作。
+// 支持 TTL 过期淘汰和容量限制淘汰。
+// LRUCache 是并发安全的，所有操作都通过互斥锁保护。
+type LRUCache struct {
+	mu         sync.Mutex
+	capacity   int
+	items      map[string]*list.Element
+	evictList  *list.List
+	onEvict    func(key string, value any)
+	defaultTTL time.Duration
+}
+
+// lruEntry LRU 缓存项内部结构。
+type lruEntry struct {
+	key       string
+	value     any
+	expiresAt time.Time
+}
 
 // WithEvictCallback 设置淘汰回调函数。
 //

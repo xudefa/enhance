@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&RabbitMQAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(RabbitMQEnabled, ConditionTrue),
+			// 约定优于配置：当 rabbitmq.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(RabbitMQEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityBusinessLayer)),
 	)

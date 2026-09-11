@@ -112,5 +112,5 @@ func TestEventRouter_DuplicateKeys(t *testing.T) {
 
 type dummyEvent struct{}
 
-func (d *dummyEvent) Type() string      { return "dummy" }
+func (d *dummyEvent) Type() string         { return "dummy" }
 func (d *dummyEvent) Timestamp() time.Time { return time.Time{} }

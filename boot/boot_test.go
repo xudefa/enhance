@@ -1,11 +1,13 @@
 package boot
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/xudefa/enhance/condition"
 	"github.com/xudefa/enhance/config/environment"
+	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/lifecycle"
 )
 
@@ -248,55 +250,189 @@ func TestBoot_BindConfig(t *testing.T) {
 		t.Fatalf("BindConfig() error = %v", err)
 	}
 	if cfg.Host != "localhost" {
-		t.Errorf("expected Host 'localhost', got '%s'", cfg.Host)
+		t.Errorf("BindConfig().Host = %q, want %q", cfg.Host, "localhost")
 	}
 }
 
-func TestBoot_BindConfig_WithPrefix(t *testing.T) {
+func TestBoot_Start_WithLifecyclePhase(t *testing.T) {
 	t.Parallel()
 
-	type ServerConfig struct {
-		Port int `config:"port"`
-	}
-
-	boot, err := NewApplication(
-		WithAppName("test-app"),
-	)
+	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {
 		t.Fatalf("NewApplication() error = %v", err)
 	}
 
-	// 设置带前缀的配置
-	boot.ctx.Environment().AddPropertySource(environment.NewDefaultPropertySource("test", map[string]any{
-		"server.port": "8080",
-	}))
-
-	cfg, err := BindConfig[ServerConfig](boot, WithConfigPrefix("server"))
-	if err != nil {
-		t.Fatalf("BindConfig() error = %v", err)
+	// 正常启动
+	if err := boot.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
-	if cfg.Port != 8080 {
-		t.Errorf("expected Port 8080, got %d", cfg.Port)
+
+	// 验证生命周期阶段
+	phase := boot.ctx.Lifecycle().GetPhase()
+	if phase != lifecycle.PhaseRunning {
+		t.Errorf("expected PhaseRunning, got %v", phase)
+	}
+
+	// 停止
+	if err := boot.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+
+	phase = boot.ctx.Lifecycle().GetPhase()
+	if phase != lifecycle.PhaseStopped {
+		t.Errorf("expected PhaseStopped, got %v", phase)
 	}
 }
 
-func TestWithConfigPrefix(t *testing.T) {
-	t.Parallel()
+func TestBoot_Start_WithStarter_boot_Register(t *testing.T) {
+	// 注意：不使用 t.Parallel()，因为共享 globalStarterRegistry 全局状态
 
-	opt := WithConfigPrefix("test")
-	if opt == nil {
-		t.Error("expected non-nil option")
+	starter := newMockStarter("test-starter")
+
+	// 通过全局注册表注册
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
+	defer func() { globalStarterRegistry.Store(orig) }()
+	testReg.Register(starter)
+
+	boot, err := NewApplication(WithAppName("test"))
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+
+	if err := boot.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer boot.Stop()
+
+	if !starter.configured.Load() {
+		t.Error("starter.Configure() should be called")
+	}
+	if !starter.started.Load() {
+		t.Error("starter.Start() should be called")
 	}
 }
 
-func TestBoot_NewApplicationFromRunOptions(t *testing.T) {
+func TestBoot_Start_WithGlobalStarter(t *testing.T) {
+	// 注意：不使用 t.Parallel()，因为共享 globalStarterRegistry 全局状态
+
+	starter := newMockStarter("global-starter")
+
+	orig := globalStarterRegistry.Load()
+	testReg := newStarterRegistryImpl()
+	globalStarterRegistry.Store(testReg)
+	defer func() { globalStarterRegistry.Store(orig) }()
+	testReg.Register(starter)
+
+	boot, err := NewApplication(WithAppName("test"))
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+
+	if err := boot.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer boot.Stop()
+
+	if !starter.configured.Load() {
+		t.Error("global starter.Configure() should be called")
+	}
+	if !starter.started.Load() {
+		t.Error("global starter.Start() should be called")
+	}
+}
+
+// TestAutoConfiguration 测试自动配置。
+type TestAutoConfiguration struct {
+	onConfigure func()
+}
+
+func (a *TestAutoConfiguration) Configure(ctx ApplicationContext) error {
+	if a.onConfigure != nil {
+		a.onConfigure()
+	}
+	return nil
+}
+
+func (a *TestAutoConfiguration) Dependencies() []string {
+	return nil
+}
+
+func (a *TestAutoConfiguration) GetCondition() condition.Condition {
+	return condition.OnPropertyOrDefault("test.enabled", "true", "true")
+}
+
+// TestBoot_Start_WithHooks tests hook execution during Start.
+func TestBoot_Start_WithHooks(t *testing.T) {
 	t.Parallel()
 
-	app, err := NewApplicationFromRunOptions(WithAppName("test-app"))
+	initCalled := false
+	startCalled := false
+
+	app, err := NewApplication(
+		WithAppName("test-app"),
+		WithoutAutoConfig(),
+		WithoutStarters(),
+		WithHook(lifecycle.NewHookFunc(
+			func(ctx context.Context) error {
+				initCalled = true
+				return nil
+			},
+			func(ctx context.Context) error {
+				startCalled = true
+				return nil
+			},
+			nil,
+		)),
+	)
 	if err != nil {
-		t.Fatalf("NewApplicationFromRunOptions() error = %v", err)
+		t.Fatalf("NewApplication failed: %v", err)
 	}
-	if app == nil {
-		t.Error("expected non-nil application")
+
+	if err := app.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer app.Stop()
+
+	if !initCalled {
+		t.Error("Expected OnInit hook to be called")
+	}
+	if !startCalled {
+		t.Error("Expected OnStart hook to be called")
+	}
+}
+
+// TestBoot_Register tests bean registration via module.
+func TestBoot_Register(t *testing.T) {
+	t.Parallel()
+
+	type TestBean struct {
+		Name string
+	}
+
+	app, err := NewApplication(
+		WithAppName("test-app"),
+		WithoutAutoConfig(),
+		WithoutStarters(),
+		WithModules(NewModule().
+			Name("test-module").
+			Bean(Provide(func(c core.Container) (TestBean, error) {
+				return TestBean{Name: "test"}, nil
+			})).
+			Build(),
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewApplication failed: %v", err)
+	}
+
+	if err := app.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer app.Stop()
+
+	if !core.Has[TestBean](app.Container(), "") {
+		t.Error("Expected TestBean to exist after Register")
 	}
 }

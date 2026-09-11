@@ -24,7 +24,8 @@ var ginAutoConfig = &GinAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(ginAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(GinEnabled, ConditionTrue),
+			// 约定优于配置：当 gin.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(GinEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -192,7 +193,7 @@ func (c *GinAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *GinAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(GinEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(GinEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetEngine 从容器中获取 Gin 引擎实例。

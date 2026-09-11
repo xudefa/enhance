@@ -46,7 +46,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&SwaggerAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(SwaggerEnabled, ConditionTrue),
+			// 约定优于配置：当 swagger.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(SwaggerEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)

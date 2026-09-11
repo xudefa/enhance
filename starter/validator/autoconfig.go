@@ -50,7 +50,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ValidatorAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ValidatorEnabled, ConditionTrue),
+			// 约定优于配置：当 validator.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ValidatorEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)

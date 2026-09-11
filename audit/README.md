@@ -15,7 +15,7 @@
 | **多种事件类型** | 支持 CREATE/UPDATE/DELETE/LOGIN/SECURITY 等内置事件类型 |
 | **异步处理** | 支持异步事件写入，提高性能，缓冲区满时自动降级为同步 |
 | **多写入器** | 支持控制台、文件等多种 EventWriter 实现 |
-| **拦截器** | 提供 AuditInterceptor 用于自动审计，可与 AOP 框架配合使用 |
+| **拦截器** | 提供 AuditInterceptor 用于自动审计 |
 | **日志助手** | 提供 AuditLogger 简化常见审计场景的日志记录 |
 
 ---
@@ -163,7 +163,7 @@ auditor.LogError("user123", audit.EventCreate, "user", err)
 
 ### AuditInterceptor 审计拦截器
 
-用于拦截方法调用并自动记录审计日志，通常与 AOP 框架配合使用。
+用于拦截方法调用并自动记录审计日志。
 
 #### 创建
 
@@ -292,7 +292,7 @@ logger.LoginFailure("192.168.1.1", "invalid password")
 logger.PermissionDenied("user", "user:789")
 ```
 
-### 与 AOP 集成
+### 拦截器集成
 
 ```go
 type UserService struct {
@@ -474,7 +474,7 @@ auditor.Log(audit.Event{
 })
 ```
 
-### 4. 与 AOP 集成自动审计
+### 4. 拦截器自动审计
 
 ```go
 // ✅ 推荐：使用拦截器自动审计

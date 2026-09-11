@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestValidationError_Error(t *testing.T) {
+func TestValidationError_Error_Coverage(t *testing.T) {
 	t.Parallel()
 	err := ValidationError{Field: "port", Message: "value below minimum"}
 	expected := "field port: value below minimum"
@@ -13,7 +13,7 @@ func TestValidationError_Error(t *testing.T) {
 	}
 }
 
-func TestValidationErrors_Error(t *testing.T) {
+func TestValidationErrors_Error_Coverage(t *testing.T) {
 	t.Parallel()
 	errs := ValidationErrors{
 		{Field: "name", Message: "required"},

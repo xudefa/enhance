@@ -28,7 +28,7 @@ enhance 是一个参考 Spring Framework 和 Spring Boot 设计的 Go 企业级�
 | **快速开发** | 提供类似 Spring Boot 的开发体验 |
 | **零外部依赖** | 核心框架仅使用 Go 标准库 |
 | **高扩展性** | 模块化设计，支持插件化扩展 |
-| **企业级特性** | IoC、AOP、数据访问、安全、监控等完整生态 |
+| **企业级特性** | IoC、数据访问、安全、监控等完整生态 |
 
 ### 架构分层
 
@@ -44,8 +44,8 @@ enhance 是一个参考 Spring Framework 和 Spring Boot 设计的 Go 企业级�
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Core Layer                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ IoC      │ │ AOP      │ │ Event    │ │ Lifecycle│ │ Config   │   │
-│  │ Container│ │ Engine   │ │ Bus      │ │ Manager  │ │ Manager  │   │
+│  │ IoC      │ │ Event    │ │ Lifecycle│ │ Config   │   │
+│  │ Container│ │ Bus      │ │ Manager  │ │ Manager  │   │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
@@ -63,7 +63,6 @@ enhance 是一个参考 Spring Framework 和 Spring Boot 设计的 Go 企业级�
 | 包 | 说明 | 核心接口 |
 |---|------|----------|
 | `core/` | IoC 容器（依赖注入、组件扫描、泛型 API） | `core.Container` |
-| `aop/` | AOP 框架（5 种通知 + 切点匹配 + 代码生成） | `aop.Advice`, `aop.PointCut` |
 | `boot/` | 应用启动器、自动配置、横幅、失败分析 | `boot.AutoConfiguration` |
 | `context/` | 应用上下文（聚合容器、环境、生命周期） | `context.ApplicationContext` |
 | `condition/` | 条件判断（OnProperty / OnBean / OnModuleLoaded） | `condition.Condition` |
@@ -164,73 +163,7 @@ type BeanDestroyFunc func(bean any) error
 
 ---
 
-### 2. AOP 框架
-
-#### 模块职责
-
-- 切点表达式匹配
-- 通知执行
-- 动态代理生成
-- 拦截器链管理
-- 代码生成支持
-
-#### 核心接口
-
-```go
-// Pointcut 切点接口
-type Pointcut interface {
-    Matches(target any, methodName string) bool
-    MatchClass(t reflect.Type) bool
-    Expression() string
-}
-
-// Advice 通知接口
-type Advice interface {
-    Type() AdviceType
-    Order() int
-    Execute(ctx context.Context, joinPoint JoinPoint) (any, error)
-}
-
-// Advisor 通知器接口
-type Advisor interface {
-    Advice() Advice
-    PointCut() Pointcut
-    Order() int
-}
-
-// JoinPoint 连接点接口
-type JoinPoint interface {
-    Target() any
-    Method() string
-    Args() []any
-    Proceed() (any, error)
-    ProceedWithArgs(args []any) (any, error)
-}
-```
-
-#### 通知类型
-
-| 通知类型 | 执行时机 | 用途 |
-|---------|---------|------|
-| Before | 目标方法前 | 日志、权限检查 |
-| After | 目标方法后 | 资源清理 |
-| AfterReturning | 方法成功返回后 | 结果处理 |
-| AfterThrowing | 方法抛出异常后 | 异常处理 |
-| Around | 包裹目标方法 | 事务、性能监控 |
-
-#### 切点表达式
-
-```go
-// 支持的匹配模式
-aop.WithPointcut("*Service.*")           // 匹配所有 Service 的方法
-aop.WithPointcut("UserService.GetUser")  // 精确匹配
-aop.WithPointcut("prefix.*")             // 前缀匹配
-aop.WithPointcut("regex:.*Service$")     // 正则匹配
-```
-
----
-
-### 3. 事件驱动
+### 2. 事件驱动
 
 #### 模块职责
 
@@ -1168,7 +1101,6 @@ type ApplicationListener interface {
 | 缓存类型 | 说明 | 效果 |
 |---------|------|------|
 | Bean 定义缓存 | 缓存 Bean 定义元数据 | 减少重复解析 |
-| 切点匹配缓存 | 缓存切点匹配结果 | 提升 AOP 性能 |
 | 配置解析缓存 | 缓存配置解析结果 | 加速配置访问 |
 | 反射结果缓存 | 缓存反射操作结果 | 减少反射开销 |
 
@@ -1198,14 +1130,6 @@ type ApplicationListener interface {
 | 避免循环依赖 | 使用接口解耦 |
 | 使用接口 | 优先依赖接口而非具体实现 |
 
-### AOP 使用
-
-| 实践 | 说明 |
-|------|------|
-| 职责单一 | 每个切面只关注一个横切关注点 |
-| 避免过度使用 | AOP 会增加复杂性和性能开销 |
-| 注意性能 | 避免在通知中执行耗时操作 |
-
 ### 事务管理
 
 | 实践 | 说明 |
@@ -1231,7 +1155,6 @@ type ApplicationListener interface {
 | 接口 | 说明 |
 |------|------|
 | `core.Container` | IoC 容器：Get、RegisterBean、Initialize |
-| `aop.Advice` | AOP 通知：Before、After、Around 等 |
 | `boot.Application` | 应用实例：Start、Stop、Container |
 | `cache.Cache` | 缓存操作：Get、Set、Del、Exists、TTL |
 | `config.Config` | 配置访问：Get、GetString、Set、Load、Save |

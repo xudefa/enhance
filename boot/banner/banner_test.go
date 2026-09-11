@@ -37,6 +37,7 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 func TestTextBanner_Print(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		template string
@@ -70,6 +71,7 @@ func TestTextBanner_Print(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			b := NewTextBanner(tt.template, tt.props)
 			output := captureStdout(t, func() {
 				if err := b.Print(tt.version); err != nil {
@@ -100,6 +102,7 @@ func TestTextBanner_Mode(t *testing.T) {
 }
 
 func TestTextBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewTextBanner("should not appear", nil)
 	b.(*TextBanner).SetMode(BannerModeOff)
 
@@ -115,6 +118,7 @@ func TestTextBanner_OffMode(t *testing.T) {
 }
 
 func TestASCIIArtBanner_Print(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		art     string
@@ -141,6 +145,7 @@ func TestASCIIArtBanner_Print(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			b := NewASCIIArtBanner(tt.art, tt.color)
 			output := captureStdout(t, func() {
 				if err := b.Print(tt.version); err != nil {
@@ -171,6 +176,7 @@ func TestASCIIArtBanner_Mode(t *testing.T) {
 }
 
 func TestASCIIArtBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewASCIIArtBanner("should not appear", "")
 	b.(*ASCIIArtBanner).SetMode(BannerModeOff)
 
@@ -186,6 +192,7 @@ func TestASCIIArtBanner_OffMode(t *testing.T) {
 }
 
 func TestLegacyBanner_Print(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		lines    []string
@@ -231,6 +238,7 @@ func TestLegacyBanner_Print(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			b := NewLegacyBanner(
 				WithLines(tt.lines),
 				WithAppName(tt.appName),
@@ -267,6 +275,7 @@ func TestLegacyBanner_Mode(t *testing.T) {
 }
 
 func TestLegacyBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewLegacyBanner(WithLines([]string{"should not appear"}))
 	b.(*LegacyBanner).SetMode(BannerModeOff)
 

@@ -109,7 +109,7 @@ func TestTestContext_Close(t *testing.T) {
 	}
 }
 
-func TestTestContext_Container(t *testing.T) {
+func TestTestContext_Container_Coverage(t *testing.T) {
 	t.Parallel()
 	ctx := NewTestContext(t)
 
@@ -140,6 +140,7 @@ func TestTestContext_Helper(t *testing.T) {
 func TestTestFunctions(t *testing.T) {
 	t.Parallel()
 	t.Run("Test", func(t *testing.T) {
+		t.Parallel()
 		called := false
 		Test(t, func(ctx TestContext) {
 			called = true
@@ -154,6 +155,7 @@ func TestTestFunctions(t *testing.T) {
 	})
 
 	t.Run("TestWithContainer", func(t *testing.T) {
+		t.Parallel()
 		container := core.NewContainer()
 		called := false
 		TestWithContainer(t, container, func(ctx TestContext) {
@@ -169,6 +171,7 @@ func TestTestFunctions(t *testing.T) {
 	})
 
 	t.Run("SetupTest", func(t *testing.T) {
+		t.Parallel()
 		ctx := SetupTest(t, func(ctx TestContext) {
 			ctx.SetProperty("setup.key", "setup-value")
 		})
@@ -180,6 +183,7 @@ func TestTestFunctions(t *testing.T) {
 	})
 
 	t.Run("RunSubtest", func(t *testing.T) {
+		t.Parallel()
 		called := false
 		RunSubtest(t, "subtest", func(ctx TestContext) {
 			called = true
@@ -349,10 +353,12 @@ func TestAssertExpectations_Failure(t *testing.T) {
 func TestAssertions_Failure(t *testing.T) {
 	t.Parallel()
 	t.Run("AssertTrue", func(t *testing.T) {
+		t.Parallel()
 		AssertTrue(t, true)
 	})
 
 	t.Run("AssertFalse", func(t *testing.T) {
+		t.Parallel()
 		AssertFalse(t, false)
 	})
 }

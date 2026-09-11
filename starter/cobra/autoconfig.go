@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&CobraAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(CobraEnabled, ConditionTrue),
+			// 约定优于配置：当 cobra.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(CobraEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)

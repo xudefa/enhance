@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/xudefa/enhance)](https://go.dev/) [![License](https://img.shields.io/github/license/xudefa/enhance)](./LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/xudefa/enhance/test.yml?branch=master)](https://github.com/xudefa/enhance/actions) [![Go Reference](https://pkg.go.dev/badge/github.com/xudefa/enhance.svg)](https://pkg.go.dev/github.com/xudefa/enhance) [![Go Report Card](https://goreportcard.com/badge/github.com/xudefa/enhance)](https://goreportcard.com/report/github.com/xudefa/enhance)
 
-**Go 语言企业级应用开发增强框架** — 参考 Spring Framework 和 Spring Boot 设计，提供 IoC 容器、依赖注入、AOP、自动配置、Actuator 等企业级特性，帮助开发者快速构建可测试、松耦合、高扩展的 Go 应用程序。
+**Go 语言企业级应用开发增强框架** — 参考 Spring Framework 和 Spring Boot 设计，提供 IoC 容器、依赖注入、自动配置、Actuator 等企业级特性，帮助开发者快速构建可测试、松耦合、高扩展的 Go 应用程序。
 
 > **设计理念**：零外部依赖的工程化框架，借鉴 Spring Boot 的设计思想，为 Go 开发者提供熟悉的企业级开发体验。
 > 
@@ -14,7 +14,6 @@
 
 - 🎯 **零外部依赖** — 核心框架仅使用 Go 标准库，Integration 层通过接口抽象隔离第三方依赖
 - 🔄 **IoC 容器** — 完整的依赖注入支持，构造器/字段/方法注入，泛型 API
-- 🔀 **AOP 框架** — 5 种通知类型，切点匹配，动态代理，代码生成
 - ⚡ **自动配置** — 条件装配，Starter 机制，即插即用
 - 📊 **可观测性** — 日志、指标、健康检查、分布式追踪
 - 🛡️ **安全框架** — 认证、授权、过滤器链、JWT、Casbin
@@ -95,7 +94,6 @@ func main() {
 | 模块 | 说明 | 文档 |
 |------|------|------|
 | [IoC 容器](core/README.md) | 依赖注入、构造器自动推导、泛型 API | [→](core/README.md) |
-| [AOP 框架](aop/README.md) | 5 种通知类型、切点匹配、代码生成 | [→](aop/README.md) |
 | [应用启动器](boot/README.md) | 自动配置、Starter 机制 | [→](boot/README.md) |
 | [应用上下文](context/README.md) | 聚合容器、环境配置、生命周期 | [→](context/README.md) |
 | [条件判断](condition/README.md) | OnProperty / OnBean / OnClass 条件装配 | [→](condition/README.md) |
@@ -191,47 +189,6 @@ func main() {
 }
 ```
 
-### AOP 切面编程
-
-```go
-package main
-
-import (
-    "fmt"
-    "reflect"
-    "github.com/xudefa/enhance/aop"
-    "github.com/xudefa/enhance/core"
-)
-
-type LoggingAspect struct{}
-
-func (l *LoggingAspect) Before(ctx aop.JoinPoint) {
-    fmt.Printf("Before: %s\n", ctx.Method().Name)
-}
-
-func (l *LoggingAspect) After(ctx aop.JoinPoint, result any, err error) {
-    fmt.Printf("After: %s, result: %v\n", ctx.Method().Name, result)
-}
-
-type UserService struct{}
-
-func (u *UserService) GetUser(id int) string {
-    return fmt.Sprintf("User %d", id)
-}
-
-func main() {
-    c := core.New()
-    c.Register(reflect.TypeOf(&UserService{}), core.Bean(&UserService{}))
-    aop.RegisterAspect(&LoggingAspect{}, aop.WithPointcut("*UserService.*"))
-    
-    svc := core.MustGetBean[*UserService](c)
-    svc.GetUser(1)
-    // Output:
-    // Before: GetUser
-    // After: GetUser, result: User 1
-}
-```
-
 ### 事件驱动
 
 ```go
@@ -301,8 +258,8 @@ func main() {
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Core Layer                                  │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ IoC      │ │ AOP      │ │ Event    │ │ Lifecycle│ │ Config   │   │
-│  │ Container│ │ Engine   │ │ Bus      │ │ Manager  │ │ Manager  │   │
+│  │ IoC      │ │ Event    │ │ Lifecycle│ │ Config   │   │
+│  │ Container│ │ Bus      │ │ Manager  │ │ Manager  │   │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
@@ -320,7 +277,7 @@ func main() {
 | 层级 | 职责 | 核心模块 |
 |------|------|----------|
 | **Boot Layer** | 应用启动、自动配置、Starter 管理 | `boot`, `condition`, `context` |
-| **Core Layer** | IoC 容器、AOP、事件驱动、配置管理 | `core`, `aop`, `event`, `config`, `lifecycle` |
+| **Core Layer** | IoC 容器、事件驱动、配置管理 | `core`, `event`, `config`, `lifecycle` |
 | **Infrastructure Layer** | Web、安全、监控、缓存、数据访问等基础设施 | `web`, `security`, `actuator`, `cache`, `schedule`, `log`, `metrics` |
 
 ### 核心接口速查
@@ -328,7 +285,6 @@ func main() {
 | 接口 | 所属层 | 说明 |
 |------|--------|------|
 | `core.Container` | Core | IoC 容器：Register、Get、Resolve |
-| `aop.Advice` | Core | AOP 通知：Before、After、Around 等 |
 | `boot.Application` | Boot | 应用实例：Start、Stop、Container |
 | `cache.Cache` | Infrastructure | 缓存操作：Get、Set、Del |
 | `config.Config` | Core | 配置访问：Get、Unmarshal、Watch |
@@ -350,7 +306,6 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | **模块组合** | `func init()` 隐式注册 | `NewModule().Bean().Condition()` 显式组合 | 依赖清晰 |
 | **生命周期** | 7 阶段状态机 | `OnInit/OnStart/OnStop` 3 阶段钩子 | 简化 57% |
 | **配置绑定** | `GetProperty("key")` | `BindConfig[T]()` 结构体绑定 | 类型安全 |
-| **AOP 代理** | 运行时反射代理 | `//go:generate` 编译时代码生成 | 零反射开销 |
 
 详细优化说明请参阅 [架构设计文档](ARCHITECTURE.md)。
 
@@ -376,7 +331,6 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | 文档 | 说明 |
 |------|------|
 | [IoC 容器](core/README.md) | Bean 注册、依赖注入、泛型 API |
-| [AOP 框架](aop/README.md) | 切点匹配、通知类型、动态代理 |
 | [应用启动器](boot/README.md) | 自动配置、Starter 机制 |
 | [应用上下文](context/README.md) | 聚合容器、环境配置、生命周期 |
 | [条件判断](condition/README.md) | OnProperty / OnBean / OnClass 条件装配 |

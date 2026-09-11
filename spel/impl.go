@@ -11,30 +11,11 @@ type standardEvaluationContextImpl struct {
 	propertyAccessor PropertyAccessor
 }
 
-// NewStandardEvaluationContext 创建标准求值上下文。
-func NewStandardEvaluationContext(root any) EvaluationContext {
-	return &standardEvaluationContextImpl{
-		rootObject:       root,
-		variables:        make(map[string]any),
-		propertyAccessor: NewReflectPropertyAccessor(),
-	}
-}
-
 // reflectPropertyAccessorImpl PropertyAccessor 接口的默认实现。
 type reflectPropertyAccessorImpl struct{}
 
-// NewReflectPropertyAccessor 创建反射属性访问器。
-func NewReflectPropertyAccessor() PropertyAccessor {
-	return &reflectPropertyAccessorImpl{}
-}
-
 // spelParserImpl ExpressionParser 接口的默认实现。
 type spelParserImpl struct{}
-
-// NewSpelParser 创建 SpEL 表达式解析器。
-func NewSpelParser() ExpressionParser {
-	return &spelParserImpl{}
-}
 
 // propertyExpressionImpl Expression 接口的简单属性实现。
 type propertyExpressionImpl struct {
@@ -54,20 +35,42 @@ type interceptorChainImpl struct {
 	invocation   MethodInvocation
 }
 
-// NewInterceptorChain 创建拦截器链。
-func NewInterceptorChain(interceptors []MethodInterceptor) MethodInterceptor {
-	return &interceptorChainImpl{
-		interceptors: interceptors,
-		index:        0,
-	}
-}
-
 // simpleMethodInvocationImpl MethodInvocation 接口的简单实现。
 type simpleMethodInvocationImpl struct {
 	method  string
 	args    []any
 	target  any
 	handler func() (any, error)
+}
+
+// loggingInterceptorImpl MethodInterceptor 接口的日志实现。
+type loggingInterceptorImpl struct{}
+
+// NewStandardEvaluationContext 创建标准求值上下文。
+func NewStandardEvaluationContext(root any) EvaluationContext {
+	return &standardEvaluationContextImpl{
+		rootObject:       root,
+		variables:        make(map[string]any),
+		propertyAccessor: NewReflectPropertyAccessor(),
+	}
+}
+
+// NewReflectPropertyAccessor 创建反射属性访问器。
+func NewReflectPropertyAccessor() PropertyAccessor {
+	return &reflectPropertyAccessorImpl{}
+}
+
+// NewSpelParser 创建 SpEL 表达式解析器。
+func NewSpelParser() ExpressionParser {
+	return &spelParserImpl{}
+}
+
+// NewInterceptorChain 创建拦截器链。
+func NewInterceptorChain(interceptors []MethodInterceptor) MethodInterceptor {
+	return &interceptorChainImpl{
+		interceptors: interceptors,
+		index:        0,
+	}
 }
 
 // NewSimpleMethodInvocation 创建简单方法调用。
@@ -79,9 +82,6 @@ func NewSimpleMethodInvocation(method string, arguments []any, target any, proce
 		handler: proceedFn,
 	}
 }
-
-// loggingInterceptorImpl MethodInterceptor 接口的日志实现。
-type loggingInterceptorImpl struct{}
 
 // NewLoggingInterceptor 创建日志拦截器。
 func NewLoggingInterceptor() MethodInterceptor {

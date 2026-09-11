@@ -8,7 +8,8 @@ import (
 	"testing"
 )
 
-func TestSubdomainResolver_EmptyHost(t *testing.T) {
+// TestSubdomainResolver_EmptyHost_Coverage 测试空 Host 时的 SubdomainResolver
+func TestSubdomainResolver_EmptyHost_Coverage(t *testing.T) {
 	t.Parallel()
 	resolver := NewSubdomainResolver("example.com")
 
@@ -21,7 +22,8 @@ func TestSubdomainResolver_EmptyHost(t *testing.T) {
 	}
 }
 
-func TestJWTClaims_ContextRoundTrip(t *testing.T) {
+// TestJWTClaims_ContextRoundTrip_Coverage 测试 JWT Claims 的上下文存储和提取
+func TestJWTClaims_ContextRoundTrip_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
@@ -67,7 +69,8 @@ func TestJWTClaims_ContextRoundTrip(t *testing.T) {
 	}
 }
 
-func TestNewJWTExtractor(t *testing.T) {
+// TestNewJWTExtractor_Coverage 测试创建 JWTExtractor
+func TestNewJWTExtractor_Coverage(t *testing.T) {
 	t.Parallel()
 	parse := func(authHeader string) (map[string]any, error) {
 		return map[string]any{"sub": authHeader}, nil
@@ -82,7 +85,8 @@ func TestNewJWTExtractor(t *testing.T) {
 	}
 }
 
-func TestJWTExtractor_Handle(t *testing.T) {
+// TestJWTExtractor_Handle_Coverage 测试 JWTExtractor.Handle
+func TestJWTExtractor_Handle_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name       string
@@ -144,7 +148,8 @@ func TestJWTExtractor_Handle(t *testing.T) {
 	}
 }
 
-func TestJWTResolver_Resolve(t *testing.T) {
+// TestJWTResolver_Resolve_Coverage 测试 JWTResolver.Resolve
+func TestJWTResolver_Resolve_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name      string
@@ -207,7 +212,8 @@ func TestJWTResolver_Resolve(t *testing.T) {
 	}
 }
 
-func TestTenantManager_SetCurrentTenant_NotFound(t *testing.T) {
+// TestTenantManager_SetCurrentTenant_NotFound_Coverage 测试设置不存在的当前租户
+func TestTenantManager_SetCurrentTenant_NotFound_Coverage(t *testing.T) {
 	t.Parallel()
 	manager := NewTenantManager(NewHeaderResolver("X-Tenant-ID"))
 
@@ -219,7 +225,8 @@ func TestTenantManager_SetCurrentTenant_NotFound(t *testing.T) {
 	}
 }
 
-func TestTenantMiddleware_UnknownTenant(t *testing.T) {
+// TestTenantMiddleware_UnknownTenant_Coverage 测试未知租户中间件
+func TestTenantMiddleware_UnknownTenant_Coverage(t *testing.T) {
 	t.Parallel()
 	manager := NewTenantManager(NewHeaderResolver("X-Tenant-ID"))
 	middleware := NewTenantMiddleware(manager)
@@ -242,7 +249,8 @@ func TestTenantMiddleware_UnknownTenant(t *testing.T) {
 	}
 }
 
-func TestTenantIsolation_UnknownTenantErrors(t *testing.T) {
+// TestTenantIsolation_UnknownTenantErrors_Coverage 测试未知租户隔离错误
+func TestTenantIsolation_UnknownTenantErrors_Coverage(t *testing.T) {
 	t.Parallel()
 	isolation := NewTenantIsolation(NewTenantManager(NewHeaderResolver("X-Tenant-ID")))
 
@@ -266,7 +274,8 @@ func TestTenantIsolation_UnknownTenantErrors(t *testing.T) {
 	}
 }
 
-func TestTenantProvider_GetCurrentTenantDatabase_Errors(t *testing.T) {
+// TestTenantProvider_GetCurrentTenantDatabase_Errors_Coverage 测试 GetCurrentTenantDatabase 错误处理
+func TestTenantProvider_GetCurrentTenantDatabase_Errors_Coverage(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name         string

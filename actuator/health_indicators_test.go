@@ -10,6 +10,7 @@ import (
 func TestDiskSpaceHealthIndicator(t *testing.T) {
 	t.Parallel()
 	t.Run("Name", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewDiskSpaceHealthIndicator("/tmp", 0.9)
 		expected := "disk_space_/tmp"
 		if indicator.Name() != expected {
@@ -18,6 +19,7 @@ func TestDiskSpaceHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health_BelowThreshold", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewDiskSpaceHealthIndicator("/tmp", 0.9)
 		h := indicator.Health(context.Background())
 
@@ -44,6 +46,7 @@ func TestDiskSpaceHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health_AboveThreshold", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewDiskSpaceHealthIndicator("/tmp", 0.3)
 		h := indicator.Health(context.Background())
 
@@ -60,6 +63,7 @@ func TestDiskSpaceHealthIndicator(t *testing.T) {
 func TestMemoryHealthIndicator(t *testing.T) {
 	t.Parallel()
 	t.Run("Name", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewMemoryHealthIndicator(0.9)
 		if indicator.Name() != "memory_usage" {
 			t.Errorf("expected name 'memory_usage', got %s", indicator.Name())
@@ -67,6 +71,7 @@ func TestMemoryHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewMemoryHealthIndicator(0.99)
 		h := indicator.Health(context.Background())
 
@@ -95,9 +100,9 @@ func TestMemoryHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health_Degraded", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewMemoryHealthIndicator(0.0000001)
 		h := indicator.Health(context.Background())
-
 		if h.Status != health.StatusDegraded {
 			t.Errorf("expected status Degraded with very low threshold, got %s", h.Status)
 		}
@@ -107,6 +112,7 @@ func TestMemoryHealthIndicator(t *testing.T) {
 func TestProcessHealthIndicator(t *testing.T) {
 	t.Parallel()
 	t.Run("Name", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewProcessHealthIndicator(1000)
 		if indicator.Name() != "process_status" {
 			t.Errorf("expected name 'process_status', got %s", indicator.Name())
@@ -114,6 +120,7 @@ func TestProcessHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health_Normal", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewProcessHealthIndicator(10000)
 		h := indicator.Health(context.Background())
 
@@ -130,6 +137,7 @@ func TestProcessHealthIndicator(t *testing.T) {
 	})
 
 	t.Run("Health_Degraded", func(t *testing.T) {
+		t.Parallel()
 		indicator := NewProcessHealthIndicator(1)
 		h := indicator.Health(context.Background())
 

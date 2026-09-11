@@ -7,12 +7,11 @@ import (
 	"time"
 )
 
-func (s Status) String() string {
-	if name, ok := statusNames[s]; ok {
-		return name
-	}
-	return "UNKNOWN"
-}
+// defaultMaxConcurrentChecks 同时运行的指标健康检查数量上限。
+const defaultMaxConcurrentChecks = 8
+
+// DefaultIndicatorTimeout 每个指标的默认超时时间。
+const DefaultIndicatorTimeout = 5 * time.Second
 
 var statusNames = map[Status]string{
 	StatusUp:       "UP",
@@ -29,8 +28,13 @@ func NewAggregator() *Aggregator {
 	}
 }
 
-// defaultMaxConcurrentChecks 同时运行的指标健康检查数量上限。
-const defaultMaxConcurrentChecks = 8
+// String 返回状态的字符串表示
+func (s Status) String() string {
+	if name, ok := statusNames[s]; ok {
+		return name
+	}
+	return "UNKNOWN"
+}
 
 // AddIndicator 添加健康指标
 func (a *Aggregator) AddIndicator(indicator Indicator) {
@@ -47,9 +51,6 @@ func (a *Aggregator) Indicators() []Indicator {
 	copy(result, a.indicators)
 	return result
 }
-
-// DefaultIndicatorTimeout 每个指标的默认超时时间。
-const DefaultIndicatorTimeout = 5 * time.Second
 
 // Aggregate 聚合所有指标的健康状态。
 // 每个指标调用都有独立的超时保护，防止慢指标阻塞整个健康检查。

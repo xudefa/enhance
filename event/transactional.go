@@ -106,7 +106,7 @@ func (tc *TransactionContext) RegisterEvent(event ApplicationEvent) {
 // Commit 提交事务，发布 BeforeCommit 和 AfterCommit 事件
 //
 // 线程安全，多次调用只会执行一次。
-func (tc *TransactionContext) Commit(bus *EventBus) {
+func (tc *TransactionContext) Commit(bus EventBus) {
 	tc.mu.Lock()
 	if tc.committed || tc.rolledBack {
 		tc.mu.Unlock()
@@ -136,7 +136,7 @@ func (tc *TransactionContext) Commit(bus *EventBus) {
 // Rollback 回滚事务，发布 AfterRollback 事件
 //
 // 线程安全，多次调用只会执行一次。
-func (tc *TransactionContext) Rollback(bus *EventBus) {
+func (tc *TransactionContext) Rollback(bus EventBus) {
 	tc.mu.Lock()
 	if tc.committed || tc.rolledBack {
 		tc.mu.Unlock()
@@ -182,11 +182,11 @@ func (tc *TransactionContext) IsRolledBack() bool {
 //	tx.PublishAfterCommit(&MyEvent{})
 //	tx.Commit()
 type TransactionalEventPublisher struct {
-	bus *EventBus
+	bus EventBus
 }
 
 // NewTransactionalEventPublisher 创建事务事件发布器
-func NewTransactionalEventPublisher(bus *EventBus) *TransactionalEventPublisher {
+func NewTransactionalEventPublisher(bus EventBus) *TransactionalEventPublisher {
 	return &TransactionalEventPublisher{bus: bus}
 }
 
