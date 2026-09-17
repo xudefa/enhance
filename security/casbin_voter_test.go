@@ -60,9 +60,9 @@ func TestCasbinVoter_Vote_Granted(t *testing.T) {
 	auth := &mockAuthentication{authenticated: true, principal: "admin"}
 	ctx := context.Background()
 
-	result := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("expected ACCESS_GRANTED, got %d", result)
+	voteResult := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
+	if voteResult != ACCESS_GRANTED {
+		t.Errorf("expected ACCESS_GRANTED, got %d", voteResult)
 	}
 }
 
@@ -75,9 +75,9 @@ func TestCasbinVoter_Vote_Denied(t *testing.T) {
 	auth := &mockAuthentication{authenticated: true, principal: "user"}
 	ctx := context.Background()
 
-	result := voter.Vote(ctx, auth, "DELETE:/api/users/1", []string{"delete"})
-	if result != ACCESS_DENIED {
-		t.Errorf("expected ACCESS_DENIED, got %d", result)
+	voteResult := voter.Vote(ctx, auth, "DELETE:/api/users/1", []string{"delete"})
+	if voteResult != ACCESS_DENIED {
+		t.Errorf("expected ACCESS_DENIED, got %d", voteResult)
 	}
 }
 
@@ -91,9 +91,9 @@ func TestCasbinVoter_Vote_Abstain(t *testing.T) {
 	auth := &mockAuthentication{authenticated: false}
 	ctx := context.Background()
 
-	result := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
-	if result != ACCESS_ABSTAIN {
-		t.Errorf("expected ACCESS_ABSTAIN, got %d", result)
+	voteResult := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
+	if voteResult != ACCESS_ABSTAIN {
+		t.Errorf("expected ACCESS_ABSTAIN, got %d", voteResult)
 	}
 }
 
@@ -104,9 +104,9 @@ func TestCasbinVoter_Vote_NilAuthentication(t *testing.T) {
 	voter := MustNewCasbinVoter(enforcer)
 
 	ctx := context.Background()
-	result := voter.Vote(ctx, nil, "GET:/api/users", []string{"read"})
-	if result != ACCESS_ABSTAIN {
-		t.Errorf("expected ACCESS_ABSTAIN for nil authentication, got %d", result)
+	voteResult := voter.Vote(ctx, nil, "GET:/api/users", []string{"read"})
+	if voteResult != ACCESS_ABSTAIN {
+		t.Errorf("expected ACCESS_ABSTAIN for nil authentication, got %d", voteResult)
 	}
 }
 
@@ -119,9 +119,9 @@ func TestCasbinVoter_Vote_EnforcerError(t *testing.T) {
 	auth := &mockAuthentication{authenticated: true, principal: "admin"}
 	ctx := context.Background()
 
-	result := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
-	if result != ACCESS_DENIED {
-		t.Errorf("expected ACCESS_DENIED on enforcer error, got %d", result)
+	voteResult := voter.Vote(ctx, auth, "GET:/api/users", []string{"read"})
+	if voteResult != ACCESS_DENIED {
+		t.Errorf("expected ACCESS_DENIED on enforcer error, got %d", voteResult)
 	}
 }
 

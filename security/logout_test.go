@@ -16,15 +16,15 @@ func (h *testLogoutHandler) Logout(_ context.Context, _ SecurityRequest, _ Secur
 func TestNewLogoutFilter_Success(t *testing.T) {
 	t.Parallel()
 
-	f, err := NewLogoutFilter("/logout", nil)
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if f == nil {
+	if logoutFilter == nil {
 		t.Fatal("expected non-nil filter")
 	}
-	if f.Order() != 0 {
-		t.Errorf("expected order 0, got %d", f.Order())
+	if logoutFilter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", logoutFilter.Order())
 	}
 }
 
@@ -40,8 +40,8 @@ func TestNewLogoutFilter_EmptyUrl(t *testing.T) {
 func TestMustNewLogoutFilter_Success(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
-	if f == nil {
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
+	if logoutFilter == nil {
 		t.Fatal("expected non-nil filter")
 	}
 }
@@ -60,23 +60,23 @@ func TestMustNewLogoutFilter_Panic(t *testing.T) {
 func TestLogoutFilter_AddLogoutHandler_New(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 	handler := &testLogoutHandler{}
-	f.AddLogoutHandler(handler)
+	logoutFilter.AddLogoutHandler(handler)
 
-	if len(f.handlers) != 1 {
-		t.Errorf("expected 1 handler, got %d", len(f.handlers))
+	if len(logoutFilter.handlers) != 1 {
+		t.Errorf("expected 1 handler, got %d", len(logoutFilter.handlers))
 	}
 }
 
 func TestLogoutFilter_SetSuccessHandler(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 	handler := &mockLogoutSuccessHandler{}
-	f.SetSuccessHandler(handler)
+	logoutFilter.SetSuccessHandler(handler)
 
-	if f.successHandler == nil {
+	if logoutFilter.successHandler == nil {
 		t.Error("expected successHandler to be set")
 	}
 }
@@ -84,19 +84,19 @@ func TestLogoutFilter_SetSuccessHandler(t *testing.T) {
 func TestLogoutFilter_DoFilter_TypeErrors(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 
-	err := f.DoFilter("notContext", nil, nil, &mockFilterChain{})
+	err := logoutFilter.DoFilter("notContext", nil, nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-context")
 	}
 
-	err = f.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
+	err = logoutFilter.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-request")
 	}
 
-	err = f.DoFilter(context.Background(), newMockSecurityRequest("POST", "/logout", nil), "notResp", &mockFilterChain{})
+	err = logoutFilter.DoFilter(context.Background(), newMockSecurityRequest("POST", "/logout", nil), "notResp", &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-response")
 	}
@@ -105,13 +105,13 @@ func TestLogoutFilter_DoFilter_TypeErrors(t *testing.T) {
 func TestLogoutFilter_NonAllowedMethod(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("GET", "/logout", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := logoutFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -123,13 +123,13 @@ func TestLogoutFilter_NonAllowedMethod(t *testing.T) {
 func TestLogoutFilter_WrongURI(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("POST", "/other", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := logoutFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -142,12 +142,12 @@ func TestLogoutFilter_LogoutPost_Success(t *testing.T) {
 	t.Parallel()
 
 	handler := &testLogoutHandler{}
-	f := MustNewLogoutFilter("/logout", []LogoutHandler{handler})
+	logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{handler})
 
 	req := newMockSecurityRequest("POST", "/logout", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, &mockFilterChain{})
+	err := logoutFilter.DoFilter(context.Background(), req, resp, &mockFilterChain{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,12 +162,12 @@ func TestLogoutFilter_LogoutPost_Success(t *testing.T) {
 func TestLogoutFilter_LogoutDelete_Success(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
 
 	req := newMockSecurityRequest("DELETE", "/logout", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, &mockFilterChain{})
+	err := logoutFilter.DoFilter(context.Background(), req, resp, &mockFilterChain{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,13 +180,13 @@ func TestLogoutFilter_WithSuccessHandler_Set(t *testing.T) {
 	t.Parallel()
 
 	handler := &mockLogoutSuccessHandler{}
-	f := MustNewLogoutFilter("/logout", nil)
-	f.SetSuccessHandler(handler)
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
+	logoutFilter.SetSuccessHandler(handler)
 
 	req := newMockSecurityRequest("POST", "/logout", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, &mockFilterChain{})
+	err := logoutFilter.DoFilter(context.Background(), req, resp, &mockFilterChain{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -278,8 +278,8 @@ func TestCookieClearingLogoutHandler_MultipleCookies(t *testing.T) {
 func TestLogoutFilter_Order(t *testing.T) {
 	t.Parallel()
 
-	f := MustNewLogoutFilter("/logout", nil)
-	if f.Order() != 0 {
-		t.Errorf("expected order 0, got %d", f.Order())
+	logoutFilter := MustNewLogoutFilter("/logout", nil)
+	if logoutFilter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", logoutFilter.Order())
 	}
 }

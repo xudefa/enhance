@@ -52,19 +52,19 @@ func parseStringList(s string) (any, error) {
 }
 
 func parseStringMap(s string) (any, error) {
-	result := make(map[string]string)
+	parsed := make(map[string]string)
 	s = strings.Trim(s, "{}")
 	if s == "" {
-		return result, nil
+		return parsed, nil
 	}
 	pairs := strings.Split(s, ",")
 	for _, pair := range pairs {
 		kv := strings.SplitN(pair, "=", 2)
 		if len(kv) == 2 {
-			result[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
+			parsed[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 		}
 	}
-	return result, nil
+	return parsed, nil
 }
 
 // Bind 将配置数据绑定到结构体
@@ -82,30 +82,30 @@ func parseStringMap(s string) (any, error) {
 // 返回：
 //   - error: 绑定或验证错误
 func Bind(cfg any, target any) error {
-	v := reflect.ValueOf(target)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+	targetValue := reflect.ValueOf(target)
+	if targetValue.Kind() != reflect.Ptr || targetValue.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("target must be a pointer to struct")
 	}
 
-	var data map[string]any
+	var configData map[string]any
 	switch c := cfg.(type) {
 	case Config:
-		data = c.GetAll()
+		configData = c.GetAll()
 	case map[string]any:
-		data = c
+		configData = c
 	default:
 		return fmt.Errorf("cfg must be Config or map[string]any")
 	}
 
-	return bindStruct(data, v.Elem())
+	return bindStruct(configData, targetValue.Elem())
 }
 
 // bindStruct 递归绑定结构体字段
 func bindStruct(data map[string]any, v reflect.Value) error {
-	t := v.Type()
+	structType := v.Type()
 
-	for i := range t.NumField() {
-		field := t.Field(i)
+	for i := range structType.NumField() {
+		field := structType.Field(i)
 		fieldVal := v.Field(i)
 
 		// 跳过未导出字段
@@ -130,19 +130,19 @@ func bindStruct(data map[string]any, v reflect.Value) error {
 			// 检查是否有注册的转换器，有则当作普通字段处理
 			if _, ok := GetConverter(fieldType); ok {
 				if err := bindField(data, field, fieldVal); err != nil {
-					return err
+					return fmt.Errorf("绑定字段 %s 失败: %w", field.Name, err)
 				}
 				continue
 			}
 			if err := bindNestedStruct(data, field, fieldVal); err != nil {
-				return err
+				return fmt.Errorf("绑定嵌套结构体 %s 失败: %w", field.Name, err)
 			}
 			continue
 		}
 
 		// 处理普通字段
 		if err := bindField(data, field, fieldVal); err != nil {
-			return err
+			return fmt.Errorf("绑定字段 %s 失败: %w", field.Name, err)
 		}
 	}
 
@@ -170,14 +170,14 @@ func bindNestedStruct(data map[string]any, field reflect.StructField, fieldVal r
 
 // extractSubMap 从扁平配置中提取指定前缀的子配置
 func extractSubMap(data map[string]any, prefix string) map[string]any {
-	result := make(map[string]any)
+	subMap := make(map[string]any)
 	for key, value := range data {
 		if strings.HasPrefix(key, prefix) {
 			subKey := strings.TrimPrefix(key, prefix)
-			result[subKey] = value
+			subMap[subKey] = value
 		}
 	}
-	return result
+	return subMap
 }
 
 // bindField 绑定单个字段
@@ -222,273 +222,72 @@ func bindField(data map[string]any, field reflect.StructField, fieldVal reflect.
 // setFieldValue 设置字段值，支持类型转换
 func setFieldValue(fieldVal reflect.Value, targetType reflect.Type, strVal string) error {
 	// 检查是否有注册的转换器
-	if converter, ok := GetConverter(targetType); ok {
-		converted, err := converter(strVal)
-		if err != nil {
-			return fmt.Errorf("failed to convert %q to %s: %w", strVal, targetType, err)
-		}
-		convertedVal := reflect.ValueOf(converted)
-		// 如果转换器返回的是接口类型，需要提取底层值
-		if convertedVal.Kind() == reflect.Interface {
-			convertedVal = convertedVal.Elem()
-		}
-		if !convertedVal.Type().AssignableTo(fieldVal.Type()) {
-			return fmt.Errorf("converted value of type %s is not assignable to field type %s", convertedVal.Type(), fieldVal.Type())
-		}
-		if !fieldVal.CanSet() {
-			return fmt.Errorf("field %s is not addressable", targetType)
-		}
-		fieldVal.Set(convertedVal)
-		return nil
+	if applied, err := applyCustomConverter(fieldVal, targetType, strVal); applied {
+		return err
 	}
 
 	// 基本类型转换
+	return setBasicTypeValue(fieldVal, targetType, strVal)
+}
+
+// applyCustomConverter 应用注册的自定义类型转换器。
+// 返回是否已找到并应用转换器。
+func applyCustomConverter(fieldVal reflect.Value, targetType reflect.Type, strVal string) (bool, error) {
+	converter, ok := GetConverter(targetType)
+	if !ok {
+		return false, nil
+	}
+	converted, err := converter(strVal)
+	if err != nil {
+		return true, fmt.Errorf("failed to convert %q to %s: %w", strVal, targetType, err)
+	}
+	convertedVal := reflect.ValueOf(converted)
+	// 如果转换器返回的是接口类型，需要提取底层值
+	if convertedVal.Kind() == reflect.Interface {
+		convertedVal = convertedVal.Elem()
+	}
+	if !convertedVal.Type().AssignableTo(fieldVal.Type()) {
+		return true, fmt.Errorf("converted value of type %s is not assignable to field type %s", convertedVal.Type(), fieldVal.Type())
+	}
+	if !fieldVal.CanSet() {
+		return true, fmt.Errorf("field %s is not addressable", targetType)
+	}
+	fieldVal.Set(convertedVal)
+	return true, nil
+}
+
+// setBasicTypeValue 按基本类型转换并设置字段值。
+func setBasicTypeValue(fieldVal reflect.Value, targetType reflect.Type, strVal string) error {
 	switch targetType.Kind() {
 	case reflect.String:
 		fieldVal.SetString(strVal)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(strVal, 10, targetType.Bits())
+		parsedVal, err := strconv.ParseInt(strVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("failed to parse int %q: %w", strVal, err)
 		}
-		fieldVal.SetInt(v)
+		fieldVal.SetInt(parsedVal)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(strVal, 10, targetType.Bits())
+		parsedVal, err := strconv.ParseUint(strVal, 10, targetType.Bits())
 		if err != nil {
 			return fmt.Errorf("failed to parse uint %q: %w", strVal, err)
 		}
-		fieldVal.SetUint(v)
+		fieldVal.SetUint(parsedVal)
 	case reflect.Float32, reflect.Float64:
-		v, err := strconv.ParseFloat(strVal, 64)
+		parsedVal, err := strconv.ParseFloat(strVal, 64)
 		if err != nil {
 			return fmt.Errorf("failed to parse float %q: %w", strVal, err)
 		}
-		fieldVal.SetFloat(v)
+		fieldVal.SetFloat(parsedVal)
 	case reflect.Bool:
-		v, err := strconv.ParseBool(strVal)
+		parsedVal, err := strconv.ParseBool(strVal)
 		if err != nil {
 			return fmt.Errorf("failed to parse bool %q: %w", strVal, err)
 		}
-		fieldVal.SetBool(v)
+		fieldVal.SetBool(parsedVal)
 	default:
 		return fmt.Errorf("unsupported type %s for field", targetType)
 	}
 
 	return nil
-}
-
-// Validate 根据 validate 标签验证结构体字段
-//
-// 支持的验证规则：
-//   - required: 字段不能为空
-//   - min=N: 数值字段最小值，或字符串最小长度
-//   - max=N: 数值字段最大值，或字符串最大长度
-//   - enum=a,b,c: 枚举值限制
-//
-// 参数：
-//   - target: 目标结构体指针
-//
-// 返回：
-//   - error: 验证错误
-func Validate(target any) error {
-	// 检查 nil 值，避免反射操作 panic
-	if target == nil {
-		return fmt.Errorf("target must be a pointer to struct")
-	}
-
-	v := reflect.ValueOf(target)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
-		return fmt.Errorf("target must be a pointer to struct")
-	}
-
-	return validateStruct(v.Elem(), "")
-}
-
-// validateStruct 递归验证结构体
-func validateStruct(v reflect.Value, prefix string) error {
-	t := v.Type()
-
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if !field.IsExported() {
-			continue
-		}
-
-		fieldVal := v.Field(i)
-		fieldName := prefix + field.Name
-
-		// 处理嵌套结构体
-		if field.Type.Kind() == reflect.Struct {
-			if err := validateStruct(fieldVal, fieldName+"."); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// 验证字段
-		if err := validateField(field, fieldVal, fieldName); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// validateField 验证单个字段
-func validateField(field reflect.StructField, fieldVal reflect.Value, fieldName string) error {
-	validateTag := field.Tag.Get("validate")
-	if validateTag == "" {
-		return nil
-	}
-
-	rules := strings.Split(validateTag, ",")
-	for _, rule := range rules {
-		rule = strings.TrimSpace(rule)
-		if err := applyRule(rule, field, fieldVal, fieldName); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// applyRule 应用单个验证规则
-func applyRule(rule string, field reflect.StructField, fieldVal reflect.Value, fieldName string) error {
-	switch {
-	case rule == "required":
-		return validateRequired(fieldVal, fieldName)
-	case strings.HasPrefix(rule, "min="):
-		val := strings.TrimPrefix(rule, "min=")
-		return validateMin(fieldVal, val, fieldName)
-	case strings.HasPrefix(rule, "max="):
-		val := strings.TrimPrefix(rule, "max=")
-		return validateMax(fieldVal, val, fieldName)
-	case strings.HasPrefix(rule, "enum="):
-		vals := strings.TrimPrefix(rule, "enum=")
-		return validateEnum(fieldVal, vals, fieldName)
-	}
-	return nil
-}
-
-// validateRequired 验证必填
-func validateRequired(fieldVal reflect.Value, fieldName string) error {
-	switch fieldVal.Kind() {
-	case reflect.String:
-		if fieldVal.String() == "" {
-			return ValidationError{Field: fieldName, Message: "required field is empty"}
-		}
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		if fieldVal.Int() == 0 {
-			return ValidationError{Field: fieldName, Message: "required field is zero"}
-		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		if fieldVal.Uint() == 0 {
-			return ValidationError{Field: fieldName, Message: "required field is zero"}
-		}
-	case reflect.Float32, reflect.Float64:
-		if fieldVal.Float() == 0 {
-			return ValidationError{Field: fieldName, Message: "required field is zero"}
-		}
-	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
-		if fieldVal.IsNil() {
-			return ValidationError{Field: fieldName, Message: "required field is nil"}
-		}
-	case reflect.Struct:
-		if fieldVal.IsZero() {
-			return ValidationError{Field: fieldName, Message: "required field is zero value"}
-		}
-	}
-	return nil
-}
-
-// validateMin 验证最小值
-func validateMin(fieldVal reflect.Value, minStr string, fieldName string) error {
-	switch fieldVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		min, err := strconv.ParseInt(minStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid min value %q: %w", minStr, err)
-		}
-		if fieldVal.Int() < min {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %d below minimum %d", fieldVal.Int(), min)}
-		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		min, err := strconv.ParseUint(minStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid min value %q: %w", minStr, err)
-		}
-		if fieldVal.Uint() < min {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %d below minimum %d", fieldVal.Uint(), min)}
-		}
-	case reflect.Float32, reflect.Float64:
-		min, err := strconv.ParseFloat(minStr, 64)
-		if err != nil {
-			return fmt.Errorf("invalid min value %q: %w", minStr, err)
-		}
-		if fieldVal.Float() < min {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %f below minimum %f", fieldVal.Float(), min)}
-		}
-	case reflect.String:
-		min, err := strconv.Atoi(minStr)
-		if err != nil {
-			return fmt.Errorf("invalid min length %q: %w", minStr, err)
-		}
-		if len(fieldVal.String()) < min {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("length %d below minimum %d", len(fieldVal.String()), min)}
-		}
-	}
-	return nil
-}
-
-// validateMax 验证最大值
-func validateMax(fieldVal reflect.Value, maxStr string, fieldName string) error {
-	switch fieldVal.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		max, err := strconv.ParseInt(maxStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid max value %q: %w", maxStr, err)
-		}
-		if fieldVal.Int() > max {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %d above maximum %d", fieldVal.Int(), max)}
-		}
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		max, err := strconv.ParseUint(maxStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid max value %q: %w", maxStr, err)
-		}
-		if fieldVal.Uint() > max {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %d above maximum %d", fieldVal.Uint(), max)}
-		}
-	case reflect.Float32, reflect.Float64:
-		max, err := strconv.ParseFloat(maxStr, 64)
-		if err != nil {
-			return fmt.Errorf("invalid max value %q: %w", maxStr, err)
-		}
-		if fieldVal.Float() > max {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %f above maximum %f", fieldVal.Float(), max)}
-		}
-	case reflect.String:
-		max, err := strconv.Atoi(maxStr)
-		if err != nil {
-			return fmt.Errorf("invalid max length %q: %w", maxStr, err)
-		}
-		if len(fieldVal.String()) > max {
-			return ValidationError{Field: fieldName, Message: fmt.Sprintf("length %d above maximum %d", len(fieldVal.String()), max)}
-		}
-	}
-	return nil
-}
-
-// validateEnum 验证枚举值
-func validateEnum(fieldVal reflect.Value, enumStr string, fieldName string) error {
-	allowed := strings.Split(enumStr, "|")
-	strVal := fmt.Sprintf("%v", fieldVal.Interface())
-
-	for _, allowedVal := range allowed {
-		if strings.TrimSpace(allowedVal) == strVal {
-			return nil
-		}
-	}
-
-	return ValidationError{Field: fieldName, Message: fmt.Sprintf("value %q not in enum [%s]", strVal, enumStr)}
 }

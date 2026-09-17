@@ -11,8 +11,8 @@ func (e *Environment) getRawProperty(key string) (any, bool) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	for i := len(e.sources) - 1; i >= 0; i-- {
-		if val, ok := e.sources[i].GetProperty(key); ok {
-			return val, true
+		if rawVal, ok := e.sources[i].GetProperty(key); ok {
+			return rawVal, true
 		}
 	}
 	return nil, false
@@ -24,14 +24,14 @@ func (e *Environment) getRawProperty(key string) (any, bool) {
 // 如果值是字符串且包含 ${...} 占位符，自动递归解析。
 // 高优先级的配置源会覆盖低优先级的同名属性。
 func (e *Environment) GetProperty(key string) (any, bool) {
-	val, ok := e.getRawProperty(key)
+	rawVal, ok := e.getRawProperty(key)
 	if !ok {
 		return nil, false
 	}
-	if s, ok := val.(string); ok {
+	if s, ok := rawVal.(string); ok {
 		return e.resolvePlaceholders(s, make(map[string]bool)), true
 	}
-	return val, true
+	return rawVal, true
 }
 
 // GetString 获取字符串类型的属性值.
@@ -43,8 +43,8 @@ func (e *Environment) GetProperty(key string) (any, bool) {
 // 返回:
 //   - string: 属性值,不存在时返回 defaultVal
 func (e *Environment) GetString(key, defaultVal string) string {
-	if val, ok := e.GetProperty(key); ok {
-		converted, err := globalTypeConverter.ConvertTo(val, reflect.TypeOf(""))
+	if propertyVal, ok := e.GetProperty(key); ok {
+		converted, err := globalTypeConverter.ConvertTo(propertyVal, reflect.TypeOf(""))
 		if err == nil {
 			return converted.String()
 		}
@@ -63,14 +63,14 @@ func (e *Environment) GetString(key, defaultVal string) string {
 // 返回:
 //   - int: 属性值,不存在时返回 defaultVal
 func (e *Environment) GetInt(key string, defaultVal int) int {
-	if val, ok := e.GetProperty(key); ok {
-		switch v := val.(type) {
+	if propertyVal, ok := e.GetProperty(key); ok {
+		switch raw := propertyVal.(type) {
 		case int:
-			return v
+			return raw
 		case float64:
-			return int(v)
+			return int(raw)
 		case string:
-			if n, err := strconv.Atoi(v); err == nil {
+			if n, err := strconv.Atoi(raw); err == nil {
 				return n
 			}
 		}
@@ -89,12 +89,12 @@ func (e *Environment) GetInt(key string, defaultVal int) int {
 // 返回:
 //   - bool: 属性值,不存在时返回 defaultVal
 func (e *Environment) GetBool(key string, defaultVal bool) bool {
-	if val, ok := e.GetProperty(key); ok {
-		switch v := val.(type) {
+	if propertyVal, ok := e.GetProperty(key); ok {
+		switch raw := propertyVal.(type) {
 		case bool:
-			return v
+			return raw
 		case string:
-			if b, err := strconv.ParseBool(v); err == nil {
+			if b, err := strconv.ParseBool(raw); err == nil {
 				return b
 			}
 		}
@@ -116,23 +116,23 @@ func (e *Environment) ContainsProperty(key string) bool {
 
 // GetRequiredProperty 获取必需属性，不存在时返回错误
 func (e *Environment) GetRequiredProperty(key string) (any, error) {
-	val, ok := e.GetProperty(key)
+	propertyVal, ok := e.GetProperty(key)
 	if !ok {
 		return nil, fmt.Errorf("required property not found: %s", key)
 	}
-	return val, nil
+	return propertyVal, nil
 }
 
 // GetFloat64 获取 float64 类型属性
 func (e *Environment) GetFloat64(key string, defaultVal float64) float64 {
-	if val, ok := e.GetProperty(key); ok {
-		switch v := val.(type) {
+	if propertyVal, ok := e.GetProperty(key); ok {
+		switch raw := propertyVal.(type) {
 		case float64:
-			return v
+			return raw
 		case int:
-			return float64(v)
+			return float64(raw)
 		case string:
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
+			if f, err := strconv.ParseFloat(raw, 64); err == nil {
 				return f
 			}
 		}
@@ -142,11 +142,11 @@ func (e *Environment) GetFloat64(key string, defaultVal float64) float64 {
 
 // IsPropertyEmpty 检查属性是否为空（不存在或空字符串）
 func (e *Environment) IsPropertyEmpty(key string) bool {
-	val, ok := e.GetProperty(key)
+	propertyVal, ok := e.GetProperty(key)
 	if !ok {
 		return true
 	}
-	s, ok := val.(string)
+	s, ok := propertyVal.(string)
 	if !ok {
 		return false
 	}

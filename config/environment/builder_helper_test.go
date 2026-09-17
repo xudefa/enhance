@@ -177,12 +177,12 @@ func TestEnvironmentHelper_GetRequiredProperty(t *testing.T) {
 	helper := NewEnvironmentHelper(env)
 
 	// 测试获取存在的属性
-	val, err := helper.GetRequiredProperty("app.name")
+	prop, err := helper.GetRequiredProperty("app.name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "test-app" {
-		t.Errorf("expected 'test-app', got %v", val)
+	if prop != "test-app" {
+		t.Errorf("expected 'test-app', got %v", prop)
 	}
 
 	// 测试获取不存在的属性

@@ -93,21 +93,21 @@ func TestDaoAuthenticationProvider_Authenticate_Success(t *testing.T) {
 	provider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, logger)
 
 	token := NewUsernamePasswordAuthenticationToken("testuser", "password123")
-	result, err := provider.Authenticate(context.Background(), token)
+	authenticated, err := provider.Authenticate(context.Background(), token)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
+	if authenticated == nil {
 		t.Fatal("expected non-nil authentication result")
 	}
 	// Principal 返回的是 UserDetails 对象
-	if ud, ok := result.Principal().(authentication.UserDetails); ok {
+	if ud, ok := authenticated.Principal().(authentication.UserDetails); ok {
 		if ud.Username() != "testuser" {
 			t.Errorf("expected principal username 'testuser', got %s", ud.Username())
 		}
 	} else {
-		t.Errorf("expected principal to be UserDetails, got %T", result.Principal())
+		t.Errorf("expected principal to be UserDetails, got %T", authenticated.Principal())
 	}
 }
 

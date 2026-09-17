@@ -1,4 +1,4 @@
-.PHONY: help dev build test tidy clean status \
+.PHONY: help dev build test tidy clean status audit \
         release create-tags delete-tags push-tags \
         create-remote-tags delete-remote-tags list-tags \
         init-work sync-work update-deps vuln-check
@@ -47,6 +47,7 @@ help: ## 显示帮助信息
 	@echo ""
 	@echo "状态检查:"
 	@echo "  status          - 显示项目状态"
+	@echo "  audit           - 生成 AI 可读性审计报告"
 	@echo ""
 	@echo "示例:"
 	@echo "  make dev                           # 进入开发模式"
@@ -414,3 +415,7 @@ vuln-check: ## 检查安全漏洞
 		$(GO) -C "$$dir" list -m -vuln all 2>&1 | grep -E "(vulnerability|VULN|Found)" | head -5; \
 	done
 	@echo "✅ 检查完成"
+
+audit: ## 生成 AI 可读性审计报告
+	@$(GO) run ./cmd/audit -dir . -out docs/AI_READABILITY_AUDIT.md
+	@echo "✅ 审计报告已生成: docs/AI_READABILITY_AUDIT.md"

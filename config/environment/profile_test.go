@@ -1,12 +1,10 @@
 package environment
 
 import (
-	"os"
 	"testing"
 )
 
 func TestGetProfileActive_FromArgs(t *testing.T) {
-	t.Parallel()
 	args := []string{"--profile=dev", "--other=value"}
 	profile := GetProfileActive(args)
 	if profile != "dev" {
@@ -15,9 +13,7 @@ func TestGetProfileActive_FromArgs(t *testing.T) {
 }
 
 func TestGetProfileActive_FromEnv(t *testing.T) {
-	t.Parallel()
-	_ = os.Setenv("GO_BOOT_PROFILE", "test")
-	defer func() { _ = os.Unsetenv("GO_BOOT_PROFILE") }()
+	t.Setenv("GO_BOOT_PROFILE", "test")
 
 	args := []string{"--other=value"}
 	profile := GetProfileActive(args)
@@ -27,9 +23,7 @@ func TestGetProfileActive_FromEnv(t *testing.T) {
 }
 
 func TestGetProfileActive_ArgsPriority(t *testing.T) {
-	t.Parallel()
-	_ = os.Setenv("GO_BOOT_PROFILE", "env-profile")
-	defer func() { _ = os.Unsetenv("GO_BOOT_PROFILE") }()
+	t.Setenv("GO_BOOT_PROFILE", "env-profile")
 
 	args := []string{"--profile=arg-profile"}
 	profile := GetProfileActive(args)
@@ -39,8 +33,7 @@ func TestGetProfileActive_ArgsPriority(t *testing.T) {
 }
 
 func TestGetProfileActive_None(t *testing.T) {
-	t.Parallel()
-	_ = os.Unsetenv("GO_BOOT_PROFILE")
+	t.Setenv("GO_BOOT_PROFILE", "")
 
 	args := []string{"--other=value"}
 	profile := GetProfileActive(args)
@@ -86,13 +79,13 @@ func TestParseProfiles_ProfileFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := ParseProfiles(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Fatalf("expected %d profiles, got %d", len(tt.expected), len(result))
+			parsed := ParseProfiles(tt.input)
+			if len(parsed) != len(tt.expected) {
+				t.Fatalf("expected %d profiles, got %d", len(tt.expected), len(parsed))
 			}
 			for i, p := range tt.expected {
-				if result[i] != p {
-					t.Errorf("profile[%d]: expected %s, got %s", i, p, result[i])
+				if parsed[i] != p {
+					t.Errorf("profile[%d]: expected %s, got %s", i, p, parsed[i])
 				}
 			}
 		})

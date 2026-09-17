@@ -47,9 +47,9 @@ func (a *Aggregator) AddIndicator(indicator Indicator) {
 func (a *Aggregator) Indicators() []Indicator {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	result := make([]Indicator, len(a.indicators))
-	copy(result, a.indicators)
-	return result
+	indicatorList := make([]Indicator, len(a.indicators))
+	copy(indicatorList, a.indicators)
+	return indicatorList
 }
 
 // Aggregate 聚合所有指标的健康状态。
@@ -61,16 +61,16 @@ func (a *Aggregator) Aggregate(ctx context.Context) Health {
 	details := make(map[string]any)
 
 	for _, ind := range indicators {
-		h := a.aggregateWithTimeout(ctx, ind, DefaultIndicatorTimeout)
-		d := map[string]any{
-			"status": h.Status.String(),
-			"detail": h.Details,
+		indicatorHealth := a.aggregateWithTimeout(ctx, ind, DefaultIndicatorTimeout)
+		detail := map[string]any{
+			"status": indicatorHealth.Status.String(),
+			"detail": indicatorHealth.Details,
 		}
-		if h.Error != nil {
-			d["error"] = h.Error.Error()
+		if indicatorHealth.Error != nil {
+			detail["error"] = indicatorHealth.Error.Error()
 		}
-		details[ind.Name()] = d
-		switch h.Status {
+		details[ind.Name()] = detail
+		switch indicatorHealth.Status {
 		case StatusOutage:
 			overall = StatusOutage
 		case StatusDown:
@@ -114,21 +114,21 @@ func (a *Aggregator) aggregateWithTimeout(ctx context.Context, ind Indicator, ti
 		}
 	}
 
-	r := result{done: make(chan struct{}, 1)}
+	checkResult := result{done: make(chan struct{}, 1)}
 	go func() {
 		defer func() { <-a.workers }()
 		defer func() {
-			if p := recover(); p != nil {
-				r.health = Health{Status: StatusDown, Error: fmt.Errorf("panic: %v", p)}
+			if panicValue := recover(); panicValue != nil {
+				checkResult.health = Health{Status: StatusDown, Error: fmt.Errorf("panic: %v", panicValue)}
 			}
-			close(r.done)
+			close(checkResult.done)
 		}()
-		r.health = ind.Health(ctx)
+		checkResult.health = ind.Health(ctx)
 	}()
 
 	select {
-	case <-r.done:
-		return r.health
+	case <-checkResult.done:
+		return checkResult.health
 	case <-ctx.Done():
 		return Health{
 			Status:  StatusDown,

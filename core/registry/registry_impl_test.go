@@ -69,11 +69,11 @@ func TestRegisterInstance_FactoryReturnsInstance(t *testing.T) {
 	_ = reg.RegisterInstance(original, typ, "myBean")
 
 	def, _ := reg.GetDefinition("myBean")
-	result, err := def.Factory()
+	instance, err := def.Factory()
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
-	if result != original {
+	if instance != original {
 		t.Error("Factory should return the original instance")
 	}
 }

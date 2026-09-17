@@ -80,34 +80,39 @@ func TestBoot_RegisterPlugin(t *testing.T) {
 func TestBoot_PluginContext(t *testing.T) {
 	t.Parallel()
 
-	type TestBean struct {
-		Name string
-	}
+	plugin := testBootPluginContextBuild(t)
+	testBootPluginContextStart(t, plugin)
 
-	plugin := &testPluginWithCallback{
+	if !plugin.startCalled {
+		t.Error("Expected plugin Start to be called")
+	}
+}
+
+func testBootPluginContextBuild(t *testing.T) *testPluginWithCallback {
+	t.Helper()
+
+	return &testPluginWithCallback{
 		name:    "callback-plugin",
 		version: "1.0.0",
 		onStart: func(ctx PluginContext) error {
-			// 测试 Container 方法 - 应该返回非 nil
-			container := ctx.Container()
-			if container == nil {
+			if container := ctx.Container(); container == nil {
 				t.Error("Expected non-nil Container")
 			}
-
-			// 测试 Environment 方法 - 应该返回非 nil
-			env := ctx.Environment()
-			if env == nil {
+			if env := ctx.Environment(); env == nil {
 				t.Error("Expected non-nil Environment")
 			}
-
-			// 测试 Config 方法 - 验证方法可以调用
 			_, _ = ctx.Config("app.name")
-
-			// 测试 GetPlugin 方法 - 验证方法可以调用
 			_, _ = ctx.GetPlugin("callback-plugin")
-
 			return nil
 		},
+	}
+}
+
+func testBootPluginContextStart(t *testing.T, plugin *testPluginWithCallback) {
+	t.Helper()
+
+	type TestBean struct {
+		Name string
 	}
 
 	app, err := NewApplication(
@@ -132,10 +137,6 @@ func TestBoot_PluginContext(t *testing.T) {
 	}
 
 	defer app.Stop()
-
-	if !plugin.startCalled {
-		t.Error("Expected plugin Start to be called")
-	}
 }
 
 // TestBoot_WithPluginMultiple_Coverage 测试多个插件

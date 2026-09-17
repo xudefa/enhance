@@ -88,76 +88,83 @@ func BenchmarkPasswordEncoder_NoOp(b *testing.B) {
 }
 
 // BenchmarkSecurityBuilder_DifferentConfigs 测试不同配置的性能
+func benchSecurityBuilderSimple(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithCSRF(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableCsrf().
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithFormLogin(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableFormLogin("/login", "/home").
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithHttpBasic(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableHttpBasic().
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithLogout(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableLogout("/logout").
+			Build()
+	}
+}
+
+func benchSecurityBuilderFullConfig(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableCsrf().
+			EnableFormLogin("/login", "/home").
+			EnableHttpBasic().
+			EnableLogout("/logout").
+			EnableAnonymous().
+			Build()
+	}
+}
+
 func BenchmarkSecurityBuilder_DifferentConfigs(b *testing.B) {
 	authManager := &benchAuthManager{}
 	userDetailsService := &benchUserDetailsService{}
 
-	b.Run("Simple", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				Build()
-		}
-	})
-
-	b.Run("WithCSRF", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				EnableCsrf().
-				Build()
-		}
-	})
-
-	b.Run("WithFormLogin", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				EnableFormLogin("/login", "/home").
-				Build()
-		}
-	})
-
-	b.Run("WithHttpBasic", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				EnableHttpBasic().
-				Build()
-		}
-	})
-
-	b.Run("WithLogout", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				EnableLogout("/logout").
-				Build()
-		}
-	})
-
-	b.Run("Full-Config", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_ = NewSecurityBuilder().
-				AuthenticationManager(authManager).
-				UserDetailsService(userDetailsService).
-				EnableCsrf().
-				EnableFormLogin("/login", "/home").
-				EnableHttpBasic().
-				EnableLogout("/logout").
-				EnableAnonymous().
-				Build()
-		}
-	})
+	b.Run("Simple", func(b *testing.B) { benchSecurityBuilderSimple(b, authManager, userDetailsService) })
+	b.Run("WithCSRF", func(b *testing.B) { benchSecurityBuilderWithCSRF(b, authManager, userDetailsService) })
+	b.Run("WithFormLogin", func(b *testing.B) { benchSecurityBuilderWithFormLogin(b, authManager, userDetailsService) })
+	b.Run("WithHttpBasic", func(b *testing.B) { benchSecurityBuilderWithHttpBasic(b, authManager, userDetailsService) })
+	b.Run("WithLogout", func(b *testing.B) { benchSecurityBuilderWithLogout(b, authManager, userDetailsService) })
+	b.Run("Full-Config", func(b *testing.B) { benchSecurityBuilderFullConfig(b, authManager, userDetailsService) })
 }

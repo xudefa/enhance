@@ -48,40 +48,9 @@ func (c *NetClient) buildURL(path string, query map[string][]string) string {
 
 // buildRequest 构建 HTTP 请求。
 func (c *NetClient) buildRequest(ctx context.Context, method, path string, body any, cfg *HTTPRequest) (*http.Request, error) {
-	var reqBody io.Reader
-	contentType := "application/json"
-
-	if body != nil {
-		switch v := body.(type) {
-		case string:
-			reqBody = strings.NewReader(v)
-			contentType = "text/plain"
-		case []byte:
-			reqBody = bytes.NewReader(v)
-			contentType = "application/octet-stream"
-		case map[string][]string:
-			var sb strings.Builder
-			first := true
-			for k, vals := range v {
-				for _, val := range vals {
-					if !first {
-						sb.WriteString("&")
-					}
-					sb.WriteString(url.QueryEscape(k))
-					sb.WriteString("=")
-					sb.WriteString(url.QueryEscape(val))
-					first = false
-				}
-			}
-			reqBody = strings.NewReader(sb.String())
-			contentType = "application/x-www-form-urlencoded"
-		default:
-			data, err := json.Marshal(body)
-			if err != nil {
-				return nil, fmt.Errorf("marshal body failed: %w", err)
-			}
-			reqBody = bytes.NewReader(data)
-		}
+	reqBody, contentType, err := marshalRequestBody(body)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.buildURL(path, cfg.Query), reqBody)
@@ -99,21 +68,63 @@ func (c *NetClient) buildRequest(ctx context.Context, method, path string, body 
 		req.Header.Set("Content-Type", cfg.ContentType)
 	}
 
+	applyRequestHeaders(req, cfg)
+
+	return req, nil
+}
+
+// marshalRequestBody 根据 body 类型序列化为请求体并确定 Content-Type。
+func marshalRequestBody(body any) (io.Reader, string, error) {
+	if body == nil {
+		return nil, "application/json", nil
+	}
+	switch bodyValue := body.(type) {
+	case string:
+		return strings.NewReader(bodyValue), "text/plain", nil
+	case []byte:
+		return bytes.NewReader(bodyValue), "application/octet-stream", nil
+	case map[string][]string:
+		return marshalFormBody(bodyValue), "application/x-www-form-urlencoded", nil
+	default:
+		jsonBytes, err := json.Marshal(body)
+		if err != nil {
+			return nil, "", fmt.Errorf("marshal body failed: %w", err)
+		}
+		return bytes.NewReader(jsonBytes), "application/json", nil
+	}
+}
+
+// marshalFormBody 将表单字段编码为 URL-encoded 请求体。
+func marshalFormBody(values map[string][]string) io.Reader {
+	var sb strings.Builder
+	first := true
+	for k, vals := range values {
+		for _, val := range vals {
+			if !first {
+				sb.WriteString("&")
+			}
+			sb.WriteString(url.QueryEscape(k))
+			sb.WriteString("=")
+			sb.WriteString(url.QueryEscape(val))
+			first = false
+		}
+	}
+	return strings.NewReader(sb.String())
+}
+
+// applyRequestHeaders 将 HTTPRequest 配置中的 headers/auth 写入请求。
+func applyRequestHeaders(req *http.Request, cfg *HTTPRequest) {
 	for key, values := range cfg.Header {
 		for _, value := range values {
 			req.Header.Add(key, value)
 		}
 	}
-
 	if cfg.AuthToken != "" {
 		req.Header.Set("Authorization", "Bearer "+cfg.AuthToken)
 	}
-
 	if cfg.BasicAuth.Username != "" || cfg.BasicAuth.Password != "" {
 		req.SetBasicAuth(cfg.BasicAuth.Username, cfg.BasicAuth.Password)
 	}
-
-	return req, nil
 }
 
 // Get 发送 GET 请求。
@@ -184,28 +195,9 @@ func (c *NetClient) Do(ctx context.Context, request any) (*HTTPResponse, error) 
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxResponseBodySize+1))
+	body, err := readResponseBody(ctx, resp, c.logger)
 	if err != nil {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.logger.Error(ctx, "close response body failed",
-				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
-				log.KeyValue{Key: "read_error", Value: err.Error()},
-			)
-		}
-		return nil, fmt.Errorf("read response failed: %w", err)
-	}
-
-	if len(body) > DefaultMaxResponseBodySize {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			c.logger.Error(ctx, "close response body failed",
-				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
-			)
-		}
-		return nil, fmt.Errorf("response body too large: max %d bytes", DefaultMaxResponseBodySize)
-	}
-
-	if err := resp.Body.Close(); err != nil {
-		return nil, fmt.Errorf("close response body failed: %w", err)
+		return nil, err
 	}
 
 	httpResp := &HTTPResponse{
@@ -219,13 +211,50 @@ func (c *NetClient) Do(ctx context.Context, request any) (*HTTPResponse, error) 
 	copy(middleware, c.middleware)
 	c.mu.RUnlock()
 
-	for _, m := range middleware {
-		if err := m(req, httpResp); err != nil {
-			return nil, err
-		}
+	if err := applyClientMiddlewares(req, httpResp, middleware); err != nil {
+		return nil, err
 	}
 
 	return httpResp, nil
+}
+
+// readResponseBody 读取响应体，检查大小限制并关闭 Body。
+func readResponseBody(ctx context.Context, resp *http.Response, logger log.Logger) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxResponseBodySize+1))
+	if err != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Error(ctx, "close response body failed",
+				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
+				log.KeyValue{Key: "read_error", Value: err.Error()},
+			)
+		}
+		return nil, fmt.Errorf("read response failed: %w", err)
+	}
+
+	if len(body) > DefaultMaxResponseBodySize {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Error(ctx, "close response body failed",
+				log.KeyValue{Key: "close_error", Value: closeErr.Error()},
+			)
+		}
+		return nil, fmt.Errorf("response body too large: max %d bytes", DefaultMaxResponseBodySize)
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		return nil, fmt.Errorf("close response body failed: %w", err)
+	}
+
+	return body, nil
+}
+
+// applyClientMiddlewares 对响应依次执行客户端中间件。
+func applyClientMiddlewares(req *http.Request, resp *HTTPResponse, middlewares []ClientMiddlewareFunc) error {
+	for _, m := range middlewares {
+		if err := m(req, resp); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Unmarshal 反序列化 JSON 数据到指定目标。

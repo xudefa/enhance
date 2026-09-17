@@ -28,6 +28,7 @@ type CorsFilter struct {
 	logger log.Logger
 }
 
+// NewCorsFilter 创建 CORS 过滤器，自动补齐默认配置。
 func NewCorsFilter(config CorsConfig) *CorsFilter {
 	if len(config.AllowedMethods) == 0 {
 		config.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}

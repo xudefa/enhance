@@ -12,10 +12,17 @@ import (
 // BackoffStrategy 退避策略
 type BackoffStrategy string
 
+// maxExponentialShift 指数退避最大位移量，防止 1<<shift 左移溢出。
+const maxExponentialShift = 62
+
 const (
-	BackoffNone        BackoffStrategy = "none"        // 无退避，立即重试
-	BackoffFixed       BackoffStrategy = "fixed"       // 固定间隔退避
-	BackoffLinear      BackoffStrategy = "linear"      // 线性退避
+	// BackoffNone 无退避，立即重试。
+	BackoffNone BackoffStrategy = "none" // 无退避，立即重试
+	// BackoffFixed 固定间隔退避。
+	BackoffFixed BackoffStrategy = "fixed" // 固定间隔退避
+	// BackoffLinear 线性退避。
+	BackoffLinear BackoffStrategy = "linear" // 线性退避
+	// BackoffExponential 指数退避。
 	BackoffExponential BackoffStrategy = "exponential" // 指数退避
 )
 
@@ -102,8 +109,8 @@ func (p RetryPolicy) CalculateDelay(attempt int) time.Duration {
 		delay = p.InitialDelay * time.Duration(attempt+1)
 	case BackoffExponential:
 		shift := attempt
-		if shift > 62 {
-			shift = 62
+		if shift > maxExponentialShift {
+			shift = maxExponentialShift
 		}
 		delay = p.InitialDelay * time.Duration(float64(int64(1)<<uint(shift))*p.Multiplier)
 	default:
@@ -171,7 +178,7 @@ type Executor struct {
 // NewExecutor 创建重试执行器
 func NewExecutor(policy RetryPolicy, opts ...ExecutorOption) (*Executor, error) {
 	if err := policy.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("校验重试策略失败: %w", err)
 	}
 
 	exec := &Executor{
@@ -265,7 +272,10 @@ func (e *Executor) ExecuteVoid(ctx context.Context, fn func(ctx context.Context)
 	_, err := Execute(ctx, e, func(ctx context.Context) (any, error) {
 		return nil, fn(ctx)
 	})
-	return err
+	if err != nil {
+		return fmt.Errorf("执行无返回值重试任务失败: %w", err)
+	}
+	return nil
 }
 
 // maxSafeShift 计算 baseDelay*(1<<shift) 不会溢出且不超过 maxDelay 的最大位移量

@@ -79,9 +79,9 @@ func (r *expressionBasedUrlRegistry) And() UrlAuthorizationRuleBuilder {
 // Get 获取所有规则。
 func (r *expressionBasedUrlRegistry) Get() []UrlAuthorizationRule {
 	r.commit()
-	result := make([]UrlAuthorizationRule, len(r.rules))
-	copy(result, r.rules)
-	return result
+	rulesCopy := make([]UrlAuthorizationRule, len(r.rules))
+	copy(rulesCopy, r.rules)
+	return rulesCopy
 }
 
 // requestMatchers 注册 URL 匹配规则并返回注册表。

@@ -8,37 +8,37 @@ import (
 func TestNewLeakyBucketRateLimiter(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
-	if l == nil {
+	limiter := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
+	if limiter == nil {
 		t.Fatal("expected non-nil limiter")
 	}
-	defer l.Close()
+	defer limiter.Close()
 }
 
 func TestNewLeakyBucketRateLimiter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(0, 0)
-	if l == nil {
+	limiter := NewLeakyBucketRateLimiter(0, 0)
+	if limiter == nil {
 		t.Fatal("expected non-nil limiter")
 	}
-	defer l.Close()
+	defer limiter.Close()
 
-	if l.capacity != 100 {
-		t.Errorf("expected default capacity 100, got %d", l.capacity)
+	if limiter.capacity != 100 {
+		t.Errorf("expected default capacity 100, got %d", limiter.capacity)
 	}
-	if l.rate != 100*time.Millisecond {
-		t.Errorf("expected default rate 100ms, got %v", l.rate)
+	if limiter.rate != 100*time.Millisecond {
+		t.Errorf("expected default rate 100ms, got %v", limiter.rate)
 	}
 }
 
 func TestLeakyBucketRateLimiter_Allow(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(5, 10*time.Millisecond)
-	defer l.Close()
+	limiter := NewLeakyBucketRateLimiter(5, 10*time.Millisecond)
+	defer limiter.Close()
 
-	if !l.Allow("key1") {
+	if !limiter.Allow("key1") {
 		t.Error("expected first request to be allowed")
 	}
 }
@@ -46,12 +46,12 @@ func TestLeakyBucketRateLimiter_Allow(t *testing.T) {
 func TestLeakyBucketRateLimiter_Allow_Reject(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(2, 1*time.Hour)
-	defer l.Close()
+	limiter := NewLeakyBucketRateLimiter(2, 1*time.Hour)
+	defer limiter.Close()
 
-	l.Allow("key1")
-	l.Allow("key1")
-	if l.Allow("key1") {
+	limiter.Allow("key1")
+	limiter.Allow("key1")
+	if limiter.Allow("key1") {
 		t.Error("expected request to be rejected after capacity exceeded")
 	}
 }
@@ -59,55 +59,55 @@ func TestLeakyBucketRateLimiter_Allow_Reject(t *testing.T) {
 func TestLeakyBucketRateLimiter_CloseMethod(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
-	l.Close()
+	limiter := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
+	limiter.Close()
 
-	l.Close()
+	limiter.Close()
 }
 
 func TestNewFixedWindowCounterRateLimiter(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(time.Minute, 10)
-	if l == nil {
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 10)
+	if limiter == nil {
 		t.Fatal("expected non-nil limiter")
 	}
-	defer l.Close()
+	defer limiter.Close()
 }
 
 func TestNewFixedWindowCounterRateLimiter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(0, 0)
-	if l == nil {
+	limiter := NewFixedWindowCounterRateLimiter(0, 0)
+	if limiter == nil {
 		t.Fatal("expected non-nil limiter")
 	}
-	defer l.Close()
+	defer limiter.Close()
 
-	if l.windowSize != time.Minute {
-		t.Errorf("expected default windowSize 1m, got %v", l.windowSize)
+	if limiter.windowSize != time.Minute {
+		t.Errorf("expected default windowSize 1m, got %v", limiter.windowSize)
 	}
-	if l.maxRequests != 100 {
-		t.Errorf("expected default maxRequests 100, got %d", l.maxRequests)
+	if limiter.maxRequests != 100 {
+		t.Errorf("expected default maxRequests 100, got %d", limiter.maxRequests)
 	}
 }
 
 func TestFixedWindowCounterRateLimiter_Allow(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(time.Minute, 3)
-	defer l.Close()
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 3)
+	defer limiter.Close()
 
-	if !l.Allow("key1") {
+	if !limiter.Allow("key1") {
 		t.Error("expected first request to be allowed")
 	}
-	if !l.Allow("key1") {
+	if !limiter.Allow("key1") {
 		t.Error("expected second request to be allowed")
 	}
-	if !l.Allow("key1") {
+	if !limiter.Allow("key1") {
 		t.Error("expected third request to be allowed")
 	}
-	if l.Allow("key1") {
+	if limiter.Allow("key1") {
 		t.Error("expected fourth request to be rejected")
 	}
 }
@@ -115,13 +115,13 @@ func TestFixedWindowCounterRateLimiter_Allow(t *testing.T) {
 func TestFixedWindowCounterRateLimiter_DifferentKeys(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(time.Minute, 1)
-	defer l.Close()
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 1)
+	defer limiter.Close()
 
-	if !l.Allow("key1") {
+	if !limiter.Allow("key1") {
 		t.Error("expected key1 to be allowed")
 	}
-	if !l.Allow("key2") {
+	if !limiter.Allow("key2") {
 		t.Error("expected key2 to be allowed")
 	}
 }
@@ -129,27 +129,27 @@ func TestFixedWindowCounterRateLimiter_DifferentKeys(t *testing.T) {
 func TestFixedWindowCounterRateLimiter_CloseMethod(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(time.Minute, 10)
-	l.Close()
-	l.Close()
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 10)
+	limiter.Close()
+	limiter.Close()
 }
 
 func TestLeakyBucketRateLimiter_CleanupFunc(t *testing.T) {
 	t.Parallel()
 
-	l := NewLeakyBucketRateLimiter(10, time.Millisecond)
-	defer l.Close()
+	limiter := NewLeakyBucketRateLimiter(10, time.Millisecond)
+	defer limiter.Close()
 
-	l.Allow("key1")
-	l.Cleanup()
+	limiter.Allow("key1")
+	limiter.Cleanup()
 }
 
 func TestFixedWindowCounterRateLimiter_CleanupFunc(t *testing.T) {
 	t.Parallel()
 
-	l := NewFixedWindowCounterRateLimiter(time.Millisecond, 10)
-	defer l.Close()
+	limiter := NewFixedWindowCounterRateLimiter(time.Millisecond, 10)
+	defer limiter.Close()
 
-	l.Allow("key1")
-	l.Cleanup()
+	limiter.Allow("key1")
+	limiter.Cleanup()
 }

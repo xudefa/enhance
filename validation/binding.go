@@ -57,7 +57,7 @@ func (b *DefaultBinder) bindJSON(req *http.Request, obj any) error {
 	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
 	err := decoder.Decode(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode JSON request body: %w", err)
 	}
 
 	// 验证绑定的对象
@@ -67,7 +67,7 @@ func (b *DefaultBinder) bindJSON(req *http.Request, obj any) error {
 // bindForm 从表单数据绑定到对象
 func (b *DefaultBinder) bindForm(req *http.Request, obj any) error {
 	if err := req.ParseForm(); err != nil {
-		return err
+		return fmt.Errorf("failed to parse form request: %w", err)
 	}
 
 	return b.bindQuery(req.Form, obj)
@@ -193,7 +193,7 @@ func (j *JSONBinder) BindJSON(req *http.Request, obj any) error {
 	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
 	err := decoder.Decode(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode JSON request body: %w", err)
 	}
 
 	// 验证绑定的对象
@@ -218,7 +218,7 @@ func NewFormBinder(validator Validator) *FormBinder {
 // BindForm 仅从表单数据绑定
 func (f *FormBinder) BindForm(req *http.Request, obj any) error {
 	if err := req.ParseForm(); err != nil {
-		return err
+		return fmt.Errorf("failed to parse form request: %w", err)
 	}
 
 	return bindFieldsFromValues(req.Form, obj, f.Validator)

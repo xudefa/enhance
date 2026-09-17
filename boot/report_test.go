@@ -7,6 +7,12 @@ import (
 
 func TestConditionEvaluationReport_String(t *testing.T) {
 	t.Parallel()
+
+	report := testConditionEvaluationReportBuild()
+	testConditionEvaluationReportAssert(t, report.String())
+}
+
+func testConditionEvaluationReportBuild() *ConditionEvaluationReport {
 	report := NewConditionEvaluationReport()
 
 	report.RecordPositiveMatch("ActuatorAutoConfiguration", []ConditionResult{
@@ -27,10 +33,12 @@ func TestConditionEvaluationReport_String(t *testing.T) {
 
 	report.RecordExclusion("SecurityAutoConfiguration")
 	report.RecordUnconditional("CoreAutoConfiguration")
+	return report
+}
 
-	output := report.String()
+func testConditionEvaluationReportAssert(t *testing.T, output string) {
+	t.Helper()
 
-	// 验证报告包含所有部分
 	if !strings.Contains(output, "AUTO-CONFIGURATION REPORT") {
 		t.Error("Report should contain header")
 	}
@@ -146,9 +154,9 @@ func TestTypeName(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := typeName(tt.input)
-		if result != tt.expected {
-			t.Errorf("typeName(%T) = %s, want %s", tt.input, result, tt.expected)
+		got := typeName(tt.input)
+		if got != tt.expected {
+			t.Errorf("typeName(%T) = %s, want %s", tt.input, got, tt.expected)
 		}
 	}
 }

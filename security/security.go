@@ -20,8 +20,8 @@ const authContextKey requestContextKey = "security.authentication"
 
 // GetAuthenticationFromContext 从 context.Context 获取认证信息。
 func GetAuthenticationFromContext(ctx context.Context) Authentication {
-	if val, ok := ctx.Value(authContextKey).(Authentication); ok {
-		return val
+	if auth, ok := ctx.Value(authContextKey).(Authentication); ok {
+		return auth
 	}
 	return nil
 }
@@ -42,18 +42,21 @@ type securityContext struct {
 	mu             sync.RWMutex
 }
 
+// Authentication 返回安全上下文中的认证信息。
 func (s *securityContext) Authentication() Authentication {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.authentication
 }
 
+// SetAuthentication 设置安全上下文中的认证信息。
 func (s *securityContext) SetAuthentication(auth Authentication) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.authentication = auth
 }
 
+// ClearAuthentication 清除安全上下文中的认证信息。
 func (s *securityContext) ClearAuthentication() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

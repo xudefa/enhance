@@ -79,8 +79,8 @@ func TestSlogLoggerLogLevelsWithDPanicPanicFatal(t *testing.T) {
 
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
-				t.Logf("recovered from DPanic: %v", r)
+			if rec := recover(); rec != nil {
+				t.Logf("recovered from DPanic: %v", rec)
 			}
 		}()
 		logger.DPanic(ctx, "dpanic message", KeyValue{Key: "k", Value: "v"})
@@ -88,8 +88,8 @@ func TestSlogLoggerLogLevelsWithDPanicPanicFatal(t *testing.T) {
 
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
-				t.Logf("recovered from Panic: %v", r)
+			if rec := recover(); rec != nil {
+				t.Logf("recovered from Panic: %v", rec)
 			}
 		}()
 		logger.Panic(ctx, "panic message", KeyValue{Key: "k", Value: "v"})

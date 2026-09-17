@@ -135,7 +135,6 @@ func (r *RouteRegistry) createHandler(route RouteInfo) (http.Handler, error) {
 		return nil, fmt.Errorf("method %s not found on controller %T",
 			route.MethodName, route.Controller)
 	}
-
 	methodType := method.Type()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -148,39 +147,49 @@ func (r *RouteRegistry) createHandler(route RouteInfo) (http.Handler, error) {
 			w.Header().Set("Content-Type", route.Produces)
 		}
 
-		args := make([]reflect.Value, 0, methodType.NumIn())
-
-		for i := 0; i < methodType.NumIn(); i++ {
-			paramType := methodType.In(i)
-			if paramType.Implements(contextInterfaceType) {
-				args = append(args, reflect.ValueOf(newSimpleContext(w, req)))
-			} else {
-				args = append(args, reflect.Zero(paramType))
-			}
-		}
-
+		args := buildHandlerArgs(methodType, w, req)
 		results := method.Call(args)
-		if len(results) > 0 {
-			lastResult := results[len(results)-1]
-			if lastResult.Type().Implements(reflect.TypeFor[error]()) {
-				if err, _ := lastResult.Interface().(error); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-			}
-			if len(results) == 1 || (len(results) == 2 && lastResult.Type().Implements(reflect.TypeFor[error]())) {
-				result := results[0]
-				switch result.Kind() {
-				case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
-					if result.IsNil() {
-						return
-					}
-				}
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(result.Interface())
+		writeHandlerResult(w, results)
+	}), nil
+}
+
+// buildHandlerArgs 根据方法签名构造参数列表：context.Context 参数绑定到请求，其余填零值。
+func buildHandlerArgs(methodType reflect.Type, w http.ResponseWriter, req *http.Request) []reflect.Value {
+	args := make([]reflect.Value, 0, methodType.NumIn())
+	for i := 0; i < methodType.NumIn(); i++ {
+		paramType := methodType.In(i)
+		if paramType.Implements(contextInterfaceType) {
+			args = append(args, reflect.ValueOf(newSimpleContext(w, req)))
+		} else {
+			args = append(args, reflect.Zero(paramType))
+		}
+	}
+	return args
+}
+
+// writeHandlerResult 将处理器返回值写入 HTTP 响应：若末尾 error 不为 nil 则返回 500，否则 JSON 编码第一个返回值。
+func writeHandlerResult(w http.ResponseWriter, results []reflect.Value) {
+	if len(results) == 0 {
+		return
+	}
+	lastResult := results[len(results)-1]
+	if lastResult.Type().Implements(reflect.TypeFor[error]()) {
+		if err, _ := lastResult.Interface().(error); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(results) == 1 || (len(results) == 2 && lastResult.Type().Implements(reflect.TypeFor[error]())) {
+		handlerResult := results[0]
+		switch handlerResult.Kind() {
+		case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+			if handlerResult.IsNil() {
+				return
 			}
 		}
-	}), nil
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(handlerResult.Interface())
+	}
 }
 
 // simpleContext 是 core.Context 的简单实现，基于标准库 http.ResponseWriter 和 *http.Request。
@@ -200,32 +209,56 @@ func newSimpleContext(w http.ResponseWriter, req *http.Request) *simpleContext {
 	}
 }
 
-func (c *simpleContext) RequestMethod() string        { return c.req.Method }
-func (c *simpleContext) RequestURI() string           { return c.req.URL.RequestURI() }
+// RequestMethod 返回请求的 HTTP 方法。
+func (c *simpleContext) RequestMethod() string { return c.req.Method }
+
+// RequestURI 返回请求的完整 URI。
+func (c *simpleContext) RequestURI() string { return c.req.URL.RequestURI() }
+
+// PathParam 返回路径参数（当前实现返回空字符串）。
 func (c *simpleContext) PathParam(name string) string { return "" }
-func (c *simpleContext) Query(name string) string     { return c.req.URL.Query().Get(name) }
-func (c *simpleContext) Header(key string) string     { return c.req.Header.Get(key) }
-func (c *simpleContext) Next()                        {}
-func (c *simpleContext) IsAborted() bool              { return c.aborted }
-func (c *simpleContext) Context() context.Context     { return c.ctx }
-func (c *simpleContext) Request() *http.Request       { return c.req }
 
+// Query 返回查询参数中指定键的值。
+func (c *simpleContext) Query(name string) string { return c.req.URL.Query().Get(name) }
+
+// Header 返回请求头中指定键的值。
+func (c *simpleContext) Header(key string) string { return c.req.Header.Get(key) }
+
+// Next 继续执行下一个处理器。
+func (c *simpleContext) Next() {}
+
+// IsAborted 返回请求是否已被中断。
+func (c *simpleContext) IsAborted() bool { return c.aborted }
+
+// Context 返回请求关联的上下文。
+func (c *simpleContext) Context() context.Context { return c.ctx }
+
+// Request 返回底层的 HTTP 请求对象。
+func (c *simpleContext) Request() *http.Request { return c.req }
+
+// SetContext 设置请求关联的上下文。
 func (c *simpleContext) SetContext(ctx context.Context) { c.ctx = ctx }
-func (c *simpleContext) SetStatusCode(code int)         { c.statusCode = code }
-func (c *simpleContext) SetHeader(key, value string)    { c.w.Header().Set(key, value) }
 
+// SetStatusCode 设置响应状态码。
+func (c *simpleContext) SetStatusCode(code int) { c.statusCode = code }
+
+// SetHeader 设置响应头的指定键值对。
+func (c *simpleContext) SetHeader(key, value string) { c.w.Header().Set(key, value) }
+
+// QueryDefault 返回查询参数指定键的值，为空时返回默认值。
 func (c *simpleContext) QueryDefault(name, defaultVal string) string {
-	if v := c.req.URL.Query().Get(name); v != "" {
-		return v
+	if paramValue := c.req.URL.Query().Get(name); paramValue != "" {
+		return paramValue
 	}
 	return defaultVal
 }
 
+// BindJSON 读取请求体并解析为指定的 JSON 目标对象。
 func (c *simpleContext) BindJSON(target any) error {
 	c.req.Body = http.MaxBytesReader(nil, c.req.Body, 32<<20)
 	body, err := io.ReadAll(c.req.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read request body: %w", err)
 	}
 	if len(body) == 0 {
 		return fmt.Errorf("request body is empty")
@@ -234,18 +267,21 @@ func (c *simpleContext) BindJSON(target any) error {
 	return json.Unmarshal(body, target)
 }
 
+// JSON 以 JSON 格式写入指定状态码和响应数据。
 func (c *simpleContext) JSON(code int, data any) error {
 	c.w.Header().Set("Content-Type", "application/json")
 	c.w.WriteHeader(code)
 	return json.NewEncoder(c.w).Encode(data)
 }
 
+// String 以纯文本格式写入指定状态码和格式化响应内容。
 func (c *simpleContext) String(code int, format string, args ...any) {
 	c.w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.w.WriteHeader(code)
 	_, _ = fmt.Fprintf(c.w, format, args...)
 }
 
+// AbortWithStatus 中断请求并写入指定状态码响应。
 func (c *simpleContext) AbortWithStatus(code int) {
 	c.aborted = true
 	c.statusCode = code
@@ -256,6 +292,7 @@ func (c *simpleContext) AbortWithStatus(code int) {
 	http.Error(c.w, http.StatusText(code), code)
 }
 
+// AbortWithStatusJSON 中断请求并以 JSON 格式写入指定状态码响应。
 func (c *simpleContext) AbortWithStatusJSON(code int, body any) {
 	c.aborted = true
 	c.statusCode = code

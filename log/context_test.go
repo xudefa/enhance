@@ -112,10 +112,10 @@ func TestAppendContextKeys_EmptyTraceID(t *testing.T) {
 	t.Parallel()
 
 	keys := []KeyValue{{Key: "a", Value: "b"}}
-	result := appendContextKeys(context.Background(), keys)
+	merged := appendContextKeys(context.Background(), keys)
 
-	if len(result) != 1 {
-		t.Errorf("expected 1 key, got %d", len(result))
+	if len(merged) != 1 {
+		t.Errorf("expected 1 key, got %d", len(merged))
 	}
 }
 
@@ -124,13 +124,13 @@ func TestAppendContextKeys_WithTraceID(t *testing.T) {
 
 	ctx := WithTraceID(context.Background(), "trace-1")
 	keys := []KeyValue{{Key: "a", Value: "b"}}
-	result := appendContextKeys(ctx, keys)
+	merged := appendContextKeys(ctx, keys)
 
-	if len(result) != 2 {
-		t.Errorf("expected 2 keys, got %d", len(result))
+	if len(merged) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(merged))
 	}
-	if result[1].Key != "trace_id" {
-		t.Errorf("expected trace_id key, got %q", result[1].Key)
+	if merged[1].Key != "trace_id" {
+		t.Errorf("expected trace_id key, got %q", merged[1].Key)
 	}
 }
 

@@ -263,9 +263,9 @@ func TestBoot_ContainerAccessor_Has_GetAllNilBeanType(t *testing.T) {
 	adapter := &containerAccessorAdapter{container: mockContainer}
 
 	// 测试 GetAll 中有 nil 元素的情况
-	result := adapter.Has("test.Bean")
+	hasResult := adapter.Has("test.Bean")
 	// 应该通过第二个非 nil 元素匹配
-	if !result {
+	if !hasResult {
 		t.Error("Expected Has to return true via GetAll non-nil bean")
 	}
 }

@@ -25,10 +25,10 @@ type Sanitizer struct {
 
 // NewSanitizer 创建敏感信息检测器
 func NewSanitizer() *Sanitizer {
-	s := &Sanitizer{}
-	s.keywords.Store(defaultKeywords())
-	s.strategies.Store(&strategyList{list: []SanitizeStrategy{}})
-	return s
+	sanitizer := &Sanitizer{}
+	sanitizer.keywords.Store(defaultKeywords())
+	sanitizer.strategies.Store(&strategyList{list: []SanitizeStrategy{}})
+	return sanitizer
 }
 
 // AddStrategy 添加自定义检测策略

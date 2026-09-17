@@ -53,7 +53,7 @@ func TestDefaultExceptionHandler_RegisterResolver(t *testing.T) {
 		order:    50,
 		supports: func(err error) bool { return errors.Is(err, ErrBadRequest) },
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(400, "Custom bad request", "", "", nil)
+			return NewErrorResponse(400, "Custom bad request")
 		},
 	}
 
@@ -75,7 +75,7 @@ func TestDefaultExceptionHandler_RegisterHandlerFunc(t *testing.T) {
 	errType := reflect.TypeOf(err)
 	handler.RegisterHandlerFunc(errType,
 		func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(418, "I'm a teapot", "", "", nil)
+			return NewErrorResponse(418, "I'm a teapot")
 		})
 
 	response := &mockResponseWriter{}

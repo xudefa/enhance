@@ -6,6 +6,41 @@ import (
 	"testing"
 )
 
+func testEnvAssertApplicationConfig(t *testing.T, env *Environment) {
+	t.Helper()
+	// 验证配置源数量
+	sources := env.GetPropertySources()
+	if len(sources) < 3 {
+		t.Errorf("Expected at least 3 sources, got %d", len(sources))
+	}
+
+	// 验证应用配置是否被加载
+	prop, ok := env.GetProperty("server.host")
+	if !ok {
+		t.Error("Expected to find 'server.host' from application config")
+	}
+	if prop != "0.0.0.0" {
+		t.Errorf("Expected '0.0.0.0', got '%v'", prop)
+	}
+
+	prop, ok = env.GetProperty("server.port")
+	if !ok {
+		t.Error("Expected to find 'server.port' from application config")
+	}
+	// JSON 中的数字会被解析为 float64
+	if prop != float64(9090) {
+		t.Errorf("Expected 9090, got '%v'", prop)
+	}
+
+	prop, ok = env.GetProperty("app.name")
+	if !ok {
+		t.Error("Expected to find 'app.name' from application config")
+	}
+	if prop != "test-app" {
+		t.Errorf("Expected 'test-app', got '%v'", prop)
+	}
+}
+
 func TestNewEnvironmentWithApplicationConfig(t *testing.T) {
 	// 注意: 不使用 t.Parallel()，因为测试依赖全局的 os.Chdir
 	// 创建临时目录
@@ -44,37 +79,7 @@ func TestNewEnvironmentWithApplicationConfig(t *testing.T) {
 	// 创建 Environment
 	env := NewEnvironment()
 
-	// 验证配置源数量
-	sources := env.GetPropertySources()
-	if len(sources) < 3 {
-		t.Errorf("Expected at least 3 sources, got %d", len(sources))
-	}
-
-	// 验证应用配置是否被加载
-	val, ok := env.GetProperty("server.host")
-	if !ok {
-		t.Error("Expected to find 'server.host' from application config")
-	}
-	if val != "0.0.0.0" {
-		t.Errorf("Expected '0.0.0.0', got '%v'", val)
-	}
-
-	val, ok = env.GetProperty("server.port")
-	if !ok {
-		t.Error("Expected to find 'server.port' from application config")
-	}
-	// JSON 中的数字会被解析为 float64
-	if val != float64(9090) {
-		t.Errorf("Expected 9090, got '%v'", val)
-	}
-
-	val, ok = env.GetProperty("app.name")
-	if !ok {
-		t.Error("Expected to find 'app.name' from application config")
-	}
-	if val != "test-app" {
-		t.Errorf("Expected 'test-app', got '%v'", val)
-	}
+	testEnvAssertApplicationConfig(t, env)
 }
 
 func TestNewEnvironmentWithoutApplicationConfig(t *testing.T) {
@@ -109,6 +114,21 @@ func TestNewEnvironmentWithoutApplicationConfig(t *testing.T) {
 	_, ok := env.GetProperty("server.host")
 	if ok {
 		t.Error("Expected not to find 'server.host' without application config")
+	}
+}
+
+func testEnvAssertPriority(t *testing.T, env *Environment) {
+	t.Helper()
+	// 验证环境变量优先级更高
+	prop, ok := env.GetProperty("server.port")
+	if !ok {
+		t.Error("Expected to find 'server.port'")
+	}
+	// 环境变量值是字符串，JSON 中的数字会被解析为 float64
+	// 环境变量应该覆盖 JSON 配置
+	want := "9090"
+	if prop != want {
+		t.Errorf("Expected '%s' from env var, got '%v' (type: %T)", want, prop, prop)
 	}
 }
 
@@ -152,15 +172,5 @@ func TestNewEnvironmentPriority(t *testing.T) {
 	// 创建 Environment
 	env := NewEnvironment()
 
-	// 验证环境变量优先级更高
-	val, ok := env.GetProperty("server.port")
-	if !ok {
-		t.Error("Expected to find 'server.port'")
-	}
-	// 环境变量值是字符串，JSON 中的数字会被解析为 float64
-	// 环境变量应该覆盖 JSON 配置
-	expectedVal := "9090"
-	if val != expectedVal {
-		t.Errorf("Expected '%s' from env var, got '%v' (type: %T)", expectedVal, val, val)
-	}
+	testEnvAssertPriority(t, env)
 }

@@ -170,15 +170,15 @@ func TestWebTestClient_JSONResponse(t *testing.T) {
 	})
 
 	client := NewWebTestClient(handler)
-	var result Response
+	var responseBody Response
 	client.Get("/api/test").
 		Exchange().
 		StatusIsOk().
 		Header("Content-Type", "application/json").
-		JSONBody(&result)
+		JSONBody(&responseBody)
 
-	if result.Name != "Alice" || result.Age != 30 {
-		t.Errorf("expected Alice/30, got %s/%d", result.Name, result.Age)
+	if responseBody.Name != "Alice" || responseBody.Age != 30 {
+		t.Errorf("expected Alice/30, got %s/%d", responseBody.Name, responseBody.Age)
 	}
 }
 
@@ -246,7 +246,7 @@ func TestWebTestClient_StatusAssertionFailure(t *testing.T) {
 
 	client := NewWebTestClient(handler)
 	defer func() {
-		if r := recover(); r == nil {
+		if panicValue := recover(); panicValue == nil {
 			t.Error("StatusIsOk should panic on 404")
 		}
 	}()
@@ -334,9 +334,9 @@ func TestRequestSpec_Body(t *testing.T) {
 	t.Parallel()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := make([]byte, 100)
-		n, _ := r.Body.Read(body)
-		if string(body[:n]) != "test body content" {
-			t.Errorf("expected 'test body content', got %s", string(body[:n]))
+		bytesRead, _ := r.Body.Read(body)
+		if string(body[:bytesRead]) != "test body content" {
+			t.Errorf("expected 'test body content', got %s", string(body[:bytesRead]))
 		}
 		w.WriteHeader(http.StatusOK)
 	})

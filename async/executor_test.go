@@ -18,13 +18,13 @@ func TestAsyncExecutor_SubmitAndGet(t *testing.T) {
 		return "hello", nil
 	})
 
-	result, err := future.Get()
+	value, err := future.Get()
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
 
-	if result != "hello" {
-		t.Errorf("expected 'hello', got %v", result)
+	if value != "hello" {
+		t.Errorf("expected 'hello', got %v", value)
 	}
 }
 
@@ -219,9 +219,9 @@ func TestAsyncExecutor_ConcurrentSubmit(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 				return n, nil
 			})
-			result, _ := future.Get()
-			if result.(int) != n {
-				t.Errorf("expected %d, got %v", n, result)
+			value, _ := future.Get()
+			if value.(int) != n {
+				t.Errorf("expected %d, got %v", n, value)
 			}
 			done <- true
 		}(i)
@@ -235,75 +235,83 @@ func TestAsyncExecutor_ConcurrentSubmit(t *testing.T) {
 func TestAsyncExecutor_SubmitAfterShutdown(t *testing.T) {
 	t.Parallel()
 	t.Run("Shutdown 后 Submit 应返回错误而非 panic", func(t *testing.T) {
-		executor := NewAsyncExecutor(context.Background(), 2, 10)
-		executor.Start()
-
-		// 先提交一个正常任务
-		future1 := executor.Submit(func() (any, error) {
-			return "ok", nil
-		})
-		result, _ := future1.Get()
-		if result != "ok" {
-			t.Errorf("expected 'ok', got %v", result)
-		}
-
-		// 关闭执行器
-		executor.Shutdown()
-
-		// Shutdown 后再提交应该返回错误，而不是 panic
-		future2 := executor.Submit(func() (any, error) {
-			return "should not execute", nil
-		})
-
-		_, err := future2.Get()
-		if err == nil {
-			t.Fatal("expected error after shutdown")
-		}
-
-		if err.Error() != "executor is shutdown" {
-			t.Errorf("expected 'executor is shutdown', got '%v'", err)
-		}
+		testAsyncExecutorSubmitAfterShutdown(t)
 	})
 
 	t.Run("ShutdownWithTimeout 后 Submit 应返回错误", func(t *testing.T) {
-		executor := NewAsyncExecutor(context.Background(), 2, 10)
-		executor.Start()
-
-		// 提交一个慢任务
-		executor.Submit(func() (any, error) {
-			time.Sleep(500 * time.Millisecond)
-			return nil, nil
-		})
-
-		// 快速关闭
-		_ = executor.ShutdownWithTimeout(10 * time.Millisecond)
-
-		// 再提交应该失败
-		future := executor.Submit(func() (any, error) {
-			return "test", nil
-		})
-
-		_, err := future.Get()
-		if err == nil {
-			t.Error("expected error after shutdown with timeout")
-		}
+		testAsyncExecutorSubmitAfterShutdownWithTimeout(t)
 	})
 
 	t.Run("Shutdown 后 SubmitVoid 应返回错误", func(t *testing.T) {
-		executor := NewAsyncExecutor(context.Background(), 2, 10)
-		executor.Start()
-		executor.Shutdown()
-
-		// 不应该 panic
-		future := executor.SubmitVoid(func() error {
-			return nil
-		})
-
-		_, err := future.Get()
-		if err == nil {
-			t.Error("expected error after shutdown")
-		}
+		testAsyncExecutorSubmitVoidAfterShutdown(t)
 	})
+}
+
+func testAsyncExecutorSubmitAfterShutdown(t *testing.T) {
+	t.Helper()
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
+	executor.Start()
+
+	future1 := executor.Submit(func() (any, error) {
+		return "ok", nil
+	})
+	value, _ := future1.Get()
+	if value != "ok" {
+		t.Errorf("expected 'ok', got %v", value)
+	}
+
+	executor.Shutdown()
+
+	future2 := executor.Submit(func() (any, error) {
+		return "should not execute", nil
+	})
+
+	_, err := future2.Get()
+	if err == nil {
+		t.Fatal("expected error after shutdown")
+	}
+
+	if err.Error() != "executor is shutdown" {
+		t.Errorf("expected 'executor is shutdown', got '%v'", err)
+	}
+}
+
+func testAsyncExecutorSubmitAfterShutdownWithTimeout(t *testing.T) {
+	t.Helper()
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
+	executor.Start()
+
+	executor.Submit(func() (any, error) {
+		time.Sleep(500 * time.Millisecond)
+		return nil, nil
+	})
+
+	_ = executor.ShutdownWithTimeout(10 * time.Millisecond)
+
+	future := executor.Submit(func() (any, error) {
+		return "test", nil
+	})
+
+	_, err := future.Get()
+	if err == nil {
+		t.Error("expected error after shutdown with timeout")
+	}
+}
+
+func testAsyncExecutorSubmitVoidAfterShutdown(t *testing.T) {
+	t.Helper()
+	executor := NewAsyncExecutor(context.Background(), 2, 10)
+	executor.Start()
+	executor.Shutdown()
+
+	future := executor.SubmitVoid(func() error {
+		return nil
+	})
+
+	_, err := future.Get()
+	if err == nil {
+		t.Error("expected error after shutdown")
+	}
 }
 
 func TestAsyncExecutor_PanicRecovery(t *testing.T) {
@@ -317,12 +325,12 @@ func TestAsyncExecutor_PanicRecovery(t *testing.T) {
 		panic("test panic")
 	})
 
-	result, err := future.Get()
+	value, err := future.Get()
 	if err == nil {
 		t.Fatal("expected error from panicking task")
 	}
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
+	if value != nil {
+		t.Errorf("expected nil result, got %v", value)
 	}
 	if !strings.Contains(err.Error(), "panic") {
 		t.Errorf("expected panic error, got: %v", err)

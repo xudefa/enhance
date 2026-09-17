@@ -161,10 +161,10 @@ func TestRequestScope_ConcurrentGetWithCreation(t *testing.T) {
 	}
 	wg.Wait()
 
-	val := scope.Get("shared", func() any {
+	fetched := scope.Get("shared", func() any {
 		return "should-not-be-called"
 	})
-	if val == nil {
+	if fetched == nil {
 		t.Error("shared key should have a value")
 	}
 }
@@ -188,8 +188,8 @@ func TestRouter_Handle_AnyMethod(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("PROPFIND", "/files", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
 	if !handlerCalled {
 		t.Error("PROPFIND handler was not called")
@@ -202,11 +202,11 @@ func TestRouter_Group_PrefixNotMatching(t *testing.T) {
 	_ = router.Group("/api")
 
 	req := httptest.NewRequest(http.MethodGet, "/other/path", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -219,11 +219,11 @@ func TestRouter_ServeHTTP_PrefixPathDoesNotMatchBoundary(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/apix/users", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("StatusCode = %d, want %d for /apix/users", w.Code, http.StatusNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want %d for /apix/users", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -236,11 +236,11 @@ func TestRouter_PrefixEmptyPath(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("StatusCode = %d, want %d for /api/", w.Code, http.StatusOK)
+	if rec.Code != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d for /api/", rec.Code, http.StatusOK)
 	}
 }
 
@@ -253,10 +253,10 @@ func TestRouter_PrefixExactMatch(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/resource", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("StatusCode = %d, want %d for /api/resource", w.Code, http.StatusOK)
+	if rec.Code != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d for /api/resource", rec.Code, http.StatusOK)
 	}
 }

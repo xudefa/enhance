@@ -79,9 +79,9 @@ func TestDelegatingPasswordEncoder_EncodeWithMissingEncoder(t *testing.T) {
 		passwordEncoders: map[string]PasswordEncoder{},
 	}
 
-	result := encoder.Encode("password")
-	if result != "" {
-		t.Errorf("expected empty string, got '%s'", result)
+	encodedPassword := encoder.Encode("password")
+	if encodedPassword != "" {
+		t.Errorf("expected empty string, got '%s'", encodedPassword)
 	}
 }
 

@@ -15,9 +15,9 @@ func TestConfig_GetProperty(t *testing.T) {
 
 	cfg := NewConfig(env)
 
-	result := cfg.GetProperty("app.name")
-	if result != "test-app" {
-		t.Errorf("GetProperty() = %v, want test-app", result)
+	got := cfg.GetProperty("app.name")
+	if got != "test-app" {
+		t.Errorf("GetProperty() = %v, want test-app", got)
 	}
 }
 
@@ -27,9 +27,9 @@ func TestConfig_GetPropertyWithDefault(t *testing.T) {
 	env := environment.NewMapEnvironment(map[string]string{})
 	cfg := NewConfig(env)
 
-	result := cfg.GetPropertyWithDefault("missing", "default")
-	if result != "default" {
-		t.Errorf("GetPropertyWithDefault() = %v, want default", result)
+	got := cfg.GetPropertyWithDefault("missing", "default")
+	if got != "default" {
+		t.Errorf("GetPropertyWithDefault() = %v, want default", got)
 	}
 }
 
@@ -54,9 +54,9 @@ func TestConfig_ContainsProperty(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := cfg.ContainsProperty(tt.key)
-			if result != tt.expected {
-				t.Errorf("ContainsProperty() = %v, want %v", result, tt.expected)
+			got := cfg.ContainsProperty(tt.key)
+			if got != tt.expected {
+				t.Errorf("ContainsProperty() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -72,12 +72,12 @@ func TestConfig_GetRequiredProperty(t *testing.T) {
 
 	t.Run("existing property", func(t *testing.T) {
 		t.Parallel()
-		result, err := cfg.GetRequiredProperty("app.name")
+		got, err := cfg.GetRequiredProperty("app.name")
 		if err != nil {
 			t.Errorf("GetRequiredProperty() error = %v", err)
 		}
-		if result != "test-app" {
-			t.Errorf("GetRequiredProperty() = %v, want test-app", result)
+		if got != "test-app" {
+			t.Errorf("GetRequiredProperty() = %v, want test-app", got)
 		}
 	})
 

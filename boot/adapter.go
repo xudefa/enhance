@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -49,7 +50,7 @@ func (a *appCtxAdapter) Register(t reflect.Type, opts ...core.BeanOption) error 
 func (a *appCtxAdapter) GetByType(t reflect.Type) (any, error) {
 	instances, err := a.ctx.Container().Get(t)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("按类型获取 Bean 失败: %w", err)
 	}
 	if len(instances) == 0 {
 		return nil, core.ErrBeanNotFound

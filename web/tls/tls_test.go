@@ -150,6 +150,28 @@ func TestHttpsClientIntegration(t *testing.T) {
 
 func TestHttpsClientIntegration_AllMethods(t *testing.T) {
 	t.Parallel()
+
+	client, ctx := testTLSHttpsClientIntegrationSetup(t)
+
+	t.Run("GET", func(t *testing.T) {
+		testTLSHttpsClientIntegrationGet(t, client, ctx)
+	})
+
+	t.Run("POST", func(t *testing.T) {
+		testTLSHttpsClientIntegrationPost(t, client, ctx)
+	})
+
+	t.Run("PUT", func(t *testing.T) {
+		testTLSHttpsClientIntegrationPut(t, client, ctx)
+	})
+
+	t.Run("DELETE", func(t *testing.T) {
+		testTLSHttpsClientIntegrationDelete(t, client, ctx)
+	})
+}
+
+func testTLSHttpsClientIntegrationSetup(t *testing.T) (*server.NetClient, context.Context) {
+	t.Helper()
 	certPEM, keyPEM := generateTestCert(t)
 
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
@@ -176,50 +198,53 @@ func TestHttpsClientIntegration_AllMethods(t *testing.T) {
 		Certificates: []tls.Certificate{cert},
 	}
 	ts.StartTLS()
-	defer ts.Close()
+	t.Cleanup(ts.Close)
 
-	client := server.NewTLSClient(ts.URL, server.WithInsecureTLS())
-	ctx := context.Background()
+	return server.NewTLSClient(ts.URL, server.WithInsecureTLS()), context.Background()
+}
 
-	t.Run("GET", func(t *testing.T) {
-		resp, err := client.Get(ctx, "/")
-		if err != nil {
-			t.Fatalf("Get() error = %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
-	})
+func testTLSHttpsClientIntegrationGet(t *testing.T, client *server.NetClient, ctx context.Context) {
+	t.Helper()
+	resp, err := client.Get(ctx, "/")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
 
-	t.Run("POST", func(t *testing.T) {
-		resp, err := client.Post(ctx, "/", map[string]string{"key": "value"})
-		if err != nil {
-			t.Fatalf("Post() error = %v", err)
-		}
-		if resp.StatusCode != http.StatusCreated {
-			t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusCreated)
-		}
-	})
+func testTLSHttpsClientIntegrationPost(t *testing.T, client *server.NetClient, ctx context.Context) {
+	t.Helper()
+	resp, err := client.Post(ctx, "/", map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatalf("Post() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}
 
-	t.Run("PUT", func(t *testing.T) {
-		resp, err := client.Put(ctx, "/", map[string]string{"key": "value"})
-		if err != nil {
-			t.Fatalf("Put() error = %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
-	})
+func testTLSHttpsClientIntegrationPut(t *testing.T, client *server.NetClient, ctx context.Context) {
+	t.Helper()
+	resp, err := client.Put(ctx, "/", map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatalf("Put() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
 
-	t.Run("DELETE", func(t *testing.T) {
-		resp, err := client.Delete(ctx, "/")
-		if err != nil {
-			t.Fatalf("Delete() error = %v", err)
-		}
-		if resp.StatusCode != http.StatusNoContent {
-			t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusNoContent)
-		}
-	})
+func testTLSHttpsClientIntegrationDelete(t *testing.T, client *server.NetClient, ctx context.Context) {
+	t.Helper()
+	resp, err := client.Delete(ctx, "/")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
 }
 
 func TestLoadTLSConfig(t *testing.T) {

@@ -14,14 +14,14 @@ import (
 func TestBoot_Stop_DuringInit(t *testing.T) {
 	t.Parallel()
 
-	s := newMockStarter("test")
+	starter := newMockStarter("test")
 	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {
 		t.Fatalf("NewApplication() error = %v", err)
 	}
 
 	// 手动设置 starter 绕过 Start() 完整流程
-	boot.starters = []Starter{s}
+	boot.starters = []Starter{starter}
 
 	// 在 PhaseInit 时调用 Stop()
 	if err := boot.Stop(); err != nil {
@@ -29,7 +29,7 @@ func TestBoot_Stop_DuringInit(t *testing.T) {
 	}
 
 	// Stop() 不应调用 starter.Stop()，因为 starter 尚未启动
-	if s.stopped.Load() {
+	if starter.stopped.Load() {
 		t.Error("starter.Stop() was called but starter was never started")
 	}
 	if boot.ctx.Lifecycle().GetPhase() != lifecycle.PhaseStopped {
@@ -40,12 +40,12 @@ func TestBoot_Stop_DuringInit(t *testing.T) {
 func TestBoot_Stop_DuringRunning(t *testing.T) {
 	t.Parallel()
 
-	s := newMockStarter("test")
+	starter := newMockStarter("test")
 	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {
 		t.Fatalf("NewApplication() error = %v", err)
 	}
-	boot.starters = []Starter{s}
+	boot.starters = []Starter{starter}
 
 	// 模拟已运行状态
 	if err := boot.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
@@ -57,7 +57,7 @@ func TestBoot_Stop_DuringRunning(t *testing.T) {
 	}
 
 	// PhaseRunning 时 starter 已启动，应调用 Stop
-	if !s.stopped.Load() {
+	if !starter.stopped.Load() {
 		t.Error("starter.Stop() should be called when phase was Running")
 	}
 }
@@ -114,13 +114,13 @@ func TestBoot_Stop_AlreadyStopped(t *testing.T) {
 }
 
 func TestBoot_Stop_OnlyStopsStartedStarters(t *testing.T) {
-	s := newMockStarter("test")
+	starter := newMockStarter("test")
 	// 通过全局注册表注册，Start() 会从全局注册表加载
 	orig := globalStarterRegistry.Load()
 	testReg := newStarterRegistryImpl()
 	globalStarterRegistry.Store(testReg)
 	t.Cleanup(func() { globalStarterRegistry.Store(orig) })
-	testReg.Register(s)
+	testReg.Register(starter)
 
 	boot, err := NewApplication(WithAppName("test"))
 	if err != nil {
@@ -131,14 +131,14 @@ func TestBoot_Stop_OnlyStopsStartedStarters(t *testing.T) {
 	if err := boot.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	if !s.started.Load() {
+	if !starter.started.Load() {
 		t.Fatal("starter should be started after Start()")
 	}
 
 	if err := boot.Stop(); err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
-	if !s.stopped.Load() {
+	if !starter.stopped.Load() {
 		t.Error("starter.Stop() should be called after proper start")
 	}
 }

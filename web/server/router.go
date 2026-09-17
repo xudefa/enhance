@@ -99,53 +99,13 @@ func (r *DefaultRouter) Use(middleware core.MiddlewareFunc) {
 // ServeHTTP 实现 http.Handler 接口
 func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 查找匹配的路由
-	path := req.URL.Path
-	matchPath := path
-	if r.prefix != "" {
-		// 校验请求路径确实以路由前缀开头
-		if !strings.HasPrefix(path, r.prefix) {
-			http.NotFound(w, req)
-			return
-		}
-		// 前缀必须落在路径分段边界上：/api 不能匹配 /apix
-		if len(path) > len(r.prefix) && path[len(r.prefix)] != '/' {
-			http.NotFound(w, req)
-			return
-		}
-		path = strings.TrimPrefix(path, r.prefix)
-		if path == "" {
-			path = "/"
-		}
-		matchPath = r.prefix + path
+	matchPath := r.resolveMatchPath(req.URL.Path)
+	if matchPath == "" {
+		http.NotFound(w, req)
+		return
 	}
 
-	// 构建完整路径用于查找（路由模式使用完整前缀+路径编译）
-	// RFC 7231 §4.3.2：无显式 HEAD 路由时，HEAD 请求由 GET 路由处理
-	method := req.Method
-	key := method + " " + matchPath
-
-	// 使用读锁保护 handlers 和 routeMiddleware 的读取
-	r.mu.RLock()
-	var params map[string]string
-	var patternKey string
-	handler, ok := r.handlers[key]
-	if !ok {
-		// HEAD 请求回退到 GET 路由
-		if method == http.MethodHead {
-			method = http.MethodGet
-			key = method + " " + matchPath
-			handler, ok = r.handlers[key]
-		}
-	}
-	if !ok {
-		handler, params, ok, patternKey = r.findHandlerWithParamsLocked(method, matchPath)
-	}
-	if patternKey != "" {
-		key = patternKey
-	}
-	middlewaresCopy := r.routeMiddleware[key]
-	r.mu.RUnlock()
-
+	handler, params, middlewaresCopy, _, ok := r.resolveRoute(req.Method, matchPath)
 	if !ok {
 		http.NotFound(w, req)
 		return
@@ -162,6 +122,54 @@ func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 执行中间件链和处理器
 	ctx.WithMiddleware(middlewaresCopy, handler)
 	ctx.Next()
+}
+
+// resolveMatchPath 处理路由前缀，返回去前缀后的完整匹配路径；前缀校验失败返回空字符串。
+func (r *DefaultRouter) resolveMatchPath(path string) string {
+	matchPath := path
+	if r.prefix == "" {
+		return matchPath
+	}
+
+	// 校验请求路径确实以路由前缀开头
+	if !strings.HasPrefix(path, r.prefix) {
+		return ""
+	}
+	// 前缀必须落在路径分段边界上：/api 不能匹配 /apix
+	if len(path) > len(r.prefix) && path[len(r.prefix)] != '/' {
+		return ""
+	}
+	path = strings.TrimPrefix(path, r.prefix)
+	if path == "" {
+		path = "/"
+	}
+	return r.prefix + path
+}
+
+// resolveRoute 在读锁内查找路由处理器及其路径参数与中间件。
+func (r *DefaultRouter) resolveRoute(method, matchPath string) (handler core.HandlerFunc, params map[string]string, middlewares []core.MiddlewareFunc, patternKey string, ok bool) {
+	key := method + " " + matchPath
+	effectiveMethod := method
+
+	// 使用读锁保护 handlers 和 routeMiddleware 的读取
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	handler, ok = r.handlers[key]
+	if !ok && method == http.MethodHead {
+		// HEAD 请求回退到 GET 路由
+		effectiveMethod = http.MethodGet
+		key = effectiveMethod + " " + matchPath
+		handler, ok = r.handlers[key]
+	}
+	if !ok {
+		handler, params, ok, patternKey = r.findHandlerWithParamsLocked(effectiveMethod, matchPath)
+	}
+	if patternKey != "" {
+		key = patternKey
+	}
+	middlewares = r.routeMiddleware[key]
+	return
 }
 
 // handle 注册路由

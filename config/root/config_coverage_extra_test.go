@@ -20,9 +20,9 @@ func TestConfig_GetProperty_NonString_Coverage(t *testing.T) {
 	cfg := NewConfig(env)
 
 	// 非字符串值应该返回空字符串
-	result := cfg.GetProperty("app.port")
-	if result != "" {
-		t.Errorf("GetProperty() for non-string = %v, want empty string", result)
+	got := cfg.GetProperty("app.port")
+	if got != "" {
+		t.Errorf("GetProperty() for non-string = %v, want empty string", got)
 	}
 }
 
@@ -33,9 +33,9 @@ func TestConfig_GetProperty_Missing_Coverage(t *testing.T) {
 	env := environment.NewEnvironment()
 	cfg := NewConfig(env)
 
-	result := cfg.GetProperty("missing.key")
-	if result != "" {
-		t.Errorf("GetProperty() for missing key = %v, want empty string", result)
+	got := cfg.GetProperty("missing.key")
+	if got != "" {
+		t.Errorf("GetProperty() for missing key = %v, want empty string", got)
 	}
 }
 
@@ -66,9 +66,9 @@ func TestConfig_GetPropertyWithDefault_Existing_Coverage(t *testing.T) {
 	})
 	cfg := NewConfig(env)
 
-	result := cfg.GetPropertyWithDefault("app.name", "default")
-	if result != "my-app" {
-		t.Errorf("GetPropertyWithDefault() = %v, want my-app", result)
+	got := cfg.GetPropertyWithDefault("app.name", "default")
+	if got != "my-app" {
+		t.Errorf("GetPropertyWithDefault() = %v, want my-app", got)
 	}
 }
 

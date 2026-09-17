@@ -48,11 +48,11 @@ func ExampleExceptionHandlingMiddleware() {
 	wrappedHandler := middleware(httpHandler)
 
 	req := httptest.NewRequest("GET", "/panic", nil)
-	w := httptest.NewRecorder()
+	recorder := httptest.NewRecorder()
 
-	wrappedHandler.ServeHTTP(w, req)
+	wrappedHandler.ServeHTTP(recorder, req)
 
-	fmt.Printf("Status: %d\n", w.Code)
+	fmt.Printf("Status: %d\n", recorder.Code)
 
 }
 

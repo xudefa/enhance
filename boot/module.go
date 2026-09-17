@@ -81,7 +81,7 @@ func ProvideReflect(constructor any) BeanProvider {
 					paramType := typ.In(i)
 					instances, err := c.Get(paramType)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("注入构造参数失败: %w", err)
 					}
 					if len(instances) == 0 {
 						return nil, core.ErrBeanNotFound
@@ -132,7 +132,7 @@ func Invoke(fn any) BeanProvider {
 			paramType := fnType.In(i)
 			instances, err := c.Get(paramType)
 			if err != nil {
-				return err
+				return fmt.Errorf("注入调用参数失败: %w", err)
 			}
 			if len(instances) == 0 {
 				return core.ErrBeanNotFound
@@ -287,24 +287,24 @@ func NamedModule(name string, mod Module) Module {
 //
 //	var AppModule = boot.MergeModules(DatabaseModule, WebModule, CacheModule)
 func MergeModules(modules ...Module) Module {
-	result := Module{}
+	merged := Module{}
 	for _, mod := range modules {
-		result.beans = append(result.beans, mod.beans...)
-		result.starters = append(result.starters, mod.starters...)
-		result.conditions = append(result.conditions, mod.conditions...)
+		merged.beans = append(merged.beans, mod.beans...)
+		merged.starters = append(merged.starters, mod.starters...)
+		merged.conditions = append(merged.conditions, mod.conditions...)
 		if mod.moduleName != "" {
-			if result.moduleName == "" {
-				result.moduleName = mod.moduleName
+			if merged.moduleName == "" {
+				merged.moduleName = mod.moduleName
 				continue
 			}
 			var sb strings.Builder
-			sb.WriteString(result.moduleName)
+			sb.WriteString(merged.moduleName)
 			sb.WriteString("+")
 			sb.WriteString(mod.moduleName)
-			result.moduleName = sb.String()
+			merged.moduleName = sb.String()
 		}
 	}
-	return result
+	return merged
 }
 
 // ModuleName 返回模块名称
@@ -363,11 +363,11 @@ type ApplicationOption = BootOption
 func WithModulesOption(modules ...any) BootOption {
 	return func(cfg *BootConfig) {
 		for _, mod := range modules {
-			switch m := mod.(type) {
+			switch typedModule := mod.(type) {
 			case Module:
-				cfg.Modules = append(cfg.Modules, m)
+				cfg.Modules = append(cfg.Modules, typedModule)
 			case *ModuleBuilder:
-				cfg.Modules = append(cfg.Modules, m.Build())
+				cfg.Modules = append(cfg.Modules, typedModule.Build())
 			}
 		}
 	}
@@ -386,11 +386,11 @@ func WithModulesOption(modules ...any) BootOption {
 func WithModules(modules ...any) BootOption {
 	return func(cfg *BootConfig) {
 		for _, mod := range modules {
-			switch m := mod.(type) {
+			switch typedModule := mod.(type) {
 			case Module:
-				cfg.Modules = append(cfg.Modules, m)
+				cfg.Modules = append(cfg.Modules, typedModule)
 			case *ModuleBuilder:
-				cfg.Modules = append(cfg.Modules, m.Build())
+				cfg.Modules = append(cfg.Modules, typedModule.Build())
 			}
 		}
 	}

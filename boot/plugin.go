@@ -66,6 +66,7 @@ const (
 	PluginStateError
 )
 
+// String 返回插件状态的字符串表示。
 func (s PluginState) String() string {
 	switch s {
 	case PluginStateRegistered:
@@ -157,22 +158,22 @@ func (pm *PluginManager) InitAll() error {
 
 	ordered, err := pm.resolveDependencies()
 	if err != nil {
-		return fmt.Errorf("plugin dependency resolution failed: %w", err)
+		return fmt.Errorf("解析插件依赖关系失败: %w", err)
 	}
 
 	for _, name := range ordered {
 		plugin := pm.plugins[name]
-		info := pm.infos[name]
+		pluginInfo := pm.infos[name]
 
-		if info.State != PluginStateRegistered {
+		if pluginInfo.State != PluginStateRegistered {
 			continue
 		}
 
 		if err := plugin.Init(pm.ctx); err != nil {
-			info.State = PluginStateError
+			pluginInfo.State = PluginStateError
 			return fmt.Errorf("plugin %q init failed: %w", name, err)
 		}
-		info.State = PluginStateInitialized
+		pluginInfo.State = PluginStateInitialized
 	}
 	return nil
 }
@@ -184,22 +185,22 @@ func (pm *PluginManager) StartAll() error {
 
 	ordered, err := pm.resolveDependencies()
 	if err != nil {
-		return fmt.Errorf("plugin dependency resolution failed: %w", err)
+		return fmt.Errorf("解析插件依赖关系失败: %w", err)
 	}
 
 	for _, name := range ordered {
 		plugin := pm.plugins[name]
-		info := pm.infos[name]
+		pluginInfo := pm.infos[name]
 
-		if info.State != PluginStateInitialized {
+		if pluginInfo.State != PluginStateInitialized {
 			continue
 		}
 
 		if err := plugin.Start(pm.ctx); err != nil {
-			info.State = PluginStateError
+			pluginInfo.State = PluginStateError
 			return fmt.Errorf("plugin %q start failed: %w", name, err)
 		}
-		info.State = PluginStateStarted
+		pluginInfo.State = PluginStateStarted
 	}
 	return nil
 }
@@ -211,24 +212,24 @@ func (pm *PluginManager) StopAll() error {
 
 	ordered, err := pm.resolveDependencies()
 	if err != nil {
-		return err
+		return fmt.Errorf("解析插件依赖关系失败: %w", err)
 	}
 
 	// 逆序停止
 	for i := len(ordered) - 1; i >= 0; i-- {
 		name := ordered[i]
 		plugin := pm.plugins[name]
-		info := pm.infos[name]
+		pluginInfo := pm.infos[name]
 
-		if info.State != PluginStateStarted {
+		if pluginInfo.State != PluginStateStarted {
 			continue
 		}
 
 		if err := plugin.Stop(pm.ctx); err != nil {
-			info.State = PluginStateError
+			pluginInfo.State = PluginStateError
 			return fmt.Errorf("plugin %q stop failed: %w", name, err)
 		}
-		info.State = PluginStateStopped
+		pluginInfo.State = PluginStateStopped
 	}
 	return nil
 }
@@ -260,11 +261,11 @@ func (pm *PluginManager) resolveDependencies() ([]string, error) {
 		}
 	}
 
-	result := make([]string, 0)
+	ordered := make([]string, 0)
 	for len(queue) > 0 {
 		node := queue[0]
 		queue = queue[1:]
-		result = append(result, node)
+		ordered = append(ordered, node)
 
 		for _, neighbor := range graph[node] {
 			inDegree[neighbor]--
@@ -274,11 +275,11 @@ func (pm *PluginManager) resolveDependencies() ([]string, error) {
 		}
 	}
 
-	if len(result) != len(pm.plugins) {
+	if len(ordered) != len(pm.plugins) {
 		return nil, fmt.Errorf("circular dependency detected among plugins")
 	}
 
-	return result, nil
+	return ordered, nil
 }
 
 // globalPluginManager 全局插件管理器

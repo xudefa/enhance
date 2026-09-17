@@ -27,14 +27,14 @@ func TestCompileRegex_Invalid(t *testing.T) {
 
 func TestAcquireValidationErrors(t *testing.T) {
 	t.Parallel()
-	p := acquireValidationErrors()
-	if p == nil {
+	errSlice := acquireValidationErrors()
+	if errSlice == nil {
 		t.Fatal("expected non-nil pool")
 	}
-	if len(*p) != 0 {
-		t.Errorf("expected empty slice, got length %d", len(*p))
+	if len(*errSlice) != 0 {
+		t.Errorf("expected empty slice, got length %d", len(*errSlice))
 	}
-	releaseValidationErrors(p)
+	releaseValidationErrors(errSlice)
 }
 
 func TestAcquireAndReleaseValidationErrors(t *testing.T) {

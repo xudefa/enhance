@@ -88,8 +88,8 @@ func TestRegexpValidationInvalidPattern(t *testing.T) {
 
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
-				t.Fatalf("无效正则表达式不应触发 panic，got: %v", r)
+			if rec := recover(); rec != nil {
+				t.Fatalf("无效正则表达式不应触发 panic，got: %v", rec)
 			}
 		}()
 		err := validator.Validate(TestStruct{Code: "x"})

@@ -6,6 +6,54 @@ import (
 	"testing"
 )
 
+func testAssertJSONPropertySource(t *testing.T, source *JSONPropertySource) {
+	t.Helper()
+	if source.Name() != "test" {
+		t.Errorf("Expected name 'test', got '%s'", source.Name())
+	}
+
+	if source.Priority() != PriorityLowest {
+		t.Errorf("Expected priority PriorityLowest, got %v", source.Priority())
+	}
+
+	// 测试获取属性
+	prop, ok := source.GetProperty("server.host")
+	if !ok {
+		t.Error("Expected to find 'server.host'")
+	}
+	if prop != "localhost" {
+		t.Errorf("Expected 'localhost', got '%v'", prop)
+	}
+
+	prop, ok = source.GetProperty("server.port")
+	if !ok {
+		t.Error("Expected to find 'server.port'")
+	}
+	if prop != float64(8080) {
+		t.Errorf("Expected 8080, got '%v'", prop)
+	}
+
+	// 测试不存在的键
+	_, ok = source.GetProperty("nonexistent.key")
+	if ok {
+		t.Error("Expected not to find 'nonexistent.key'")
+	}
+
+	// 测试 Contains
+	if !source.Contains("app.name") {
+		t.Error("Expected Contains('app.name') to return true")
+	}
+	if source.Contains("nonexistent") {
+		t.Error("Expected Contains('nonexistent') to return false")
+	}
+
+	// 测试 Keys
+	keys := source.Keys()
+	if len(keys) != 4 {
+		t.Errorf("Expected 4 keys, got %d", len(keys))
+	}
+}
+
 func TestNewJSONPropertySource(t *testing.T) {
 	t.Parallel()
 	// 创建临时测试文件
@@ -33,50 +81,7 @@ func TestNewJSONPropertySource(t *testing.T) {
 		t.Fatalf("Failed to create JSONPropertySource: %v", err)
 	}
 
-	if source.Name() != "test" {
-		t.Errorf("Expected name 'test', got '%s'", source.Name())
-	}
-
-	if source.Priority() != PriorityLowest {
-		t.Errorf("Expected priority PriorityLowest, got %v", source.Priority())
-	}
-
-	// 测试获取属性
-	val, ok := source.GetProperty("server.host")
-	if !ok {
-		t.Error("Expected to find 'server.host'")
-	}
-	if val != "localhost" {
-		t.Errorf("Expected 'localhost', got '%v'", val)
-	}
-
-	val, ok = source.GetProperty("server.port")
-	if !ok {
-		t.Error("Expected to find 'server.port'")
-	}
-	if val != float64(8080) {
-		t.Errorf("Expected 8080, got '%v'", val)
-	}
-
-	// 测试不存在的键
-	_, ok = source.GetProperty("nonexistent.key")
-	if ok {
-		t.Error("Expected not to find 'nonexistent.key'")
-	}
-
-	// 测试 Contains
-	if !source.Contains("app.name") {
-		t.Error("Expected Contains('app.name') to return true")
-	}
-	if source.Contains("nonexistent") {
-		t.Error("Expected Contains('nonexistent') to return false")
-	}
-
-	// 测试 Keys
-	keys := source.Keys()
-	if len(keys) != 4 {
-		t.Errorf("Expected 4 keys, got %d", len(keys))
-	}
+	testAssertJSONPropertySource(t, source)
 }
 
 func TestNewJSONPropertySourceOrDefault(t *testing.T) {
@@ -117,12 +122,12 @@ func TestJSONPropertySourceNestedKeys(t *testing.T) {
 		t.Fatalf("Failed to create JSONPropertySource: %v", err)
 	}
 
-	val, ok := source.GetProperty("level1.level2.level3.value")
+	prop, ok := source.GetProperty("level1.level2.level3.value")
 	if !ok {
 		t.Error("Expected to find deep nested key")
 	}
-	if val != "deep" {
-		t.Errorf("Expected 'deep', got '%v'", val)
+	if prop != "deep" {
+		t.Errorf("Expected 'deep', got '%v'", prop)
 	}
 }
 
@@ -194,7 +199,7 @@ func TestFindApplicationConfigFile(t *testing.T) {
 
 func TestFlattenKeys(t *testing.T) {
 	t.Parallel()
-	data := map[string]any{
+	input := map[string]any{
 		"simple": "value",
 		"nested": map[string]any{
 			"key1": "val1",
@@ -207,7 +212,7 @@ func TestFlattenKeys(t *testing.T) {
 		},
 	}
 
-	keys := flattenKeys(data, "")
+	keys := flattenKeys(input, "")
 
 	expectedKeys := []string{"simple", "nested.key1", "nested.key2", "deep.level.final"}
 	if len(keys) != len(expectedKeys) {

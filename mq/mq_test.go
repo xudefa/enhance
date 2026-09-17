@@ -49,10 +49,10 @@ func BenchmarkMessageQueueFactory_ListQueues(b *testing.B) {
 func BenchmarkMessageQueueFactory_ConcurrentCreate(b *testing.B) {
 	factory := NewMessageQueueFactory()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-			i++
+			factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", seq))
+			seq++
 		}
 	})
 }
@@ -63,10 +63,10 @@ func BenchmarkMessageQueueFactory_ConcurrentGet(b *testing.B) {
 		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
 	}
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", i%100))
-			i++
+			_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", seq%100))
+			seq++
 		}
 	})
 }
@@ -79,18 +79,18 @@ func BenchmarkMessageQueueFactory_ConcurrentMixed(b *testing.B) {
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			op := i % 3
+			op := seq % 3
 			switch op {
 			case 0:
-				factory.CreateInMemoryQueue(fmt.Sprintf("queue-new-%d", i))
+				factory.CreateInMemoryQueue(fmt.Sprintf("queue-new-%d", seq))
 			case 1:
-				_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", i%50))
+				_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", seq%50))
 			case 2:
 				_ = factory.ListQueues()
 			}
-			i++
+			seq++
 		}
 	})
 }
@@ -108,12 +108,12 @@ func TestMessageQueueFactory_ConcurrentCreateGet(t *testing.T) {
 			for i := 0; i < 100; i++ {
 				queueName := fmt.Sprintf("queue-%d-%d", gid, i)
 				factory.CreateInMemoryQueue(queueName)
-				q, err := factory.GetQueue(queueName)
+				queue, err := factory.GetQueue(queueName)
 				if err != nil {
 					t.Errorf("failed to get queue %s: %v", queueName, err)
 				}
-				if q.Name() != queueName {
-					t.Errorf("expected queue name %s, got %s", queueName, q.Name())
+				if queue.Name() != queueName {
+					t.Errorf("expected queue name %s, got %s", queueName, queue.Name())
 				}
 			}
 		}(g)

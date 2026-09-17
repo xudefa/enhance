@@ -113,8 +113,8 @@ func (m *refreshManager) collectChangedKeys() []string {
 		if ks, ok := source.(keyEnumerator); ok {
 			for _, key := range ks.Keys() {
 				if _, exists := snapshot[key]; !exists {
-					if val, ok := m.env.GetProperty(key); ok {
-						snapshot[key] = val
+					if currentVal, ok := m.env.GetProperty(key); ok {
+						snapshot[key] = currentVal
 						changed = append(changed, key)
 					}
 				}
@@ -137,8 +137,8 @@ func (m *refreshManager) initSnapshotLocked() {
 	for _, source := range m.env.GetPropertySources() {
 		if ks, ok := source.(keyEnumerator); ok {
 			for _, key := range ks.Keys() {
-				if val, ok := m.env.GetProperty(key); ok {
-					m.lastSnapshot[key] = val
+				if propertyVal, ok := m.env.GetProperty(key); ok {
+					m.lastSnapshot[key] = propertyVal
 				}
 			}
 		}

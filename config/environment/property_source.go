@@ -27,8 +27,8 @@ func (m *MapPropertySource) Name() string {
 
 // GetProperty 从 MapPropertySource 中获取指定键的值。
 func (m *MapPropertySource) GetProperty(key string) (any, bool) {
-	val, ok := m.data[key]
-	return val, ok
+	propertyVal, ok := m.data[key]
+	return propertyVal, ok
 }
 
 // Priority 返回 MapPropertySource 的优先级。
@@ -83,11 +83,11 @@ func (e *EnvPropertySource) GetProperty(key string) (any, bool) {
 	if e.prefix != "" {
 		envKey = e.prefix + "_" + envKey
 	}
-	val, ok := lookupEnv(envKey)
+	envVal, ok := lookupEnv(envKey)
 	if !ok {
 		return nil, false
 	}
-	return val, true
+	return envVal, true
 }
 
 // lookupEnv 可被测试替换
@@ -97,16 +97,16 @@ var lookupEnv = os.LookupEnv
 //
 // 支持的格式：--key=value
 func NewArgsPropertySource(name string, args []string) *ArgsPropertySource {
-	data := make(map[string]string)
+	argsMap := make(map[string]string)
 	for _, arg := range args {
 		if len(arg) > 2 && arg[:2] == "--" {
 			kv := arg[2:]
-			if key, val, found := strings.Cut(kv, "="); found && key != "" {
-				data[key] = val
+			if key, value, found := strings.Cut(kv, "="); found && key != "" {
+				argsMap[key] = value
 			}
 		}
 	}
-	return &ArgsPropertySource{name: name, args: data, priority: PriorityHighest}
+	return &ArgsPropertySource{name: name, args: argsMap, priority: PriorityHighest}
 }
 
 // Name 返回 ArgsPropertySource 的名称。
@@ -127,23 +127,23 @@ func (a *ArgsPropertySource) Contains(key string) bool {
 
 // GetProperty 从命令行参数配置源中获取指定键的值。
 func (a *ArgsPropertySource) GetProperty(key string) (any, bool) {
-	val, ok := a.args[key]
-	return val, ok
+	argVal, ok := a.args[key]
+	return argVal, ok
 }
 
 // toEnvKey 将 "server.port" 转换为 "SERVER_PORT"
 func toEnvKey(key string) string {
-	result := make([]byte, 0, len(key))
+	transformed := make([]byte, 0, len(key))
 	for i := 0; i < len(key); i++ {
 		c := key[i]
 		if c == '.' || c == '-' {
-			result = append(result, '_')
+			transformed = append(transformed, '_')
 			continue
 		}
 		if c >= 'a' && c <= 'z' {
 			c = c - 'a' + 'A'
 		}
-		result = append(result, c)
+		transformed = append(transformed, c)
 	}
-	return string(result)
+	return string(transformed)
 }

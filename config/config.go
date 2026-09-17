@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"sync"
@@ -74,11 +75,11 @@ func (c *memoryConfig) GetBool(key string) bool {
 func (c *memoryConfig) GetAll() map[string]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	result := make(map[string]any, len(c.data))
+	all := make(map[string]any, len(c.data))
 	for k, v := range c.data {
-		result[k] = v
+		all[k] = v
 	}
-	return result
+	return all
 }
 
 // Set 设置配置值
@@ -108,19 +109,19 @@ func (c *memoryConfig) Set(key string, value any) {
 
 // Load 从文件加载配置
 func (c *memoryConfig) Load(path string) error {
-	data, err := os.ReadFile(path)
+	fileData, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("读取配置文件 %s 失败: %w", path, err)
 	}
 
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
+	var decoded map[string]any
+	if err := json.Unmarshal(fileData, &decoded); err != nil {
+		return fmt.Errorf("解析配置文件 %s 失败: %w", path, err)
 	}
 
 	// 原子替换整个 map，读者不会看到中间状态
 	c.mu.Lock()
-	c.data = m
+	c.data = decoded
 	c.mu.Unlock()
 
 	return nil
@@ -128,14 +129,17 @@ func (c *memoryConfig) Load(path string) error {
 
 // Save 保存配置到文件
 func (c *memoryConfig) Save(path string) error {
-	data := c.GetAll()
+	snapshot := c.GetAll()
 
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	jsonData, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("序列化配置失败: %w", err)
 	}
 
-	return os.WriteFile(path, jsonData, 0644)
+	if err := os.WriteFile(path, jsonData, 0o644); err != nil {
+		return fmt.Errorf("写入配置文件失败: %w", err)
+	}
+	return nil
 }
 
 // Watch 注册配置变更监听器。

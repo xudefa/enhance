@@ -111,70 +111,35 @@ func (s *ActuatorHttpStarter) Stop(ctx boot.ApplicationContext) error {
 
 // buildEndpointConfigs 构建端点配置列表
 func (s *ActuatorHttpStarter) buildEndpointConfigs(env *environment.Environment) []EndpointConfig {
-	exposeHealth := env.GetBool("actuator.expose.health", true)
-	exposeMetrics := env.GetBool("actuator.expose.metrics", true)
-	exposeEnv := env.GetBool("actuator.expose.env", true)
-	exposeBeans := env.GetBool("actuator.expose.beans", true)
-	exposeInfo := env.GetBool("actuator.expose.info", true)
-	exposePrometheus := env.GetBool("actuator.expose.prometheus", true)
-
 	endpoints := make([]EndpointConfig, 0, 6)
 
-	if exposeHealth {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        JoinPath(s.basePath, "/health"),
-			Handler:     http.HandlerFunc(s.actuator.HealthHandler),
-			Description: "Health Check",
-		})
-	}
-
-	if exposeMetrics {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        JoinPath(s.basePath, "/metrics"),
-			Handler:     http.HandlerFunc(s.actuator.MetricsHandler),
-			Description: "Application Metrics",
-		})
-	}
-
-	if exposeEnv {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        JoinPath(s.basePath, "/env"),
-			Handler:     http.HandlerFunc(s.actuator.EnvHandler),
-			Description: "Environment Information",
-		})
-	}
-
-	if exposeBeans {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        JoinPath(s.basePath, "/beans"),
-			Handler:     http.HandlerFunc(s.actuator.BeansHandler),
-			Description: "Spring Beans",
-		})
-	}
-
-	if exposeInfo {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        JoinPath(s.basePath, "/info"),
-			Handler:     http.HandlerFunc(s.actuator.InfoHandler),
-			Description: "Application Info",
-		})
-	}
-
-	if exposePrometheus {
-		endpoints = append(endpoints, EndpointConfig{
-			Method:      http.MethodGet,
-			Path:        "/metrics",
-			Handler:     http.HandlerFunc(s.actuator.PrometheusHandler),
-			Description: "Prometheus Metrics",
-		})
-	}
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.health", true), endpoints,
+		http.MethodGet, JoinPath(s.basePath, "/health"), "Health Check", http.HandlerFunc(s.actuator.HealthHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.metrics", true), endpoints,
+		http.MethodGet, JoinPath(s.basePath, "/metrics"), "Application Metrics", http.HandlerFunc(s.actuator.MetricsHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.env", true), endpoints,
+		http.MethodGet, JoinPath(s.basePath, "/env"), "Environment Information", http.HandlerFunc(s.actuator.EnvHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.beans", true), endpoints,
+		http.MethodGet, JoinPath(s.basePath, "/beans"), "Spring Beans", http.HandlerFunc(s.actuator.BeansHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.info", true), endpoints,
+		http.MethodGet, JoinPath(s.basePath, "/info"), "Application Info", http.HandlerFunc(s.actuator.InfoHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.prometheus", true), endpoints,
+		http.MethodGet, "/metrics", "Prometheus Metrics", http.HandlerFunc(s.actuator.PrometheusHandler))
 
 	return endpoints
+}
+
+// appendEndpointIf 按开关追加端点配置。
+func (s *ActuatorHttpStarter) appendEndpointIf(enabled bool, endpoints []EndpointConfig, method, path, description string, handler http.Handler) []EndpointConfig {
+	if !enabled {
+		return endpoints
+	}
+	return append(endpoints, EndpointConfig{
+		Method:      method,
+		Path:        path,
+		Handler:     handler,
+		Description: description,
+	})
 }
 
 // registerViaEndpointRegistry 通过 HttpEndpointRegistry 接口注册端点
@@ -269,8 +234,8 @@ func (s *ActuatorHttpStarter) startStandaloneServer(env *environment.Environment
 
 	go func() {
 		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[Actuator] Panic in standalone server handler: %v\n", r)
+			if panicValue := recover(); panicValue != nil {
+				fmt.Printf("[Actuator] Panic in standalone server handler: %v\n", panicValue)
 			}
 		}()
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

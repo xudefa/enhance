@@ -35,15 +35,15 @@ func OnPropertyOrDefault(key string, defaultValue string, expectedValue ...strin
 // Matches 实现 Condition 接口
 func (p *propertyOrDefaultCondition) Matches(ctx ConditionContext) bool {
 	env := ctx.Environment()
-	val, ok := env.GetProperty(p.key)
+	propValue, ok := env.GetProperty(p.key)
 	if !ok {
 		// 配置键不存在，使用默认值
-		val = p.defaultValue
+		propValue = p.defaultValue
 	}
 	if len(p.expectedValue) == 0 {
-		return val != nil && val != ""
+		return propValue != nil && propValue != ""
 	}
-	return valAsString(val) == p.expectedValue[0]
+	return valAsString(propValue) == p.expectedValue[0]
 }
 
 // String 返回条件的字符串表示

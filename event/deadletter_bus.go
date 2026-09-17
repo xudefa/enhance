@@ -142,12 +142,12 @@ func (b *EventBusWithDeadLetter) publishWithRecoveryInternal(event ApplicationEv
 	go func() {
 		defer b.wg.Done()
 		defer func() {
-			if r := recover(); r != nil {
-				if err, ok := r.(error); ok {
+			if rec := recover(); rec != nil {
+				if err, ok := rec.(error); ok {
 					resultCh <- publishResult{err: err}
 					return
 				}
-				resultCh <- publishResult{err: fmt.Errorf("event handler panic: %v", r)}
+				resultCh <- publishResult{err: fmt.Errorf("event handler panic: %v", rec)}
 				return
 			}
 			resultCh <- publishResult{}
@@ -157,13 +157,13 @@ func (b *EventBusWithDeadLetter) publishWithRecoveryInternal(event ApplicationEv
 	}()
 
 	// 带超时等待结果，防止监听器死锁或无限阻塞导致 goroutine 泄漏
-	var result publishResult
+	var outcome publishResult
 	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
 	select {
-	case result = <-resultCh:
+	case outcome = <-resultCh:
 	case <-timer.C:
-		result = publishResult{err: fmt.Errorf("event handler timeout after 30s")}
+		outcome = publishResult{err: fmt.Errorf("event handler timeout after 30s")}
 	case <-b.ctx.Done():
 		b.mu.Lock()
 		delete(b.retrying, key)
@@ -175,37 +175,19 @@ func (b *EventBusWithDeadLetter) publishWithRecoveryInternal(event ApplicationEv
 	delete(b.retrying, key)
 	b.mu.Unlock()
 
-	if result.err != nil {
-		b.handleFailure(event, result.err, attempt, key)
+	if outcome.err != nil {
+		b.handleFailure(event, outcome.err, attempt, key)
 	}
 }
 
 func (b *EventBusWithDeadLetter) handleFailure(event ApplicationEvent, err error, attempt int, key string) {
 	fe := FailedEvent{
-		Event:        event,
-		Err:          err,
-		RetryCount:   attempt,
-		MaxRetries:   b.retryPolicy.MaxRetries,
-		LastFailedAt: time.Now(),
-	}
-
-	// 首次失败时记录 FirstFailedAt
-	if attempt == 0 {
-		fe.FirstFailedAt = time.Now()
-	} else {
-		// 从死信队列中查找原始事件的首次失败时间
-		b.dlq.events.Range(func(k, value any) bool {
-			existing, ok := value.(FailedEvent)
-			if ok && existing.Event != nil && existing.Event.Type() == event.Type() && existing.Event.Timestamp().Equal(event.Timestamp()) {
-				fe.FirstFailedAt = existing.FirstFailedAt
-				return false
-			}
-			return true
-		})
-		// 如果未找到（理论上不应发生），使用当前时间
-		if fe.FirstFailedAt.IsZero() {
-			fe.FirstFailedAt = time.Now()
-		}
+		Event:         event,
+		Err:           err,
+		RetryCount:    attempt,
+		MaxRetries:    b.retryPolicy.MaxRetries,
+		LastFailedAt:  time.Now(),
+		FirstFailedAt: b.resolveFirstFailedAt(event, attempt),
 	}
 
 	if attempt < b.retryPolicy.MaxRetries {
@@ -216,24 +198,47 @@ func (b *EventBusWithDeadLetter) handleFailure(event ApplicationEvent, err error
 	b.dlq.Add(fe)
 
 	if attempt < b.retryPolicy.MaxRetries {
-		delay := time.Until(fe.NextRetryAt)
-
-		// 异步重试，使用 context 控制取消
-		b.wg.Add(1)
-		go func() {
-			defer b.wg.Done()
-			timer := time.NewTimer(delay)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				b.dlq.Remove(event)
-				b.publishWithRecoveryInternal(event, attempt+1, key)
-			case <-b.ctx.Done():
-				// 调度器已关闭，取消重试
-				return
-			}
-		}()
+		b.scheduleRetry(fe, attempt, key)
 	}
+}
+
+// resolveFirstFailedAt 获取首次失败时间：首次失败时返回当前时间，否则从死信队列查询。
+func (b *EventBusWithDeadLetter) resolveFirstFailedAt(event ApplicationEvent, attempt int) time.Time {
+	if attempt == 0 {
+		return time.Now()
+	}
+
+	var firstFailedAt time.Time
+	b.dlq.events.Range(func(k, value any) bool {
+		existing, ok := value.(FailedEvent)
+		if ok && existing.Event != nil && existing.Event.Type() == event.Type() && existing.Event.Timestamp().Equal(event.Timestamp()) {
+			firstFailedAt = existing.FirstFailedAt
+			return false
+		}
+		return true
+	})
+	if firstFailedAt.IsZero() {
+		return time.Now()
+	}
+	return firstFailedAt
+}
+
+// scheduleRetry 延迟异步重试失败事件。
+func (b *EventBusWithDeadLetter) scheduleRetry(fe FailedEvent, attempt int, key string) {
+	delay := time.Until(fe.NextRetryAt)
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			b.dlq.Remove(fe.Event)
+			b.publishWithRecoveryInternal(fe.Event, attempt+1, key)
+		case <-b.ctx.Done():
+			// 调度器已关闭，取消重试
+		}
+	}()
 }
 
 // Publish 覆盖原有 Publish 方法，使用带恢复的发布

@@ -347,9 +347,9 @@ func TestExtractHTTPMethod(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.methodName, func(t *testing.T) {
-			result := doc.extractHTTPMethod(reflect.Method{Name: tt.methodName})
-			if result != tt.expected {
-				t.Errorf("extractHTTPMethod(%q) = %q, expected %q", tt.methodName, result, tt.expected)
+			httpMethod := doc.extractHTTPMethod(reflect.Method{Name: tt.methodName})
+			if httpMethod != tt.expected {
+				t.Errorf("extractHTTPMethod(%q) = %q, expected %q", tt.methodName, httpMethod, tt.expected)
 			}
 		})
 	}
@@ -371,9 +371,9 @@ func TestExtractPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.methodName, func(t *testing.T) {
-			result := doc.extractPath(reflect.Method{Name: tt.methodName}, tt.basePath)
-			if result != tt.expected {
-				t.Errorf("extractPath(%q, %q) = %q, expected %q", tt.methodName, tt.basePath, result, tt.expected)
+			path := doc.extractPath(reflect.Method{Name: tt.methodName}, tt.basePath)
+			if path != tt.expected {
+				t.Errorf("extractPath(%q, %q) = %q, expected %q", tt.methodName, tt.basePath, path, tt.expected)
 			}
 		})
 	}
@@ -395,10 +395,10 @@ func TestExtractBasePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.typeName, func(t *testing.T) {
 			// 创建一个虚拟的类型
-			result := doc.extractBasePath(reflect.TypeOf(&UserController{}).Elem())
+			basePath := doc.extractBasePath(reflect.TypeOf(&UserController{}).Elem())
 			// 验证返回的路径以 / 开头
-			if !strings.HasPrefix(result, "/") {
-				t.Errorf("extractBasePath(%q) = %q, should start with /", tt.typeName, result)
+			if !strings.HasPrefix(basePath, "/") {
+				t.Errorf("extractBasePath(%q) = %q, should start with /", tt.typeName, basePath)
 			}
 		})
 	}

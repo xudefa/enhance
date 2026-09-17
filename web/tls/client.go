@@ -45,19 +45,19 @@ type ClientBuilder struct {
 //	)
 //	resp, err := client.Get(ctx, "/api/users")
 func NewClient(baseURL string, opts ...ClientOption) *server.NetClient {
-	b := &ClientBuilder{
+	builder := &ClientBuilder{
 		baseURL: baseURL,
 		timeout: server.DefaultTimeout,
 	}
 
 	for _, opt := range opts {
-		opt(b)
+		opt(builder)
 	}
 
-	transport := b.transport
+	transport := builder.transport
 	if transport == nil {
 		transport = &http.Transport{
-			TLSClientConfig: b.tlsConfig,
+			TLSClientConfig: builder.tlsConfig,
 			DialContext: (&goNet.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -67,16 +67,16 @@ func NewClient(baseURL string, opts ...ClientOption) *server.NetClient {
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		}
-	} else if b.tlsConfig != nil {
+	} else if builder.tlsConfig != nil {
 		// 自定义 Transport 需合并 TLS 配置，否则 server 会优先使用 transport 而忽略 tlsConfig
-		transport.TLSClientConfig = b.tlsConfig
+		transport.TLSClientConfig = builder.tlsConfig
 	}
 
 	tlsOpts := []server.TLSClientOption{
-		server.WithTLSRequestTimeout(b.timeout),
+		server.WithTLSRequestTimeout(builder.timeout),
 		server.WithTLSTransport(transport),
 	}
-	for k, v := range b.headers {
+	for k, v := range builder.headers {
 		tlsOpts = append(tlsOpts, server.WithTLSDefaultHeader(k, v))
 	}
 

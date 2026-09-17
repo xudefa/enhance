@@ -76,38 +76,41 @@ func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet ma
 			continue
 		}
 
-		fieldType := field.Type
-		if typeSet[fieldType] {
-			continue
-		}
-
-		if parent == nil {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		ext, ok := parent.(ContainerExt)
-		if !ok {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		parentTypes := ext.Types()
-		found := false
-		for _, pt := range parentTypes {
-			if pt == fieldType {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
+		if err := c.validateFieldDependency(field, typeSet, parent, typ); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// validateFieldDependency 校验单个注入字段的依赖是否在类型集合或父容器中已注册。
+func (c *defaultContainer) validateFieldDependency(field reflect.StructField, typeSet map[reflect.Type]bool, parent Container, ownerType reflect.Type) error {
+	fieldType := field.Type
+	if typeSet[fieldType] {
+		return nil
+	}
+
+	if parent == nil {
+		return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+			field.Name, ownerType.String(), fieldType.String())
+	}
+
+	ext, ok := parent.(ContainerExt)
+	if !ok {
+		return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+			field.Name, ownerType.String(), fieldType.String())
+	}
+
+	parentTypes := ext.Types()
+	for _, pt := range parentTypes {
+		if pt == fieldType {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+		field.Name, ownerType.String(), fieldType.String())
 }
 
 // detectCircularDependencies 检测循环依赖。

@@ -27,12 +27,12 @@ func TestAdaptiveWeight_Next_SingleBackend(t *testing.T) {
 	backends := []*ServiceInstance{
 		{URL: "http://backend1", ID: "1"},
 	}
-	result, err := aw.Next(backends)
+	backend, err := aw.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -47,11 +47,11 @@ func TestAdaptiveWeight_Next_MultipleBackends(t *testing.T) {
 
 	selected := make(map[string]int)
 	for i := 0; i < 100; i++ {
-		result, err := aw.Next(backends)
+		backend, err := aw.Next(backends)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		selected[result.URL]++
+		selected[backend.URL]++
 	}
 
 	if len(selected) == 0 {

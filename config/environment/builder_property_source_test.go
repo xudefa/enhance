@@ -1,7 +1,6 @@
 package environment
 
 import (
-	"os"
 	"testing"
 )
 
@@ -46,10 +45,7 @@ func TestEnvPropertySource_Name(t *testing.T) {
 }
 
 func TestEnvPropertySource_Contains(t *testing.T) {
-	t.Parallel()
-
-	_ = os.Setenv("TEST_KEY", "test-value")
-	defer func() { _ = os.Unsetenv("TEST_KEY") }()
+	t.Setenv("TEST_KEY", "test-value")
 
 	source := NewEnvPropertySource("test-env", "TEST")
 	// Contains会将"key"转换为"TEST_KEY"（前缀+大写）

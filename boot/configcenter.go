@@ -56,13 +56,13 @@ func (b *Boot) loadConfigCenterConfig() error {
 		}
 	}()
 
-	data, err := center.Load()
+	configData, err := center.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config from center: %w", err)
 	}
 
-	if len(data) > 0 {
-		source := environment.NewMapPropertySource("config-center", environment.PriorityNormal, data)
+	if len(configData) > 0 {
+		source := environment.NewMapPropertySource("config-center", environment.PriorityNormal, configData)
 		b.ctx.Environment().AddPropertySource(source)
 	}
 

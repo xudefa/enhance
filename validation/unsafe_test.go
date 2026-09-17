@@ -32,10 +32,10 @@ func TestFieldValueInterface(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.value)
-			result := fieldValueInterface(val)
-			if result != tt.expected {
-				t.Errorf("expected %v (%T), got %v (%T)", tt.expected, tt.expected, result, result)
+			rv := reflect.ValueOf(tt.value)
+			got := fieldValueInterface(rv)
+			if got != tt.expected {
+				t.Errorf("expected %v (%T), got %v (%T)", tt.expected, tt.expected, got, got)
 			}
 		})
 	}
@@ -44,10 +44,10 @@ func TestFieldValueInterface(t *testing.T) {
 func TestFieldValueInterface_NilPtr(t *testing.T) {
 	t.Parallel()
 	var ptr *int = nil
-	val := reflect.ValueOf(ptr)
-	result := fieldValueInterface(val)
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+	rv := reflect.ValueOf(ptr)
+	got := fieldValueInterface(rv)
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
 	}
 }
 
@@ -55,9 +55,9 @@ func TestFieldValueInterface_NonNilPtr(t *testing.T) {
 	t.Parallel()
 	x := 42
 	ptr := &x
-	val := reflect.ValueOf(ptr)
-	result := fieldValueInterface(val)
-	if result == nil {
+	rv := reflect.ValueOf(ptr)
+	got := fieldValueInterface(rv)
+	if got == nil {
 		t.Error("expected non-nil result")
 	}
 }
@@ -68,10 +68,10 @@ func TestFieldValueInterface_CannotInterface(t *testing.T) {
 		unexported int
 	}
 	v := test{unexported: 42}
-	val := reflect.ValueOf(v).Field(0)
-	result := fieldValueInterface(val)
-	if result != nil {
-		t.Errorf("expected nil for unexported field, got %v", result)
+	rv := reflect.ValueOf(v).Field(0)
+	got := fieldValueInterface(rv)
+	if got != nil {
+		t.Errorf("expected nil for unexported field, got %v", got)
 	}
 }
 
@@ -101,10 +101,10 @@ func TestGetFieldValueUnsafe(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.value)
-			result := getFieldValueUnsafe(val)
-			if result != tt.expected {
-				t.Errorf("expected %v (%T), got %v (%T)", tt.expected, tt.expected, result, result)
+			rv := reflect.ValueOf(tt.value)
+			got := getFieldValueUnsafe(rv)
+			if got != tt.expected {
+				t.Errorf("expected %v (%T), got %v (%T)", tt.expected, tt.expected, got, got)
 			}
 		})
 	}
@@ -112,10 +112,10 @@ func TestGetFieldValueUnsafe(t *testing.T) {
 
 func TestGetFieldValueUnsafe_Invalid(t *testing.T) {
 	t.Parallel()
-	var val reflect.Value
-	result := getFieldValueUnsafe(val)
-	if result != nil {
-		t.Errorf("expected nil for invalid value, got %v", result)
+	var rv reflect.Value
+	got := getFieldValueUnsafe(rv)
+	if got != nil {
+		t.Errorf("expected nil for invalid value, got %v", got)
 	}
 }
 
@@ -123,9 +123,9 @@ func TestUnpackNonNilValue(t *testing.T) {
 	t.Parallel()
 	x := 42
 	ptr := &x
-	val := reflect.ValueOf(ptr)
-	result := unpackNonNilValue(val)
-	if result == nil {
+	rv := reflect.ValueOf(ptr)
+	got := unpackNonNilValue(rv)
+	if got == nil {
 		t.Error("expected non-nil result")
 	}
 }

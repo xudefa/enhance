@@ -131,9 +131,9 @@ func TestTestResponse_Header_Nil(t *testing.T) {
 	t.Parallel()
 	client := NewTestWebClient(t, "http://localhost:8080")
 	resp := client.Get("/api/test")
-	val := resp.Header("Content-Type")
-	if val != "" {
-		t.Errorf("expected empty header, got %q", val)
+	headerValue := resp.Header("Content-Type")
+	if headerValue != "" {
+		t.Errorf("expected empty header, got %q", headerValue)
 	}
 }
 
@@ -181,18 +181,18 @@ func TestNewTestContext_SetProperty(t *testing.T) {
 	t.Parallel()
 	ctx := NewTestContext(t)
 	ctx.SetProperty("key1", "value1")
-	val := ctx.GetProperty("key1")
-	if val != "value1" {
-		t.Errorf("expected 'value1', got %v", val)
+	got := ctx.GetProperty("key1")
+	if got != "value1" {
+		t.Errorf("expected 'value1', got %v", got)
 	}
 }
 
 func TestNewTestContext_GetProperty_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx := NewTestContext(t)
-	val := ctx.GetProperty("nonexistent")
-	if val != nil {
-		t.Errorf("expected nil for nonexistent property, got %v", val)
+	got := ctx.GetProperty("nonexistent")
+	if got != nil {
+		t.Errorf("expected nil for nonexistent property, got %v", got)
 	}
 }
 
@@ -272,19 +272,19 @@ func TestMock_ExpectAndCall_WithResult(t *testing.T) {
 	mock := NewMock()
 	mock.Expect("Compute", []any{42}, 100, nil)
 
-	result, err := mock.Call("Compute", 42)
+	got, err := mock.Call("Compute", 42)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != 100 {
-		t.Errorf("expected 100, got %v", result)
+	if got != 100 {
+		t.Errorf("expected 100, got %v", got)
 	}
 }
 
 func TestMock_ExpectTimes_NotEnoughCalls(t *testing.T) {
 	t.Parallel()
 	mock := NewMock()
-	mock.ExpectTimes("Do", []any{}, nil, nil, 3)
+	mock.ExpectTimes(ExpectationRequest{Method: "Do", Args: []any{}, Times: 3})
 
 	_, _ = mock.Call("Do")
 
@@ -359,8 +359,8 @@ func TestMockRecorder_Chain(t *testing.T) {
 	mock := NewMock()
 	recorder := NewMockRecorder(mock)
 
-	result := recorder.Times(2)
-	if result == nil {
+	chained := recorder.Times(2)
+	if chained == nil {
 		t.Error("expected non-nil result from chain")
 	}
 }
@@ -438,12 +438,12 @@ func TestTestResponse_Header_WithHeaders(t *testing.T) {
 		body:       []byte("ok"),
 		headers:    map[string]string{"X-Custom": "value"},
 	}
-	val := resp.Header("X-Custom")
-	if val != "value" {
-		t.Errorf("expected 'value', got %q", val)
+	headerValue := resp.Header("X-Custom")
+	if headerValue != "value" {
+		t.Errorf("expected 'value', got %q", headerValue)
 	}
-	val = resp.Header("Nonexistent")
-	if val != "" {
-		t.Errorf("expected empty string for missing header, got %q", val)
+	headerValue = resp.Header("Nonexistent")
+	if headerValue != "" {
+		t.Errorf("expected empty string for missing header, got %q", headerValue)
 	}
 }

@@ -65,27 +65,27 @@ func TestCsrfFilter_DoFilter_InvalidTypes(t *testing.T) {
 	t.Parallel()
 
 	repo := NewCookieCsrfTokenRepository()
-	f, err := NewCsrfFilter(repo)
+	csrfFilter, err := NewCsrfFilter(repo)
 	if err != nil {
 		t.Fatalf("NewCsrfFilter error: %v", err)
 	}
 
 	t.Run("invalid context", func(t *testing.T) {
-		err := f.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := csrfFilter.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid context")
 		}
 	})
 
 	t.Run("invalid request", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := csrfFilter.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid request")
 		}
 	})
 
 	t.Run("invalid response", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
+		err := csrfFilter.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid response")
 		}
@@ -98,7 +98,7 @@ func TestCsrfFilter_DoFilter_CSRFProtection(t *testing.T) {
 	t.Parallel()
 
 	repo := NewCookieCsrfTokenRepository()
-	f, err := NewCsrfFilter(repo)
+	csrfFilter, err := NewCsrfFilter(repo)
 	if err != nil {
 		t.Fatalf("NewCsrfFilter error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestCsrfFilter_DoFilter_CSRFProtection(t *testing.T) {
 		req := &mockSecurityRequest{method: "POST", uri: "/api/data"}
 		resp := &mockSecurityResponse{}
 		chain := &mockSecurityFilterChain{}
-		err := f.DoFilter(context.Background(), req, resp, chain)
+		err := csrfFilter.DoFilter(context.Background(), req, resp, chain)
 		if err == nil {
 			t.Error("expected error for missing CSRF token")
 		}
@@ -118,7 +118,7 @@ func TestCsrfFilter_DoFilter_CSRFProtection(t *testing.T) {
 		req.SetHeader("X-CSRF-Token", "invalid-token")
 		resp := &mockSecurityResponse{}
 		chain := &mockSecurityFilterChain{}
-		err := f.DoFilter(context.Background(), req, resp, chain)
+		err := csrfFilter.DoFilter(context.Background(), req, resp, chain)
 		if err == nil {
 			t.Error("expected error for invalid CSRF token")
 		}
@@ -129,7 +129,7 @@ func TestCsrfFilter_DoFilter_CSRFProtection(t *testing.T) {
 		req.SetHeader("X-XSRF-Token", "invalid-token")
 		resp := &mockSecurityResponse{}
 		chain := &mockSecurityFilterChain{}
-		err := f.DoFilter(context.Background(), req, resp, chain)
+		err := csrfFilter.DoFilter(context.Background(), req, resp, chain)
 		if err == nil {
 			t.Error("expected error for invalid X-XSRF-Token")
 		}
@@ -154,12 +154,12 @@ func TestCookieCsrfTokenRepository_LoadCookieValue(t *testing.T) {
 		repo := NewCookieCsrfTokenRepository()
 		req := &mockSecurityRequest{method: "GET", uri: "/test"}
 		req.SetHeader("Cookie", "_csrf_token=abc123; other=val")
-		val, exists := repo.loadCookieValue(req)
+		cookieValue, exists := repo.loadCookieValue(req)
 		if !exists {
 			t.Error("expected true for existing cookie")
 		}
-		if val != "abc123" {
-			t.Errorf("expected 'abc123', got '%s'", val)
+		if cookieValue != "abc123" {
+			t.Errorf("expected 'abc123', got '%s'", cookieValue)
 		}
 	})
 

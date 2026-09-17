@@ -28,17 +28,17 @@ func TestRoleVoter_Vote_Coverage(t *testing.T) {
 
 	t.Run("abstain when no attributes", func(t *testing.T) {
 		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
+		voteResult := voter.Vote(context.Background(), nil, "/test", []string{})
+		if voteResult != ACCESS_ABSTAIN {
+			t.Errorf("Expected ACCESS_ABSTAIN, got %d", voteResult)
 		}
 	})
 
 	t.Run("abstain when no matching attribute", func(t *testing.T) {
 		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"other"})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
+		voteResult := voter.Vote(context.Background(), nil, "/test", []string{"other"})
+		if voteResult != ACCESS_ABSTAIN {
+			t.Errorf("Expected ACCESS_ABSTAIN, got %d", voteResult)
 		}
 	})
 
@@ -48,9 +48,9 @@ func TestRoleVoter_Vote_Coverage(t *testing.T) {
 			principalName: "user",
 			authorities:   []string{"ROLE_ADMIN"},
 		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
+		voteResult := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
+		if voteResult != ACCESS_GRANTED {
+			t.Errorf("Expected ACCESS_GRANTED, got %d", voteResult)
 		}
 	})
 
@@ -60,9 +60,9 @@ func TestRoleVoter_Vote_Coverage(t *testing.T) {
 			principalName: "user",
 			authorities:   []string{"ROLE_USER"},
 		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
+		voteResult := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
+		if voteResult != ACCESS_DENIED {
+			t.Errorf("Expected ACCESS_DENIED, got %d", voteResult)
 		}
 	})
 }
@@ -95,118 +95,102 @@ func TestRoleVoter_SetRolePrefix_Coverage(t *testing.T) {
 }
 
 // TestAuthenticatedVoter_Vote_Coverage 测试 AuthenticatedVoter.Vote
+func testAuthenticatedVoterVoteCases() []struct {
+	name       string
+	auth       *mockAuthForVoter
+	attributes []string
+	want       int
+} {
+	return []struct {
+		name       string
+		auth       *mockAuthForVoter
+		attributes []string
+		want       int
+	}{
+		{"abstain when no attributes", nil, []string{}, ACCESS_ABSTAIN},
+		{"grant IS_AUTHENTICATED_FULLY when authenticated", &mockAuthForVoter{principalName: "user", authenticated: true}, []string{"IS_AUTHENTICATED_FULLY"}, ACCESS_GRANTED},
+		{"deny IS_AUTHENTICATED_FULLY when not authenticated", &mockAuthForVoter{principalName: "user", authenticated: false}, []string{"IS_AUTHENTICATED_FULLY"}, ACCESS_DENIED},
+		{"grant IS_AUTHENTICATED_REMEMBERED when authenticated", &mockAuthForVoter{principalName: "user", authenticated: true}, []string{"IS_AUTHENTICATED_REMEMBERED"}, ACCESS_GRANTED},
+		{"grant IS_AUTHENTICATED_ANONYMOUSLY always", nil, []string{"IS_AUTHENTICATED_ANONYMOUSLY"}, ACCESS_GRANTED},
+	}
+}
+
 func TestAuthenticatedVoter_Vote_Coverage(t *testing.T) {
 	t.Parallel()
 
 	voter := &AuthenticatedVoter{}
 
-	t.Run("abstain when no attributes", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_FULLY when authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authenticated: true,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("deny IS_AUTHENTICATED_FULLY when not authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authenticated: false,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_REMEMBERED when authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authenticated: true,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_REMEMBERED"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_ANONYMOUSLY always", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"IS_AUTHENTICATED_ANONYMOUSLY"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
+	for _, tt := range testAuthenticatedVoterVoteCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			voteResult := voter.Vote(context.Background(), tt.auth, "/test", tt.attributes)
+			if voteResult != tt.want {
+				t.Errorf("Expected %d, got %d", tt.want, voteResult)
+			}
+		})
+	}
 }
 
 // TestConsensusBased_Decide_Coverage 测试 ConsensusBased.Decide
+func testConsensusGrantWhenGrantGreater(t *testing.T) {
+	t.Parallel()
+	mgr := NewConsensusBased(
+		&mockAccessDecisionVoter{result: ACCESS_GRANTED},
+		&mockAccessDecisionVoter{result: ACCESS_DENIED},
+		&mockAccessDecisionVoter{result: ACCESS_GRANTED},
+	)
+	err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+func testConsensusDenyWhenDenyGreater(t *testing.T) {
+	t.Parallel()
+	mgr := NewConsensusBased(
+		&mockAccessDecisionVoter{result: ACCESS_DENIED},
+		&mockAccessDecisionVoter{result: ACCESS_DENIED},
+		&mockAccessDecisionVoter{result: ACCESS_GRANTED},
+	)
+	err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
+	if err != ErrAccessDenied {
+		t.Errorf("Expected ErrAccessDenied, got %v", err)
+	}
+}
+
+func testConsensusDenyWhenEqual(t *testing.T) {
+	t.Parallel()
+	mgr := NewConsensusBased(
+		&mockAccessDecisionVoter{result: ACCESS_GRANTED},
+		&mockAccessDecisionVoter{result: ACCESS_DENIED},
+	)
+	err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
+	if err != ErrAccessDenied {
+		t.Errorf("Expected ErrAccessDenied, got %v", err)
+	}
+}
+
+func testConsensusAllowAllAbstain(t *testing.T) {
+	t.Parallel()
+	mgr := NewConsensusBased(
+		&mockAccessDecisionVoter{result: ACCESS_ABSTAIN},
+	)
+	mgr.SetAllowIfEqualGrantedDenied(true)
+	mgr.SetAllowIfAllAbstainDecisions(true)
+	err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
 func TestConsensusBased_Decide_Coverage(t *testing.T) {
 	t.Parallel()
 
-	t.Run("grant when grant > deny", func(t *testing.T) {
-		t.Parallel()
-		mgr := NewConsensusBased(
-			&mockAccessDecisionVoter{result: ACCESS_GRANTED},
-			&mockAccessDecisionVoter{result: ACCESS_DENIED},
-			&mockAccessDecisionVoter{result: ACCESS_GRANTED},
-		)
-		err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
-
-	t.Run("deny when deny > grant", func(t *testing.T) {
-		t.Parallel()
-		mgr := NewConsensusBased(
-			&mockAccessDecisionVoter{result: ACCESS_DENIED},
-			&mockAccessDecisionVoter{result: ACCESS_DENIED},
-			&mockAccessDecisionVoter{result: ACCESS_GRANTED},
-		)
-		err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
-		if err != ErrAccessDenied {
-			t.Errorf("Expected ErrAccessDenied, got %v", err)
-		}
-	})
-
-	t.Run("deny when grant == deny", func(t *testing.T) {
-		t.Parallel()
-		mgr := NewConsensusBased(
-			&mockAccessDecisionVoter{result: ACCESS_GRANTED},
-			&mockAccessDecisionVoter{result: ACCESS_DENIED},
-		)
-		err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
-		if err != ErrAccessDenied {
-			t.Errorf("Expected ErrAccessDenied, got %v", err)
-		}
-	})
-
-	t.Run("allow when all abstain and allowIfAllAbstainDecisions=true", func(t *testing.T) {
-		t.Parallel()
-		mgr := NewConsensusBased(
-			&mockAccessDecisionVoter{result: ACCESS_ABSTAIN},
-		)
-		mgr.SetAllowIfEqualGrantedDenied(true)
-		mgr.SetAllowIfAllAbstainDecisions(true)
-		err := mgr.Decide(context.Background(), nil, "/test", []string{"test"})
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-	})
+	t.Run("grant when grant > deny", testConsensusGrantWhenGrantGreater)
+	t.Run("deny when deny > grant", testConsensusDenyWhenDenyGreater)
+	t.Run("deny when grant == deny", testConsensusDenyWhenEqual)
+	t.Run("allow when all abstain and allowIfAllAbstainDecisions=true", testConsensusAllowAllAbstain)
 }
 
 // TestAffirmativeBased_Decide_Coverage 测试 AffirmativeBased.Decide
@@ -326,112 +310,44 @@ func TestUnanimousBased_AddVoter_Coverage(t *testing.T) {
 }
 
 // TestWebExpressionVoter_Vote_Coverage 测试 WebExpressionVoter.Vote
+func testWebExpressionVoterVoteCases() []struct {
+	name       string
+	auth       *mockAuthForVoter
+	attributes []string
+	want       int
+} {
+	return []struct {
+		name       string
+		auth       *mockAuthForVoter
+		attributes []string
+		want       int
+	}{
+		{"abstain when no attributes", nil, []string{}, ACCESS_ABSTAIN},
+		{"permitAll grants", nil, []string{"permitAll"}, ACCESS_GRANTED},
+		{"denyAll denies", nil, []string{"denyAll"}, ACCESS_DENIED},
+		{"authenticated grants when authenticated", &mockAuthForVoter{principalName: "user", authenticated: true}, []string{"authenticated"}, ACCESS_GRANTED},
+		{"authenticated denies when not authenticated", &mockAuthForVoter{principalName: "user", authenticated: false}, []string{"authenticated"}, ACCESS_DENIED},
+		{"hasRole grants when role matches", &mockAuthForVoter{principalName: "user", authorities: []string{"ROLE_ADMIN"}}, []string{"hasRole('ROLE_ADMIN')"}, ACCESS_GRANTED},
+		{"hasRole denies when role doesn't match", &mockAuthForVoter{principalName: "user", authorities: []string{"ROLE_USER"}}, []string{"hasRole('ROLE_ADMIN')"}, ACCESS_DENIED},
+		{"hasAuthority grants when authority matches", &mockAuthForVoter{principalName: "user", authorities: []string{"WRITE"}}, []string{"hasAuthority('WRITE')"}, ACCESS_GRANTED},
+		{"hasAuthority denies when authority doesn't match", &mockAuthForVoter{principalName: "user", authorities: []string{"READ"}}, []string{"hasAuthority('WRITE')"}, ACCESS_DENIED},
+		{"unknown expression abstains", nil, []string{"unknownExpression"}, ACCESS_ABSTAIN},
+	}
+}
+
 func TestWebExpressionVoter_Vote_Coverage(t *testing.T) {
 	t.Parallel()
 
 	voter := NewWebExpressionVoter()
 
-	t.Run("abstain when no attributes", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
-		}
-	})
-
-	t.Run("permitAll grants", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"permitAll"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("denyAll denies", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"denyAll"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("authenticated grants when authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authenticated: true,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"authenticated"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("authenticated denies when not authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authenticated: false,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"authenticated"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("hasRole grants when role matches", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authorities:   []string{"ROLE_ADMIN"},
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"hasRole('ROLE_ADMIN')"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("hasRole denies when role doesn't match", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authorities:   []string{"ROLE_USER"},
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"hasRole('ROLE_ADMIN')"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("hasAuthority grants when authority matches", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authorities:   []string{"WRITE"},
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"hasAuthority('WRITE')"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("hasAuthority denies when authority doesn't match", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockAuthForVoter{
-			principalName: "user",
-			authorities:   []string{"READ"},
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"hasAuthority('WRITE')"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("unknown expression abstains", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"unknownExpression"})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
-		}
-	})
+	for _, tt := range testWebExpressionVoterVoteCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			voteResult := voter.Vote(context.Background(), tt.auth, "/test", tt.attributes)
+			if voteResult != tt.want {
+				t.Errorf("Expected %d, got %d", tt.want, voteResult)
+			}
+		})
+	}
 }

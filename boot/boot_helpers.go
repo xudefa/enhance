@@ -70,12 +70,12 @@ func (b *Boot) collectAutoConfigReport(allEntries []AutoConfigEntry, matchedEntr
 
 // typeName 获取类型的简短名称
 func typeName(v any) string {
-	t := fmt.Sprintf("%T", v)
+	typeStr := fmt.Sprintf("%T", v)
 	// 移除包路径，只保留类型名
-	if idx := strings.LastIndex(t, "."); idx >= 0 {
-		return t[idx+1:]
+	if idx := strings.LastIndex(typeStr, "."); idx >= 0 {
+		return typeStr[idx+1:]
 	}
-	return t
+	return typeStr
 }
 
 // starterMatches 检查启动器条件是否匹配
@@ -105,13 +105,13 @@ func (b *Boot) moduleMatches(m Module) bool {
 // deduplicateStarters 去重启动器列表（按名称去重，保留第一个）
 func deduplicateStarters(starters []Starter) []Starter {
 	seen := make(map[string]bool)
-	result := make([]Starter, 0, len(starters))
+	uniqueStarters := make([]Starter, 0, len(starters))
 	for _, s := range starters {
 		name := s.Name()
 		if !seen[name] {
 			seen[name] = true
-			result = append(result, s)
+			uniqueStarters = append(uniqueStarters, s)
 		}
 	}
-	return result
+	return uniqueStarters
 }

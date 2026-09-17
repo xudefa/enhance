@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/xudefa/enhance/boot"
@@ -14,7 +15,7 @@ type MetricsAutoConfiguration struct{}
 func (m *MetricsAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	reg := NewSimpleRegistry()
 	if err := ctx.Container().RegisterInstance(reg, reflect.TypeOf(reg)); err != nil {
-		return err
+		return fmt.Errorf("注册指标注册表 Bean 失败: %w", err)
 	}
 	return nil
 }

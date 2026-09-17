@@ -97,22 +97,34 @@ import (
 type BannerMode = banner.BannerMode
 
 const (
+	// BannerModeConsole 控制台彩色横幅模式。
 	BannerModeConsole = banner.BannerModeConsole
-	BannerModeLog     = banner.BannerModeLog
-	BannerModeOff     = banner.BannerModeOff
+	// BannerModeLog 日志输出横幅模式。
+	BannerModeLog = banner.BannerModeLog
+	// BannerModeOff 关闭横幅输出。
+	BannerModeOff = banner.BannerModeOff
 )
 
+// TextBanner 纯文本横幅类型的别名。
 type TextBanner = banner.TextBanner
+
+// ASCIIArtBanner ASCII 艺术横幅类型的别名。
 type ASCIIArtBanner = banner.ASCIIArtBanner
+
+// LegacyBanner 遗留横幅类型的别名。
 type LegacyBanner = banner.LegacyBanner
 
 // LegacyBannerOption 是 banner.LegacyOption 的类型别名。
 type LegacyBannerOption = banner.LegacyOption
 
 var (
-	NewLegacyBanner    = banner.NewLegacyBanner
-	BannerWithLines    = banner.WithLines
-	BannerWithAppName  = banner.WithAppName
+	// NewLegacyBanner 创建遗留横幅的构造函数别名。
+	NewLegacyBanner = banner.NewLegacyBanner
+	// BannerWithLines 设置横幅行数的选项别名。
+	BannerWithLines = banner.WithLines
+	// BannerWithAppName 设置横幅应用名的选项别名。
+	BannerWithAppName = banner.WithAppName
+	// BannerWithProfiles 设置横幅激活 Profile 的选项别名。
 	BannerWithProfiles = banner.WithProfiles
 )
 

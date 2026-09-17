@@ -79,9 +79,9 @@ func NewShardedLRUCache(capacity int, shardCount int, opts ...LRUOption) *Sharde
 
 // getShardIndex 计算 key 对应的分片索引
 func (c *ShardedLRUCache) getShardIndex(key string) int {
-	h := fnv.New32a()
-	h.Write([]byte(key))
-	return int(h.Sum32() % uint32(c.shardCount))
+	hasher := fnv.New32a()
+	hasher.Write([]byte(key))
+	return int(hasher.Sum32() % uint32(c.shardCount))
 }
 
 // fireEvicted 在锁外调用淘汰回调。

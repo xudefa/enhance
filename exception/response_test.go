@@ -17,27 +17,27 @@ func TestErrorResponse_MarshalJSON(t *testing.T) {
 		Timestamp: time.Now().UnixMilli(),
 	}
 
-	data, err := json.Marshal(resp)
+	jsonData, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatalf("Failed to marshal: %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
+	var parsed map[string]any
+	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 
-	if result["code"].(float64) != 404 {
-		t.Errorf("Expected code 404, got %v", result["code"])
+	if parsed["code"].(float64) != 404 {
+		t.Errorf("Expected code 404, got %v", parsed["code"])
 	}
-	if result["message"].(string) != "Not found" {
-		t.Errorf("Expected message 'Not found', got %v", result["message"])
+	if parsed["message"].(string) != "Not found" {
+		t.Errorf("Expected message 'Not found', got %v", parsed["message"])
 	}
 }
 
 func TestNewErrorResponse(t *testing.T) {
 	t.Parallel()
-	resp := NewErrorResponse(500, "Internal error", "req-123", "trace-456", nil)
+	resp := NewErrorResponse(500, "Internal error", WithRequestID("req-123"), WithTraceID("trace-456"))
 
 	if resp.Code != 500 {
 		t.Errorf("Expected code 500, got %d", resp.Code)

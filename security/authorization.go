@@ -96,61 +96,58 @@ func (v *WebExpressionVoter) Vote(ctx context.Context, authentication authorizat
 	}
 
 	for _, attribute := range attributes {
-		if attribute == "permitAll" {
-			return ACCESS_GRANTED
-		}
-
-		if attribute == "denyAll" {
-			return ACCESS_DENIED
-		}
-
-		if attribute == "authenticated" {
-			if authentication != nil && authentication.Authenticated() {
-				return ACCESS_GRANTED
-			}
-			return ACCESS_DENIED
-		}
-
-		if strings.HasPrefix(attribute, "hasRole('") && strings.HasSuffix(attribute, "')") {
-			role := strings.TrimPrefix(attribute, "hasRole('")
-			role = strings.TrimSuffix(role, "')")
-			if v.hasRole(authentication, role) {
-				return ACCESS_GRANTED
-			}
-			return ACCESS_DENIED
-		}
-
-		if strings.HasPrefix(attribute, "hasAnyRole('") && strings.HasSuffix(attribute, "')") {
-			rolesStr := strings.TrimPrefix(attribute, "hasAnyRole('")
-			rolesStr = strings.TrimSuffix(rolesStr, "')")
-			roles := strings.Split(rolesStr, "','")
-			if v.hasAnyRole(authentication, roles) {
-				return ACCESS_GRANTED
-			}
-			return ACCESS_DENIED
-		}
-
-		if strings.HasPrefix(attribute, "hasAuthority('") && strings.HasSuffix(attribute, "')") {
-			authority := strings.TrimPrefix(attribute, "hasAuthority('")
-			authority = strings.TrimSuffix(authority, "')")
-			if v.hasAuthority(authentication, authority) {
-				return ACCESS_GRANTED
-			}
-			return ACCESS_DENIED
-		}
-
-		if strings.HasPrefix(attribute, "hasAnyAuthority('") && strings.HasSuffix(attribute, "')") {
-			authoritiesStr := strings.TrimPrefix(attribute, "hasAnyAuthority('")
-			authoritiesStr = strings.TrimSuffix(authoritiesStr, "')")
-			authorities := strings.Split(authoritiesStr, "','")
-			if v.hasAnyAuthority(authentication, authorities) {
-				return ACCESS_GRANTED
-			}
-			return ACCESS_DENIED
+		if decision, decided := v.voteSingleAttribute(authentication, attribute); decided {
+			return decision
 		}
 	}
 
 	return ACCESS_ABSTAIN
+}
+
+// voteSingleAttribute 对单个访问属性进行投票，decided 为 false 表示无法判断。
+func (v *WebExpressionVoter) voteSingleAttribute(authentication authorization.Authentication, attribute string) (int, bool) {
+	switch {
+	case attribute == "permitAll":
+		return ACCESS_GRANTED, true
+	case attribute == "denyAll":
+		return ACCESS_DENIED, true
+	case attribute == "authenticated":
+		if authentication != nil && authentication.Authenticated() {
+			return ACCESS_GRANTED, true
+		}
+		return ACCESS_DENIED, true
+	case v.matchAttribute(attribute, "hasRole('", "')"):
+		role := v.extractAttributeValue(attribute, "hasRole('", "')")
+		return boolDecision(v.hasRole(authentication, role)), true
+	case v.matchAttribute(attribute, "hasAnyRole('", "')"):
+		roles := strings.Split(v.extractAttributeValue(attribute, "hasAnyRole('", "')"), "','")
+		return boolDecision(v.hasAnyRole(authentication, roles)), true
+	case v.matchAttribute(attribute, "hasAuthority('", "')"):
+		authority := v.extractAttributeValue(attribute, "hasAuthority('", "')")
+		return boolDecision(v.hasAuthority(authentication, authority)), true
+	case v.matchAttribute(attribute, "hasAnyAuthority('", "')"):
+		authorities := strings.Split(v.extractAttributeValue(attribute, "hasAnyAuthority('", "')"), "','")
+		return boolDecision(v.hasAnyAuthority(authentication, authorities)), true
+	}
+	return 0, false
+}
+
+// matchAttribute 判断属性是否包裹在指定的前缀与后缀中。
+func (v *WebExpressionVoter) matchAttribute(attribute, prefix, suffix string) bool {
+	return strings.HasPrefix(attribute, prefix) && strings.HasSuffix(attribute, suffix)
+}
+
+// extractAttributeValue 提取属性中包裹的内容。
+func (v *WebExpressionVoter) extractAttributeValue(attribute, prefix, suffix string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(attribute, prefix), suffix)
+}
+
+// boolDecision 将布尔判断结果转换为投票结果。
+func boolDecision(ok bool) int {
+	if ok {
+		return ACCESS_GRANTED
+	}
+	return ACCESS_DENIED
 }
 
 // Supports 是否支持该属性
@@ -285,8 +282,8 @@ func (m *AffirmativeBased) Decide(ctx context.Context, authentication authorizat
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case ACCESS_GRANTED:
 			grant++
 		case ACCESS_DENIED:
@@ -330,8 +327,8 @@ func (m *UnanimousBased) Decide(ctx context.Context, authentication authorizatio
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case ACCESS_GRANTED:
 			grant++
 		case ACCESS_DENIED:
@@ -375,8 +372,8 @@ func (m *ConsensusBased) Decide(ctx context.Context, authentication authorizatio
 	abstain := 0
 
 	for _, voter := range m.decisionVoters {
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case ACCESS_GRANTED:
 			grant++
 		case ACCESS_DENIED:

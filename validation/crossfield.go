@@ -20,11 +20,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 	// 解析规则：fieldmatch=OtherField, fieldne=OtherField, fieldgt=OtherField, etc.
 	parts := strings.SplitN(rule, "=", 2)
 	if len(parts) < 2 {
-		return ValidationError{
-			Field:   fieldName,
-			Message: "跨字段验证规则格式错误",
-			Value:   interfaceOrNil(field),
-		}
+		return crossRuleFormatError(fieldName, field)
 	}
 
 	ruleName := parts[0]
@@ -32,11 +28,7 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 
 	// 提取验证类型（去掉 "field" 前缀）
 	if !strings.HasPrefix(ruleName, "field") {
-		return ValidationError{
-			Field:   fieldName,
-			Message: "跨字段验证规则格式错误",
-			Value:   interfaceOrNil(field),
-		}
+		return crossRuleFormatError(fieldName, field)
 	}
 
 	validationType := strings.TrimPrefix(ruleName, "field")
@@ -44,18 +36,37 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		validationType = "eq" // field 或 fieldmatch 都表示相等验证
 	}
 
-	// 验证另一个字段是否存在
+	// 验证另一个字段是否存在并获取其值
+	otherValue, err := v.resolveCrossFieldValue(obj, otherFieldName)
+	if err != nil {
+		return ValidationError{
+			Field:   fieldName,
+			Message: err.Error(),
+			Value:   interfaceOrNil(field),
+		}
+	}
+
+	return v.applyCrossValidation(field, otherValue, otherFieldName, validationType, fieldName)
+}
+
+// crossRuleFormatError 构造跨字段规则格式错误。
+func crossRuleFormatError(fieldName string, field reflect.Value) error {
+	return ValidationError{
+		Field:   fieldName,
+		Message: "跨字段验证规则格式错误",
+		Value:   interfaceOrNil(field),
+	}
+}
+
+// resolveCrossFieldValue 定位并获取对端字段的反射值。
+func (v *TagValidator) resolveCrossFieldValue(obj any, otherFieldName string) (reflect.Value, error) {
 	objType := reflect.TypeOf(obj)
 	if objType.Kind() == reflect.Ptr {
 		objType = objType.Elem()
 	}
 	_, ok := objType.FieldByName(otherFieldName)
 	if !ok {
-		return ValidationError{
-			Field:   fieldName,
-			Message: fmt.Sprintf("字段 %s 不存在", otherFieldName),
-			Value:   interfaceOrNil(field),
-		}
+		return reflect.Value{}, fmt.Errorf("字段 %s 不存在", otherFieldName)
 	}
 
 	objVal := reflect.ValueOf(obj)
@@ -64,64 +75,48 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 	}
 	otherValue := objVal.FieldByName(otherFieldName)
 	if !otherValue.IsValid() {
-		return ValidationError{
-			Field:   fieldName,
-			Message: fmt.Sprintf("字段 %s 的值无效", otherFieldName),
-			Value:   interfaceOrNil(field),
-		}
+		return reflect.Value{}, fmt.Errorf("字段 %s 的值无效", otherFieldName)
 	}
+	return otherValue, nil
+}
 
+// crossMismatchError 构造跨字段比较失败错误。
+func crossMismatchError(fieldName string, field reflect.Value, message string) error {
+	return ValidationError{
+		Field:   fieldName,
+		Message: message,
+		Value:   interfaceOrNil(field),
+	}
+}
+
+// applyCrossValidation 根据比较类型执行跨字段比较。
+func (v *TagValidator) applyCrossValidation(field, otherValue reflect.Value, otherFieldName, validationType, fieldName string) error {
 	switch validationType {
 	case "eq":
 		if !v.fieldsEqual(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须与 %s 相等", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须与 %s 相等", otherFieldName))
 		}
 	case "ne":
 		if v.fieldsEqual(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须与 %s 不相等", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须与 %s 不相等", otherFieldName))
 		}
 	case "gt":
 		if !v.fieldGreaterThan(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须大于 %s", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须大于 %s", otherFieldName))
 		}
 	case "gte":
 		if !v.fieldGreaterThanOrEqual(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须大于或等于 %s", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须大于或等于 %s", otherFieldName))
 		}
 	case "lt":
 		if !v.fieldLessThan(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须小于 %s", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须小于 %s", otherFieldName))
 		}
 	case "lte":
 		if !v.fieldLessThanOrEqual(field, otherValue) {
-			return ValidationError{
-				Field:   fieldName,
-				Message: fmt.Sprintf("字段必须小于或等于 %s", otherFieldName),
-				Value:   interfaceOrNil(field),
-			}
+			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须小于或等于 %s", otherFieldName))
 		}
 	}
-
 	return nil
 }
 
@@ -212,67 +207,87 @@ func (v *TagValidator) compareFieldValue(obj any, fieldName, expectedValue, oper
 	rv := reflect.ValueOf(actualValue)
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		expected, err := strconv.ParseInt(expectedValue, 10, 64)
-		if err != nil {
-			return false
-		}
-		actual := rv.Int()
-		switch operator {
-		case "<":
-			return actual < expected
-		case "<=":
-			return actual <= expected
-		case ">":
-			return actual > expected
-		case ">=":
-			return actual >= expected
-		}
+		return compareIntFieldValue(rv.Int(), expectedValue, operator)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		expected, err := strconv.ParseUint(expectedValue, 10, 64)
-		if err != nil {
-			return false
-		}
-		actual := rv.Uint()
-		switch operator {
-		case "<":
-			return actual < expected
-		case "<=":
-			return actual <= expected
-		case ">":
-			return actual > expected
-		case ">=":
-			return actual >= expected
-		}
+		return compareUintFieldValue(rv.Uint(), expectedValue, operator)
 	case reflect.Float32, reflect.Float64:
-		expected, err := strconv.ParseFloat(expectedValue, 64)
-		if err != nil {
-			return false
-		}
-		actual := rv.Float()
-		switch operator {
-		case "<":
-			return actual < expected
-		case "<=":
-			return actual <= expected
-		case ">":
-			return actual > expected
-		case ">=":
-			return actual >= expected
-		}
+		return compareFloatFieldValue(rv.Float(), expectedValue, operator)
 	case reflect.String:
-		actual := rv.String()
-		switch operator {
-		case "<":
-			return len([]rune(actual)) < len([]rune(expectedValue))
-		case "<=":
-			return len([]rune(actual)) <= len([]rune(expectedValue))
-		case ">":
-			return len([]rune(actual)) > len([]rune(expectedValue))
-		case ">=":
-			return len([]rune(actual)) >= len([]rune(expectedValue))
-		}
+		return compareStringFieldValue(rv.String(), expectedValue, operator)
 	}
 
+	return false
+}
+
+// compareIntFieldValue 比较有符号整数字段值与期望值。
+func compareIntFieldValue(actual int64, expectedValue, operator string) bool {
+	expected, err := strconv.ParseInt(expectedValue, 10, 64)
+	if err != nil {
+		return false
+	}
+	switch operator {
+	case "<":
+		return actual < expected
+	case "<=":
+		return actual <= expected
+	case ">":
+		return actual > expected
+	case ">=":
+		return actual >= expected
+	}
+	return false
+}
+
+// compareUintFieldValue 比较无符号整数字段值与期望值。
+func compareUintFieldValue(actual uint64, expectedValue, operator string) bool {
+	expected, err := strconv.ParseUint(expectedValue, 10, 64)
+	if err != nil {
+		return false
+	}
+	switch operator {
+	case "<":
+		return actual < expected
+	case "<=":
+		return actual <= expected
+	case ">":
+		return actual > expected
+	case ">=":
+		return actual >= expected
+	}
+	return false
+}
+
+// compareFloatFieldValue 比较浮点字段值与期望值。
+func compareFloatFieldValue(actual float64, expectedValue, operator string) bool {
+	expected, err := strconv.ParseFloat(expectedValue, 64)
+	if err != nil {
+		return false
+	}
+	switch operator {
+	case "<":
+		return actual < expected
+	case "<=":
+		return actual <= expected
+	case ">":
+		return actual > expected
+	case ">=":
+		return actual >= expected
+	}
+	return false
+}
+
+// compareStringFieldValue 按 rune 长度比较字符串字段值与期望值。
+func compareStringFieldValue(actual, expectedValue, operator string) bool {
+	switch operator {
+	case "<":
+		return len([]rune(actual)) < len([]rune(expectedValue))
+	case "<=":
+		return len([]rune(actual)) <= len([]rune(expectedValue))
+	case ">":
+		return len([]rune(actual)) > len([]rune(expectedValue))
+	case ">=":
+		return len([]rune(actual)) >= len([]rune(expectedValue))
+	}
 	return false
 }
 

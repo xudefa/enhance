@@ -33,12 +33,12 @@ func TestHasNestedExplicitKeys(t *testing.T) {
 	}
 
 	cfg := DBConfig{Host: "localhost", Port: "5432"}
-	val := reflect.ValueOf(cfg)
+	rv := reflect.ValueOf(cfg)
 
 	// This function checks if there are nested explicit keys
-	result := hasNestedExplicitKeys(val)
+	got := hasNestedExplicitKeys(rv)
 	// Function should return false for simple struct without nested config keys
-	_ = result
+	_ = got
 }
 
 func TestHasExplicitConfigKey(t *testing.T) {
@@ -52,8 +52,8 @@ func TestHasExplicitConfigKey(t *testing.T) {
 	typ := reflect.TypeOf(cfg)
 	field, _ := typ.FieldByName("Name")
 
-	result := hasExplicitConfigKey(field)
-	if !result {
+	got := hasExplicitConfigKey(field)
+	if !got {
 		t.Error("expected field with config tag to have explicit config key")
 	}
 
@@ -65,8 +65,8 @@ func TestHasExplicitConfigKey(t *testing.T) {
 	simpleTyp := reflect.TypeOf(simpleCfg)
 	simpleField, _ := simpleTyp.FieldByName("Name")
 
-	result = hasExplicitConfigKey(simpleField)
-	if result {
+	got = hasExplicitConfigKey(simpleField)
+	if got {
 		t.Error("expected field without config tag to not have explicit config key")
 	}
 }

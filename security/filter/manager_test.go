@@ -7,8 +7,8 @@ import (
 func TestNewSecurityFilterChainManager(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
-	if m == nil {
+	manager := NewSecurityFilterChainManager()
+	if manager == nil {
 		t.Fatal("expected non-nil manager")
 	}
 }
@@ -16,15 +16,15 @@ func TestNewSecurityFilterChainManager(t *testing.T) {
 func TestSecurityFilterChainManager_AddAndRetrieve(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
+	manager := NewSecurityFilterChainManager()
 	chain := newMockSecurityFilterChain(true)
-	m.AddSecurityFilterChain(chain)
+	manager.AddSecurityFilterChain(chain)
 
-	result := m.GetSecurityFilterChain("test")
-	if result == nil {
+	retrieved := manager.GetSecurityFilterChain("test")
+	if retrieved == nil {
 		t.Fatal("expected non-nil chain")
 	}
-	if result != chain {
+	if retrieved != chain {
 		t.Error("expected the same chain to be returned")
 	}
 }
@@ -32,12 +32,12 @@ func TestSecurityFilterChainManager_AddAndRetrieve(t *testing.T) {
 func TestSecurityFilterChainManager_NoMatchResult(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
+	manager := NewSecurityFilterChainManager()
 	chain := newMockSecurityFilterChain(false)
-	m.AddSecurityFilterChain(chain)
+	manager.AddSecurityFilterChain(chain)
 
-	result := m.GetSecurityFilterChain("test")
-	if result != nil {
+	retrieved := manager.GetSecurityFilterChain("test")
+	if retrieved != nil {
 		t.Error("expected nil when no chain matches")
 	}
 }
@@ -45,14 +45,14 @@ func TestSecurityFilterChainManager_NoMatchResult(t *testing.T) {
 func TestSecurityFilterChainManager_FirstMatchWins(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
+	manager := NewSecurityFilterChainManager()
 	chain1 := newMockSecurityFilterChain(true)
 	chain2 := newMockSecurityFilterChain(true)
-	m.AddSecurityFilterChain(chain1)
-	m.AddSecurityFilterChain(chain2)
+	manager.AddSecurityFilterChain(chain1)
+	manager.AddSecurityFilterChain(chain2)
 
-	result := m.GetSecurityFilterChain("test")
-	if result != chain1 {
+	chain := manager.GetSecurityFilterChain("test")
+	if chain != chain1 {
 		t.Error("expected first matching chain to be returned")
 	}
 }
@@ -60,13 +60,13 @@ func TestSecurityFilterChainManager_FirstMatchWins(t *testing.T) {
 func TestSecurityFilterChainManager_GetAll(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
+	manager := NewSecurityFilterChainManager()
 	chain1 := newMockSecurityFilterChain(true)
 	chain2 := newMockSecurityFilterChain(false)
-	m.AddSecurityFilterChain(chain1)
-	m.AddSecurityFilterChain(chain2)
+	manager.AddSecurityFilterChain(chain1)
+	manager.AddSecurityFilterChain(chain2)
 
-	chains := m.GetSecurityFilterChains()
+	chains := manager.GetSecurityFilterChains()
 	if len(chains) != 2 {
 		t.Errorf("expected 2 chains, got %d", len(chains))
 	}
@@ -75,14 +75,14 @@ func TestSecurityFilterChainManager_GetAll(t *testing.T) {
 func TestSecurityFilterChainManager_Empty(t *testing.T) {
 	t.Parallel()
 
-	m := NewSecurityFilterChainManager()
+	manager := NewSecurityFilterChainManager()
 
-	result := m.GetSecurityFilterChain("test")
-	if result != nil {
+	chain := manager.GetSecurityFilterChain("test")
+	if chain != nil {
 		t.Error("expected nil for empty manager")
 	}
 
-	chains := m.GetSecurityFilterChains()
+	chains := manager.GetSecurityFilterChains()
 	if len(chains) != 0 {
 		t.Errorf("expected 0 chains, got %d", len(chains))
 	}
@@ -115,15 +115,15 @@ func TestSimpleSecurityFilterChain_NoMatch(t *testing.T) {
 func TestSimpleSecurityFilterChain_DoFilter(t *testing.T) {
 	t.Parallel()
 
-	f := newMockFilter(1)
+	mockFilter := newMockFilter(1)
 	matcher := MatcherFunc(func(request interface{}) bool { return true })
-	chain := NewSimpleSecurityFilterChain(matcher, f)
+	chain := NewSimpleSecurityFilterChain(matcher, mockFilter)
 
 	err := chain.DoFilter(nil, "test", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !f.executed {
+	if !mockFilter.executed {
 		t.Error("expected filter to be executed")
 	}
 }

@@ -44,8 +44,8 @@ func TestHTTPResponse_Bind_EmptyBody(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       nil,
 	}
-	var result map[string]string
-	if err := resp.Bind(&result); err != nil {
+	var payload map[string]string
+	if err := resp.Bind(&payload); err != nil {
 		t.Errorf("Bind() with empty body should not error, got %v", err)
 	}
 }
@@ -56,8 +56,8 @@ func TestHTTPResponse_Unmarshal_EmptyBody(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       nil,
 	}
-	var result map[string]string
-	if err := resp.Unmarshal(&result); err != nil {
+	var payload map[string]string
+	if err := resp.Unmarshal(&payload); err != nil {
 		t.Errorf("Unmarshal() with empty body should not error, got %v", err)
 	}
 }
@@ -71,12 +71,12 @@ func TestHTTPResponse_Unmarshal_ValidJSON(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       []byte(`{"name":"alice"}`),
 	}
-	var u user
-	if err := resp.Unmarshal(&u); err != nil {
+	var parsedUser user
+	if err := resp.Unmarshal(&parsedUser); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	if u.Name != "alice" {
-		t.Errorf("Name = %s, want alice", u.Name)
+	if parsedUser.Name != "alice" {
+		t.Errorf("Name = %s, want alice", parsedUser.Name)
 	}
 }
 
@@ -95,15 +95,15 @@ func TestContext_Request(t *testing.T) {
 func TestContext_JSON_MarshalFailure(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
-	ctx := NewContext(w, req)
+	rec := httptest.NewRecorder()
+	ctx := NewContext(rec, req)
 
 	err := ctx.JSON(http.StatusOK, make(chan int))
 	if err == nil {
 		t.Error("JSON() should error for non-marshalable data")
 	}
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusInternalServerError)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
 
@@ -111,13 +111,13 @@ func TestContext_BindJSON_ReadError(t *testing.T) {
 	t.Parallel()
 	body := strings.NewReader(strings.Repeat("x", 100))
 	req := httptest.NewRequest(http.MethodPost, "/test", body)
-	w := httptest.NewRecorder()
-	ctx := NewContext(w, req)
+	rec := httptest.NewRecorder()
+	ctx := NewContext(rec, req)
 
-	req.Body = http.MaxBytesReader(w, io.NopCloser(body), 1)
+	req.Body = http.MaxBytesReader(rec, io.NopCloser(body), 1)
 
-	var result map[string]string
-	err := ctx.BindJSON(&result)
+	var payload map[string]string
+	err := ctx.BindJSON(&payload)
 	if err == nil {
 		t.Error("BindJSON() should error when body exceeds limit")
 	}

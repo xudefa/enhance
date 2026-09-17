@@ -90,10 +90,12 @@ type LoginUrlAuthenticationEntryPoint struct {
 	loginFormUrl string
 }
 
+// NewAuthContextFilter 创建认证上下文过滤器。
 func NewAuthContextFilter() *AuthContextFilter {
 	return &AuthContextFilter{}
 }
 
+// NewAnonymousAuthenticationFilter 创建匿名认证过滤器，使用默认匿名用户。
 func NewAnonymousAuthenticationFilter() *AnonymousAuthenticationFilter {
 	return &AnonymousAuthenticationFilter{
 		key:         defaultAnonymousKey,
@@ -102,6 +104,7 @@ func NewAnonymousAuthenticationFilter() *AnonymousAuthenticationFilter {
 	}
 }
 
+// NewAnonymousAuthenticationToken 创建匿名认证令牌。
 func NewAnonymousAuthenticationToken(key string, principal any, authorities []string) *AnonymousAuthenticationToken {
 	return &AnonymousAuthenticationToken{
 		principal:     principal,
@@ -110,6 +113,7 @@ func NewAnonymousAuthenticationToken(key string, principal any, authorities []st
 	}
 }
 
+// NewExceptionTranslationFilter 创建异常翻译过滤器，将安全异常转为 HTTP 响应。
 func NewExceptionTranslationFilter(accessDeniedHandler AccessDeniedHandler, authenticationEntryPoint AuthenticationEntryPoint) *ExceptionTranslationFilter {
 	return &ExceptionTranslationFilter{
 		accessDeniedHandler:      accessDeniedHandler,
@@ -117,6 +121,7 @@ func NewExceptionTranslationFilter(accessDeniedHandler AccessDeniedHandler, auth
 	}
 }
 
+// NewFilterSecurityInterceptor 创建过滤器安全拦截器，执行访问决策和授权检查。
 func NewFilterSecurityInterceptor(securityMetadataSource SecurityMetadataSource, accessDecisionManager AccessDecisionManager, authenticationManager AuthenticationManager) *FilterSecurityInterceptor {
 	return &FilterSecurityInterceptor{
 		securityMetadataSource: securityMetadataSource,
@@ -126,24 +131,29 @@ func NewFilterSecurityInterceptor(securityMetadataSource SecurityMetadataSource,
 	}
 }
 
+// NewExpressionBasedFilterInvocationSecurityMetadataSource 创建基于表达式的请求安全元数据源。
 func NewExpressionBasedFilterInvocationSecurityMetadataSource() *ExpressionBasedFilterInvocationSecurityMetadataSource {
 	return &ExpressionBasedFilterInvocationSecurityMetadataSource{
 		requestMap: make(map[string][]string),
 	}
 }
 
+// NewHttp403ForbiddenEntryPoint 创建 HTTP 403 禁止访问入口点。
 func NewHttp403ForbiddenEntryPoint() *Http403ForbiddenEntryPoint {
 	return &Http403ForbiddenEntryPoint{}
 }
 
+// NewHttp401UnauthorizedEntryPoint 创建 HTTP 401 未认证入口点。
 func NewHttp401UnauthorizedEntryPoint() *Http401UnauthorizedEntryPoint {
 	return &Http401UnauthorizedEntryPoint{}
 }
 
+// NewHttp403ForbiddenAccessDeniedHandler 创建 HTTP 403 访问拒绝处理器。
 func NewHttp403ForbiddenAccessDeniedHandler() *Http403ForbiddenAccessDeniedHandler {
 	return &Http403ForbiddenAccessDeniedHandler{}
 }
 
+// NewLoginUrlAuthenticationEntryPoint 创建登录 URL 认证入口点。
 func NewLoginUrlAuthenticationEntryPoint(loginFormUrl string) *LoginUrlAuthenticationEntryPoint {
 	return &LoginUrlAuthenticationEntryPoint{
 		loginFormUrl: loginFormUrl,
@@ -176,7 +186,10 @@ func (f *AuthContextFilter) doFilter(ctx context.Context, request SecurityReques
 		}
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("认证上下文过滤失败: %w", err)
+	}
+	return nil
 }
 
 // Order 实现 filter.Filter 接口
@@ -257,13 +270,13 @@ func (f *ExceptionTranslationFilter) doFilter(ctx context.Context, request Secur
 				if f.authenticationEntryPoint != nil {
 					return f.authenticationEntryPoint.Commence(ctx, request, response, err)
 				}
-				return err
+				return fmt.Errorf("拒绝访问（未配置认证入口点）: %w", err)
 			}
 			if f.accessDeniedHandler != nil {
 				return f.accessDeniedHandler.Handle(ctx, request, response, err)
 			}
 		}
-		return err
+		return fmt.Errorf("安全异常转换过滤失败: %w", err)
 	}
 	return nil
 }
@@ -291,7 +304,7 @@ func (f *FilterSecurityInterceptor) DoFilter(ctx interface{}, request interface{
 func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	attributes, err := f.securityMetadataSource.GetAttributes(ctx, request)
 	if err != nil {
-		return err
+		return fmt.Errorf("获取请求安全属性失败: %w", err)
 	}
 
 	if f.observeOncePerRequest {
@@ -310,7 +323,7 @@ func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request Securi
 
 	resource := fmt.Sprintf("%s:%s", request.GetMethod(), request.GetURI())
 	if err := f.accessDecisionManager.Decide(ctx, auth, resource, attributes); err != nil {
-		return err
+		return fmt.Errorf("访问决策失败: %w", err)
 	}
 
 	return chain.DoFilter(ctx, request, response)

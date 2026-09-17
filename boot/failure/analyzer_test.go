@@ -36,9 +36,9 @@ func TestDefaultFailureAnalyzer_Supports(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := analyzer.Supports(tt.err)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
+			supported := analyzer.Supports(tt.err)
+			if supported != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, supported)
 			}
 		})
 	}
@@ -47,8 +47,8 @@ func TestDefaultFailureAnalyzer_Supports(t *testing.T) {
 func TestDefaultFailureAnalyzer_Analyze_Nil(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
-	result := analyzer.Analyze(nil)
-	if result != nil {
+	report := analyzer.Analyze(nil)
+	if report != nil {
 		t.Error("expected nil analysis for nil error")
 	}
 }
@@ -57,21 +57,21 @@ func TestDefaultFailureAnalyzer_Analyze_PortInUse(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
 	err := errors.New("listen tcp :8080: bind: address already in use")
-	result := analyzer.Analyze(err)
+	report := analyzer.Analyze(err)
 
-	if result == nil {
+	if report == nil {
 		t.Fatal("expected non-nil analysis")
 	}
-	if result.Description == "" {
+	if report.Description == "" {
 		t.Error("expected non-empty description")
 	}
-	if result.Action == "" {
+	if report.Action == "" {
 		t.Error("expected non-empty action")
 	}
-	if len(result.Components) == 0 {
+	if len(report.Components) == 0 {
 		t.Error("expected non-empty components")
 	}
-	if result.Exception != err {
+	if report.Exception != err {
 		t.Error("expected exception to match input error")
 	}
 }
@@ -80,12 +80,12 @@ func TestDefaultFailureAnalyzer_Analyze_PermissionDenied(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
 	err := errors.New("open /etc/passwd: permission denied")
-	result := analyzer.Analyze(err)
+	report := analyzer.Analyze(err)
 
-	if result == nil {
+	if report == nil {
 		t.Fatal("expected non-nil analysis")
 	}
-	if !containsComponent(result.Components, "filesystem") {
+	if !containsComponent(report.Components, "filesystem") {
 		t.Error("expected filesystem component")
 	}
 }
@@ -94,15 +94,15 @@ func TestDefaultFailureAnalyzer_Analyze_FileNotFound(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
 	err := errors.New("open config.yaml: no such file or directory")
-	result := analyzer.Analyze(err)
+	report := analyzer.Analyze(err)
 
-	if result == nil {
+	if report == nil {
 		t.Fatal("expected non-nil analysis")
 	}
-	if !containsComponent(result.Components, "filesystem") {
+	if !containsComponent(report.Components, "filesystem") {
 		t.Error("expected filesystem component")
 	}
-	if !containsComponent(result.Components, "config") {
+	if !containsComponent(report.Components, "config") {
 		t.Error("expected config component")
 	}
 }
@@ -111,17 +111,17 @@ func TestDefaultFailureAnalyzer_Analyze_Unsupported(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
 	err := errors.New("some unsupported error")
-	result := analyzer.Analyze(err)
+	report := analyzer.Analyze(err)
 
-	if result != nil {
+	if report != nil {
 		t.Error("expected nil analysis for unsupported error")
 	}
 }
 
 func TestGetSuggestions_Nil(t *testing.T) {
 	t.Parallel()
-	result := GetSuggestions(nil)
-	if result != nil {
+	suggestions := GetSuggestions(nil)
+	if suggestions != nil {
 		t.Error("expected nil suggestions for nil analysis")
 	}
 }
@@ -187,9 +187,9 @@ func TestGetSuggestions_Default(t *testing.T) {
 
 func TestFormatFailureAnalysis_Nil(t *testing.T) {
 	t.Parallel()
-	result := FormatFailureAnalysis(nil)
-	if result != "" {
-		t.Errorf("expected empty string, got %s", result)
+	output := FormatFailureAnalysis(nil)
+	if output != "" {
+		t.Errorf("expected empty string, got %s", output)
 	}
 }
 
@@ -201,20 +201,20 @@ func TestFormatFailureAnalysis_WithSuggestions(t *testing.T) {
 		Components:  []string{"server", "network"},
 	}
 
-	result := FormatFailureAnalysis(analysis)
-	if result == "" {
+	output := FormatFailureAnalysis(analysis)
+	if output == "" {
 		t.Fatal("expected non-empty result")
 	}
-	if !containsSubstring(result, "APPLICATION FAILED TO START") {
+	if !containsSubstring(output, "APPLICATION FAILED TO START") {
 		t.Error("expected header in output")
 	}
-	if !containsSubstring(result, "Port in use") {
+	if !containsSubstring(output, "Port in use") {
 		t.Error("expected description in output")
 	}
-	if !containsSubstring(result, "Change port") {
+	if !containsSubstring(output, "Change port") {
 		t.Error("expected action in output")
 	}
-	if !containsSubstring(result, "Suggestions:") {
+	if !containsSubstring(output, "Suggestions:") {
 		t.Error("expected suggestions section in output")
 	}
 }
@@ -227,11 +227,11 @@ func TestFormatFailureAnalysis_WithoutSuggestions(t *testing.T) {
 		Components:  []string{"other"},
 	}
 
-	result := FormatFailureAnalysis(analysis)
-	if result == "" {
+	output := FormatFailureAnalysis(analysis)
+	if output == "" {
 		t.Fatal("expected non-empty result")
 	}
-	if !containsSubstring(result, "APPLICATION FAILED TO START") {
+	if !containsSubstring(output, "APPLICATION FAILED TO START") {
 		t.Error("expected header in output")
 	}
 }
@@ -253,9 +253,9 @@ func TestContainsComponent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := containsComponent(tt.components, tt.target)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
+			found := containsComponent(tt.components, tt.target)
+			if found != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, found)
 			}
 		})
 	}
@@ -301,12 +301,12 @@ func TestFailureAnalysis_Struct(t *testing.T) {
 func TestDefaultFailureAnalyzer_Analyze_OsErrPermission(t *testing.T) {
 	t.Parallel()
 	analyzer := NewDefaultFailureAnalyzer()
-	result := analyzer.Analyze(os.ErrPermission)
+	report := analyzer.Analyze(os.ErrPermission)
 
-	if result == nil {
+	if report == nil {
 		t.Fatal("expected non-nil analysis for os.ErrPermission")
 	}
-	if !containsComponent(result.Components, "filesystem") {
+	if !containsComponent(report.Components, "filesystem") {
 		t.Error("expected filesystem component")
 	}
 }
@@ -337,11 +337,11 @@ func TestFormatFailureAnalysis_EmptyComponents(t *testing.T) {
 		Components:  []string{},
 	}
 
-	result := FormatFailureAnalysis(analysis)
-	if result == "" {
+	output := FormatFailureAnalysis(analysis)
+	if output == "" {
 		t.Fatal("expected non-empty result")
 	}
-	if !containsSubstring(result, "APPLICATION FAILED TO START") {
+	if !containsSubstring(output, "APPLICATION FAILED TO START") {
 		t.Error("expected header in output")
 	}
 }
@@ -352,8 +352,8 @@ func TestDefaultFailureAnalyzer_Supports_WrappedError(t *testing.T) {
 	innerErr := errors.New("address already in use")
 	wrappedErr := fmt.Errorf("failed to start server: %w", innerErr)
 
-	result := analyzer.Supports(wrappedErr)
-	if !result {
+	supported := analyzer.Supports(wrappedErr)
+	if !supported {
 		t.Error("expected to support wrapped error with port in use message")
 	}
 }

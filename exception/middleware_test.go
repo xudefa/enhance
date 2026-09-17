@@ -22,16 +22,16 @@ func TestExceptionHandlingMiddleware_Error(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	middleware(nextHandler).ServeHTTP(w, req)
+	middleware(nextHandler).ServeHTTP(rec, req)
 
-	if w.Code != 404 {
-		t.Errorf("Expected status 404, got %d", w.Code)
+	if rec.Code != 404 {
+		t.Errorf("Expected status 404, got %d", rec.Code)
 	}
 
 	var resp ErrorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
@@ -50,16 +50,16 @@ func TestExceptionHandlingMiddleware_Panic(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	middleware(nextHandler).ServeHTTP(w, req)
+	middleware(nextHandler).ServeHTTP(rec, req)
 
-	if w.Code != 500 {
-		t.Errorf("Expected status 500, got %d", w.Code)
+	if rec.Code != 500 {
+		t.Errorf("Expected status 500, got %d", rec.Code)
 	}
 
 	var resp ErrorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 

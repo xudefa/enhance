@@ -14,7 +14,23 @@ import (
 func TestBootStartStop(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	for _, tt := range testBootStartStopCases() {
+		tt := tt // capture range variable
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			app := newTestApp(t, tt.opts...)
+			startAndStopTestApp(t, app)
+			tt.verify(t, app)
+		})
+	}
+}
+
+func testBootStartStopCases() []struct {
+	name   string
+	opts   []BootOption
+	verify func(t *testing.T, app *Boot)
+} {
+	return []struct {
 		name   string
 		opts   []BootOption
 		verify func(t *testing.T, app *Boot)
@@ -55,16 +71,6 @@ func TestBootStartStop(t *testing.T) {
 				}
 			},
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt // capture range variable
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			app := newTestApp(t, tt.opts...)
-			startAndStopTestApp(t, app)
-			tt.verify(t, app)
-		})
 	}
 }
 
@@ -197,9 +203,13 @@ func TestBootCollectAutoConfigReportWithoutDebug(t *testing.T) {
 }
 
 // TestBootWaitForSignal tests WaitForSignal method.
+//
+// 注意：不得使用 t.Parallel()。WaitForSignal 依赖进程级 signal.Notify，
+// 且 syscall.Kill 直接向本进程发送 SIGTERM，多个此类测试并行会互抢
+// 进程信号，导致偶发 "signal: terminated"（进程被默认处理器终止）或
+// 等待者永久阻塞。因此信号类测试必须全局串行（与 AGENTS §2.3 的
+// "禁止并发：操作共享资源/全局状态" 条款一致）。
 func TestBootWaitForSignal(t *testing.T) {
-	t.Parallel()
-
 	app := newTestApp(t)
 	go func() {
 		time.Sleep(100 * time.Millisecond)

@@ -115,9 +115,9 @@ func TestSpanHelper_Duration_Ended(t *testing.T) {
 	time.Sleep(time.Millisecond)
 	span.End()
 
-	d := span.Duration()
-	if d <= 0 {
-		t.Errorf("Duration should be positive, got %v", d)
+	duration := span.Duration()
+	if duration <= 0 {
+		t.Errorf("Duration should be positive, got %v", duration)
 	}
 }
 
@@ -127,10 +127,10 @@ func TestSpanHelper_Duration_NotEnded(t *testing.T) {
 	span := &Span{StartTime: start}
 
 	time.Sleep(time.Millisecond)
-	d := span.Duration()
+	duration := span.Duration()
 
-	if d <= 0 {
-		t.Errorf("Duration should be positive, got %v", d)
+	if duration <= 0 {
+		t.Errorf("Duration should be positive, got %v", duration)
 	}
 }
 
@@ -168,23 +168,23 @@ func TestSpanHelper_MarshalJSON(t *testing.T) {
 	}
 	span.EndTime = span.StartTime.Add(100 * time.Millisecond)
 
-	data, err := json.Marshal(span)
+	jsonBytes, err := json.Marshal(span)
 	if err != nil {
 		t.Fatalf("MarshalJSON error: %v", err)
 	}
 
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
+	var parsed map[string]any
+	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
 		t.Fatalf("Unmarshal error: %v", err)
 	}
 
-	if m["trace_id"] != "trace-1" {
-		t.Errorf("trace_id = %v, want trace-1", m["trace_id"])
+	if parsed["trace_id"] != "trace-1" {
+		t.Errorf("trace_id = %v, want trace-1", parsed["trace_id"])
 	}
-	if m["name"] != "test" {
-		t.Errorf("name = %v, want test", m["name"])
+	if parsed["name"] != "test" {
+		t.Errorf("name = %v, want test", parsed["name"])
 	}
-	if _, ok := m["duration_ms"]; !ok {
+	if _, ok := parsed["duration_ms"]; !ok {
 		t.Error("should contain duration_ms")
 	}
 }
@@ -199,17 +199,17 @@ func TestSpanHelper_MarshalJSON_NotEnded(t *testing.T) {
 		Tags:      make(map[string]string),
 	}
 
-	data, err := json.Marshal(span)
+	jsonBytes, err := json.Marshal(span)
 	if err != nil {
 		t.Fatalf("MarshalJSON error: %v", err)
 	}
 
-	var m map[string]any
-	if err := json.Unmarshal(data, &m); err != nil {
+	var parsed map[string]any
+	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
 		t.Fatalf("Unmarshal error: %v", err)
 	}
 
-	if _, ok := m["duration_ms"]; !ok {
+	if _, ok := parsed["duration_ms"]; !ok {
 		t.Error("should contain duration_ms for not-ended span")
 	}
 }

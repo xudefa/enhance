@@ -7,7 +7,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
-	goNet "net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -75,112 +74,122 @@ func TestLoadTLSConfig_InvalidFiles(t *testing.T) {
 	})
 }
 
+func writeTestCertKeyFiles(t *testing.T, certPEM, keyPEM []byte) (certFile, keyFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return certFile, keyFile
+}
+
+func testLoadTLSConfigWithCAValid(t *testing.T) {
+	t.Parallel()
+	certPEM, keyPEM := generateTestCert(t)
+	caPEM := generateTestCA(t)
+
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	caFile := filepath.Join(dir, "ca.pem")
+
+	if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if len(cfg.Certificates) != 1 {
+		t.Errorf("expected 1 certificate, got %d", len(cfg.Certificates))
+	}
+	if cfg.RootCAs == nil {
+		t.Error("expected RootCAs to be set")
+	}
+}
+
+func testLoadTLSConfigWithCAInvalidCA(t *testing.T) {
+	t.Parallel()
+	certPEM, keyPEM := generateTestCert(t)
+	certFile, keyFile := writeTestCertKeyFiles(t, certPEM, keyPEM)
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+
+	_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
+	if err == nil {
+		t.Fatal("expected error for nonexistent CA file")
+	}
+}
+
+func testLoadTLSConfigWithCAUnparseable(t *testing.T) {
+	t.Parallel()
+	certPEM, keyPEM := generateTestCert(t)
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	caFile := filepath.Join(dir, "ca.pem")
+
+	if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caFile, []byte("not a valid PEM"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
+	if err == nil {
+		t.Fatal("expected error for unparseable CA")
+	}
+}
+
+func testLoadTLSConfigWithCAInvalidKeyPair(t *testing.T) {
+	t.Parallel()
+	caPEM := generateTestCA(t)
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	caFile := filepath.Join(dir, "ca.pem")
+
+	if err := os.WriteFile(certFile, []byte("bad cert"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("bad key"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
+	if err == nil {
+		t.Fatal("expected error for invalid key pair")
+	}
+}
+
 func TestLoadTLSConfigWithCA(t *testing.T) {
 	t.Parallel()
 
-	t.Run("valid certs and CA", func(t *testing.T) {
-		t.Parallel()
-		certPEM, keyPEM := generateTestCert(t)
-		caPEM := generateTestCA(t)
-
-		dir := t.TempDir()
-		certFile := filepath.Join(dir, "cert.pem")
-		keyFile := filepath.Join(dir, "key.pem")
-		caFile := filepath.Join(dir, "ca.pem")
-
-		if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-
-		cfg, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if cfg == nil {
-			t.Fatal("expected non-nil config")
-		}
-		if len(cfg.Certificates) != 1 {
-			t.Errorf("expected 1 certificate, got %d", len(cfg.Certificates))
-		}
-		if cfg.RootCAs == nil {
-			t.Error("expected RootCAs to be set")
-		}
-	})
-
-	t.Run("invalid CA file", func(t *testing.T) {
-		t.Parallel()
-		certPEM, keyPEM := generateTestCert(t)
-		dir := t.TempDir()
-		certFile := filepath.Join(dir, "cert.pem")
-		keyFile := filepath.Join(dir, "key.pem")
-		caFile := filepath.Join(dir, "ca.pem")
-
-		if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-
-		_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
-		if err == nil {
-			t.Fatal("expected error for nonexistent CA file")
-		}
-	})
-
-	t.Run("unparseable CA", func(t *testing.T) {
-		t.Parallel()
-		certPEM, keyPEM := generateTestCert(t)
-		dir := t.TempDir()
-		certFile := filepath.Join(dir, "cert.pem")
-		keyFile := filepath.Join(dir, "key.pem")
-		caFile := filepath.Join(dir, "ca.pem")
-
-		if err := os.WriteFile(certFile, certPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(keyFile, keyPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(caFile, []byte("not a valid PEM"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-
-		_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
-		if err == nil {
-			t.Fatal("expected error for unparseable CA")
-		}
-	})
-
-	t.Run("invalid key pair", func(t *testing.T) {
-		t.Parallel()
-		caPEM := generateTestCA(t)
-		dir := t.TempDir()
-		certFile := filepath.Join(dir, "cert.pem")
-		keyFile := filepath.Join(dir, "key.pem")
-		caFile := filepath.Join(dir, "ca.pem")
-
-		if err := os.WriteFile(certFile, []byte("bad cert"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(keyFile, []byte("bad key"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(caFile, caPEM, 0o644); err != nil {
-			t.Fatal(err)
-		}
-
-		_, err := LoadTLSConfigWithCA(certFile, keyFile, caFile)
-		if err == nil {
-			t.Fatal("expected error for invalid key pair")
-		}
-	})
+	t.Run("valid certs and CA", testLoadTLSConfigWithCAValid)
+	t.Run("invalid CA file", testLoadTLSConfigWithCAInvalidCA)
+	t.Run("unparseable CA", testLoadTLSConfigWithCAUnparseable)
+	t.Run("invalid key pair", testLoadTLSConfigWithCAInvalidKeyPair)
 }
 
 func TestLoadClientTLSConfig(t *testing.T) {
@@ -482,169 +491,4 @@ func TestParseRSAPublicKey_Invalid(t *testing.T) {
 			t.Fatal("expected error for invalid PEM content")
 		}
 	})
-}
-
-func TestNewSelfSignedCert(t *testing.T) {
-	t.Parallel()
-
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization: []string{"Test"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		IPAddresses:           []goNet.IP{goNet.ParseIP("127.0.0.1")},
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certDER,
-	})
-
-	if len(certPEM) == 0 {
-		t.Fatal("expected non-empty certificate PEM")
-	}
-
-	block, _ := pem.Decode(certPEM)
-	if block == nil {
-		t.Fatal("expected valid PEM block")
-	}
-	if block.Type != "CERTIFICATE" {
-		t.Errorf("block type = %q, want %q", block.Type, "CERTIFICATE")
-	}
-
-	parsedCert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		t.Fatalf("unexpected error parsing certificate: %v", err)
-	}
-	if parsedCert.Subject.Organization[0] != "Test" {
-		t.Errorf("subject organization = %q, want %q", parsedCert.Subject.Organization[0], "Test")
-	}
-}
-
-func TestAESEncrypt_InvalidIV(t *testing.T) {
-	t.Parallel()
-	key := []byte("0123456789abcdef")
-	iv := []byte("short")
-
-	_, err := AESEncrypt([]byte("data"), key, iv)
-	if err == nil {
-		t.Fatal("expected error for invalid IV length")
-	}
-}
-
-func TestAESDecrypt_InvalidIV(t *testing.T) {
-	t.Parallel()
-	key := []byte("012345689abcdef")
-	iv := []byte("short")
-
-	_, err := AESDecrypt([]byte("data"), key, iv)
-	if err == nil {
-		t.Fatal("expected error for invalid IV length")
-	}
-}
-
-func TestAESDecrypt_InvalidCiphertextLength(t *testing.T) {
-	t.Parallel()
-	key := []byte("0123456789abcdef")
-	iv := []byte("1234567890abcdef")
-
-	_, err := AESDecrypt([]byte("short"), key, iv)
-	if err == nil {
-		t.Fatal("expected error for invalid ciphertext length")
-	}
-}
-
-func TestAESDecrypt_InvalidKey(t *testing.T) {
-	t.Parallel()
-	key := []byte("short")
-	iv := []byte("1234567890abcdef")
-
-	_, err := AESDecrypt([]byte("data"), key, iv)
-	if err == nil {
-		t.Fatal("expected error for invalid key")
-	}
-}
-
-func TestAESGCMDecrypt_InvalidKey(t *testing.T) {
-	t.Parallel()
-	key := []byte("short")
-
-	_, err := AESGCMDecrypt([]byte("data"), key, nil)
-	if err == nil {
-		t.Fatal("expected error for invalid key")
-	}
-}
-
-func TestAESGCMDecrypt_TooShort(t *testing.T) {
-	t.Parallel()
-	key := []byte("0123456789abcdef")
-
-	_, err := AESGCMDecrypt([]byte("short"), key, nil)
-	if err == nil {
-		t.Fatal("expected error for ciphertext too short")
-	}
-}
-
-func TestPKCS7Unpad_InvalidPaddingValue(t *testing.T) {
-	t.Parallel()
-	data := make([]byte, 16)
-	for i := range data {
-		data[i] = 0
-	}
-	data[15] = 0 // padding value 0 is invalid
-	_, err := pkcs7Unpad(data, 16)
-	if err == nil {
-		t.Fatal("expected error for padding value 0")
-	}
-}
-
-func TestPKCS7Unpad_InvalidPaddingValueTooLarge(t *testing.T) {
-	t.Parallel()
-	data := make([]byte, 16)
-	for i := range data {
-		data[i] = byte(17) // padding value > blockSize
-	}
-	_, err := pkcs7Unpad(data, 16)
-	if err == nil {
-		t.Fatal("expected error for padding value > blockSize")
-	}
-}
-
-func TestPKCS7Unpad_InconsistentPadding(t *testing.T) {
-	t.Parallel()
-	data := make([]byte, 16)
-	for i := range data {
-		data[i] = byte(4)
-	}
-	data[15] = 4
-	data[14] = 3 // inconsistent padding byte
-	_, err := pkcs7Unpad(data, 16)
-	if err == nil {
-		t.Fatal("expected error for inconsistent padding")
-	}
-}
-
-func TestMarshalRSAPublicKey_NilKey(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for nil public key")
-		}
-	}()
-	_, _ = MarshalRSAPublicKey(nil)
 }

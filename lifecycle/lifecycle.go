@@ -40,8 +40,8 @@ func (m *LifecycleManager) SetPhase(newPhase ApplicationPhase) error {
 
 	var err error
 	for _, listener := range listeners {
-		if e := listener.OnPhaseChange(oldPhase, newPhase); e != nil && err == nil {
-			err = e
+		if listenerErr := listener.OnPhaseChange(oldPhase, newPhase); listenerErr != nil && err == nil {
+			err = listenerErr
 		}
 	}
 

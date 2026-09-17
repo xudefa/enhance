@@ -50,7 +50,7 @@ func (c *defaultContainer) RegisterBean(def registry.BeanDef) error {
 		if errors.Is(err, registry.ErrBeanAlreadyExists) {
 			return fmt.Errorf("%w: %v", ErrBeanAlreadyExists, err)
 		}
-		return err
+		return fmt.Errorf("注册 Bean %s 失败: %w", beanID, err)
 	}
 	return nil
 }
@@ -379,20 +379,13 @@ func (c *defaultContainer) createAndInitialize(beanID string, def *registry.Bean
 	// 检测工厂型循环依赖：仅当同一 goroutine 重入时才判定为循环依赖。
 	// 并发访问（不同 goroutine）应继续阻塞在下面的 per-beanID 锁上，
 	// 等待创建完成后命中缓存，而非直接报错。
-	if creating, ok := c.beanCreating.Load(beanID); ok {
-		if id := currentGoroutineID(); id != "" && creating.(string) == id {
-			return nil, fmt.Errorf("%w: bean %q is being created", ErrCircularDependency, beanID)
-		}
+	if err := c.checkFactoryCycle(beanID); err != nil {
+		return nil, err
 	}
 
 	// 每个 beanID 一把锁，保证 创建+初始化+缓存 整体只执行一次，
 	// 避免并发 Get 时 Init 被多次调用、产生重复销毁记录
-	lock, _ := c.beanCreationLocks.LoadOrStore(beanID, &sync.Mutex{})
-	mu, ok := lock.(*sync.Mutex)
-	if !ok {
-		mu = &sync.Mutex{}
-		c.beanCreationLocks.Store(beanID, mu)
-	}
+	mu := c.acquireBeanCreationLock(beanID)
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -405,6 +398,42 @@ func (c *defaultContainer) createAndInitialize(beanID string, def *registry.Bean
 	defer c.beanCreating.Delete(beanID)
 
 	// 根据作用域获取实例
+	instance, err := c.resolveScopeInstance(beanID, def)
+	if err != nil {
+		return nil, err
+	}
+
+	// 调用初始化回调（支持函数式回调和 LifecycleBean 接口）
+	if err := c.postCreateBean(beanID, def, instance); err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}
+
+// checkFactoryCycle 检测同一 goroutine 的工厂型循环依赖。
+func (c *defaultContainer) checkFactoryCycle(beanID string) error {
+	if creating, ok := c.beanCreating.Load(beanID); ok {
+		if id := currentGoroutineID(); id != "" && creating.(string) == id {
+			return fmt.Errorf("%w: bean %q is being created", ErrCircularDependency, beanID)
+		}
+	}
+	return nil
+}
+
+// acquireBeanCreationLock 获取或创建指定 Bean 的创建锁。
+func (c *defaultContainer) acquireBeanCreationLock(beanID string) *sync.Mutex {
+	lock, _ := c.beanCreationLocks.LoadOrStore(beanID, &sync.Mutex{})
+	mu, ok := lock.(*sync.Mutex)
+	if !ok {
+		mu = &sync.Mutex{}
+		c.beanCreationLocks.Store(beanID, mu)
+	}
+	return mu
+}
+
+// resolveScopeInstance 根据作用域获取 Bean 实例。
+func (c *defaultContainer) resolveScopeInstance(beanID string, def *registry.BeanDef) (any, error) {
 	scopeImpl := c.scopeRegistry.Get(string(def.Scope))
 	if scopeImpl == nil {
 		scopeImpl = c.scopeRegistry.Get(scope.SingletonScope)
@@ -412,12 +441,15 @@ func (c *defaultContainer) createAndInitialize(beanID string, def *registry.Bean
 
 	instance, err := scopeImpl.Get(beanID, def.Factory)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("创建 Bean %s 失败: %w", beanID, err)
 	}
+	return instance, nil
+}
 
-	// 调用初始化回调（支持函数式回调和 LifecycleBean 接口）
+// postCreateBean 调用初始化回调、缓存 Singleton 实例并注册销毁回调。
+func (c *defaultContainer) postCreateBean(beanID string, def *registry.BeanDef, instance any) error {
 	if err := c.lifecycleMgr.InvokeInit(beanID, instance, def.Init); err != nil {
-		return nil, err
+		return fmt.Errorf("初始化 Bean %s 失败: %w", beanID, err)
 	}
 
 	// 缓存 Singleton 实例（空作用域默认为 Singleton）
@@ -434,7 +466,7 @@ func (c *defaultContainer) createAndInitialize(beanID string, def *registry.Bean
 		}
 	}
 
-	return instance, nil
+	return nil
 }
 
 // currentGoroutineID 返回当前 goroutine 的 ID 字符串。

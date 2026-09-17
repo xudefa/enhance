@@ -102,7 +102,6 @@ func TestEventBus_MixedAsyncOperations(t *testing.T) {
 	var subscribeCount int32
 	var publishCount int32
 	var subscribeWg sync.WaitGroup
-	var publishWg sync.WaitGroup
 
 	// 先完成所有订阅
 	for range 50 {
@@ -117,6 +116,12 @@ func TestEventBus_MixedAsyncOperations(t *testing.T) {
 
 	subscribeWg.Wait()
 
+	testEventBusRunPublishes(t, bus, &subscribeCount, &publishCount)
+}
+
+func testEventBusRunPublishes(t *testing.T, bus EventBus, subscribeCount, publishCount *int32) {
+	var publishWg sync.WaitGroup
+
 	// 发布事件
 	for range 50 {
 		publishWg.Add(1)
@@ -126,7 +131,7 @@ func TestEventBus_MixedAsyncOperations(t *testing.T) {
 				EventType: "mixed.event",
 				EventTime: time.Now(),
 			})
-			atomic.AddInt32(&publishCount, 1)
+			atomic.AddInt32(publishCount, 1)
 		}()
 	}
 
@@ -136,10 +141,10 @@ func TestEventBus_MixedAsyncOperations(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		// 使用轮询等待订阅计数稳定
-		lastCount := atomic.LoadInt32(&subscribeCount)
+		lastCount := atomic.LoadInt32(subscribeCount)
 		for range 20 {
 			time.Sleep(5 * time.Millisecond)
-			currentCount := atomic.LoadInt32(&subscribeCount)
+			currentCount := atomic.LoadInt32(subscribeCount)
 			if currentCount == lastCount {
 				break
 			}
@@ -153,10 +158,10 @@ func TestEventBus_MixedAsyncOperations(t *testing.T) {
 		// 所有事件已处理完成
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timeout waiting for events, subscribeCount=%d, publishCount=%d",
-			atomic.LoadInt32(&subscribeCount), atomic.LoadInt32(&publishCount))
+			atomic.LoadInt32(subscribeCount), atomic.LoadInt32(publishCount))
 	}
 
-	if atomic.LoadInt32(&publishCount) != 50 {
-		t.Errorf("Expected 50 publishes, got %d", publishCount)
+	if atomic.LoadInt32(publishCount) != 50 {
+		t.Errorf("Expected 50 publishes, got %d", atomic.LoadInt32(publishCount))
 	}
 }

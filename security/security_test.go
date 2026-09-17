@@ -26,35 +26,35 @@ func TestAnonymousAuthenticationProvider_Authenticate(t *testing.T) {
 	provider := NewAnonymousAuthenticationProvider()
 
 	// Test with nil token
-	result, err := provider.Authenticate(context.Background(), nil)
+	authenticated, err := provider.Authenticate(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
+	if authenticated == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Principal() != "anonymousUser" {
-		t.Errorf("expected 'anonymousUser', got %v", result.Principal())
+	if authenticated.Principal() != "anonymousUser" {
+		t.Errorf("expected 'anonymousUser', got %v", authenticated.Principal())
 	}
 
 	// Test with authenticated token
 	token := NewUsernamePasswordAuthenticationToken("user", "pass")
 	token.SetAuthenticated(true)
-	result, err = provider.Authenticate(context.Background(), token)
+	authenticated, err = provider.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
+	if authenticated != nil {
 		t.Error("expected nil result for authenticated token")
 	}
 
 	// Test with token that has credentials
 	token2 := NewUsernamePasswordAuthenticationToken("user", "pass")
-	result, err = provider.Authenticate(context.Background(), token2)
+	authenticated, err = provider.Authenticate(context.Background(), token2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
+	if authenticated != nil {
 		t.Error("expected nil result for token with credentials")
 	}
 }
@@ -109,15 +109,15 @@ func TestRoleVoter_Vote_WithCustomPrefix(t *testing.T) {
 	token := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"CUSTOM_ADMIN"})
 
 	// Test with matching role
-	result := voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_ADMIN"})
-	if result != ACCESS_GRANTED {
-		t.Errorf("expected ACCESS_GRANTED, got %d", result)
+	voteResult := voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_ADMIN"})
+	if voteResult != ACCESS_GRANTED {
+		t.Errorf("expected ACCESS_GRANTED, got %d", voteResult)
 	}
 
 	// Test with non-matching role
-	result = voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_USER"})
-	if result != ACCESS_DENIED {
-		t.Errorf("expected ACCESS_DENIED, got %d", result)
+	voteResult = voter.Vote(context.Background(), token, "/admin", []string{"CUSTOM_USER"})
+	if voteResult != ACCESS_DENIED {
+		t.Errorf("expected ACCESS_DENIED, got %d", voteResult)
 	}
 }
 

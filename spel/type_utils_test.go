@@ -21,8 +21,8 @@ func TestEquals_NilCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if result := equals(tt.left, tt.right); result != tt.expected {
-				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, result, tt.expected)
+			if got := equals(tt.left, tt.right); got != tt.expected {
+				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
 			}
 		})
 	}
@@ -76,8 +76,8 @@ func TestEquals_Int(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if result := equals(tt.left, tt.right); result != tt.expected {
-				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, result, tt.expected)
+			if got := equals(tt.left, tt.right); got != tt.expected {
+				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
 			}
 		})
 	}
@@ -181,9 +181,9 @@ func TestToFloat64ValueConversion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := toFloat64Value(tt.input)
-			if result != tt.expected {
-				t.Errorf("toFloat64Value(%v) = %v, want %v", tt.input, result, tt.expected)
+			got := toFloat64Value(tt.input)
+			if got != tt.expected {
+				t.Errorf("toFloat64Value(%v) = %v, want %v", tt.input, got, tt.expected)
 			}
 		})
 	}
@@ -215,12 +215,12 @@ func TestCompareValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := compareValues(tt.left, tt.right, tt.op)
+			got, err := compareValues(tt.left, tt.right, tt.op)
 			if err != nil {
 				t.Errorf("compareValues(%v, %v, %s) unexpected error: %v", tt.left, tt.right, tt.op, err)
 			}
-			if result != tt.expected {
-				t.Errorf("compareValues(%v, %v, %s) = %v, want %v", tt.left, tt.right, tt.op, result, tt.expected)
+			if got != tt.expected {
+				t.Errorf("compareValues(%v, %v, %s) = %v, want %v", tt.left, tt.right, tt.op, got, tt.expected)
 			}
 		})
 	}
@@ -246,8 +246,8 @@ func TestEquals_Uint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if result := equals(tt.left, tt.right); result != tt.expected {
-				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, result, tt.expected)
+			if got := equals(tt.left, tt.right); got != tt.expected {
+				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
 			}
 		})
 	}

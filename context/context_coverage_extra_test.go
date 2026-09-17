@@ -89,9 +89,9 @@ func TestApplicationContextHelper_GetBeanByTypeOrDefault_Coverage(t *testing.T) 
 
 	// 测试默认值路径
 	defaultBean := &TestBean{Name: "default"}
-	result := helper.GetBeanByTypeOrDefault(reflect.TypeOf(TestBean{}), defaultBean)
+	bean := helper.GetBeanByTypeOrDefault(reflect.TypeOf(TestBean{}), defaultBean)
 
-	testBean := result.(*TestBean)
+	testBean := bean.(*TestBean)
 	if testBean.Name != "default" {
 		t.Errorf("Expected Name 'default', got %s", testBean.Name)
 	}

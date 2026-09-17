@@ -23,7 +23,7 @@ func BindConfig[T any](env *Environment) (T, error) {
 	var zero T
 	target := new(T)
 	if err := env.Bind(target); err != nil {
-		return zero, err
+		return zero, fmt.Errorf("绑定配置失败: %w", err)
 	}
 	return *target, nil
 }
@@ -39,7 +39,7 @@ func BindConfigPrefix[T any](env *Environment, prefix string) (T, error) {
 	var zero T
 	target := new(T)
 	if err := env.BindPrefix(prefix, target); err != nil {
-		return zero, err
+		return zero, fmt.Errorf("绑定配置前缀 %s 失败: %w", prefix, err)
 	}
 	return *target, nil
 }
@@ -51,7 +51,7 @@ func BindConfigRequired[T any](env *Environment) (T, error) {
 	var zero T
 	target := new(T)
 	if err := env.Bind(target); err != nil {
-		return zero, err
+		return zero, fmt.Errorf("绑定必填配置失败: %w", err)
 	}
 	if errs := validateRequired(reflect.ValueOf(target).Elem()); len(errs) > 0 {
 		return zero, fmt.Errorf("required config missing: %v", errs)

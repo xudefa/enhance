@@ -293,8 +293,8 @@ func (q *InMemoryQueue) Consume(handler MessageHandler) error {
 	go func() {
 		defer q.wg.Done()
 		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[MQ] message handler panic recovered in queue %s: %v\n", q.name, r)
+			if rec := recover(); rec != nil {
+				fmt.Printf("[MQ] message handler panic recovered in queue %s: %v\n", q.name, rec)
 			}
 		}()
 

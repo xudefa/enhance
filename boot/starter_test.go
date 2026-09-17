@@ -66,12 +66,12 @@ func TestStarterRegistry_Get(t *testing.T) {
 	registry.Register(newMockStarter("s1"))
 	registry.Register(newMockStarter("s2"))
 
-	s := registry.Get("s1")
-	if s == nil {
+	starter := registry.Get("s1")
+	if starter == nil {
 		t.Fatal("expected to find starter 's1'")
 	}
-	if s.Name() != "s1" {
-		t.Fatalf("expected name 's1', got '%s'", s.Name())
+	if starter.Name() != "s1" {
+		t.Fatalf("expected name 's1', got '%s'", starter.Name())
 	}
 
 	missing := registry.Get("nonexistent")

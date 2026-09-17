@@ -82,16 +82,16 @@ func TestLoaderChain_Less_NilLoaders(t *testing.T) {
 
 func TestLoaderChain_Swap(t *testing.T) {
 	t.Parallel()
-	a := &priorityLoader{name: "a", priority: 10}
-	b := &priorityLoader{name: "b", priority: 20}
-	chain := &LoaderChain{loaders: []Loader{a, b}}
+	first := &priorityLoader{name: "a", priority: 10}
+	second := &priorityLoader{name: "b", priority: 20}
+	chain := &LoaderChain{loaders: []Loader{first, second}}
 
 	chain.Swap(0, 1)
 
-	if chain.loaders[0] != b {
+	if chain.loaders[0] != second {
 		t.Error("expected index 0 to be b after swap")
 	}
-	if chain.loaders[1] != a {
+	if chain.loaders[1] != first {
 		t.Error("expected index 1 to be a after swap")
 	}
 }

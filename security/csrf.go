@@ -138,6 +138,7 @@ type CookieCsrfTokenRepository struct {
 	sameSite       http.SameSite
 }
 
+// NewCookieCsrfTokenRepository 创建基于 Cookie 的 CSRF 令牌仓库。
 func NewCookieCsrfTokenRepository() *CookieCsrfTokenRepository {
 	return &CookieCsrfTokenRepository{
 		cookieName:     "_csrf_token",
@@ -148,6 +149,7 @@ func NewCookieCsrfTokenRepository() *CookieCsrfTokenRepository {
 	}
 }
 
+// GenerateToken 生成新的 CSRF 令牌。
 func (r *CookieCsrfTokenRepository) GenerateToken(ctx context.Context, request SecurityRequest) (*CsrfToken, error) {
 	token, err := generateSecureToken(32)
 	if err != nil {
@@ -171,6 +173,7 @@ func (r *CookieCsrfTokenRepository) LoadToken(ctx context.Context, request Secur
 	}, nil
 }
 
+// ValidateToken 使用常量时间比较校验提交的令牌与已保存令牌是否一致。
 func (r *CookieCsrfTokenRepository) ValidateToken(ctx context.Context, request SecurityRequest, token string) bool {
 	savedToken, exists := request.GetAttribute("csrf.token")
 	if !exists {
@@ -216,22 +219,24 @@ func sameSiteString(s http.SameSite) string {
 	}
 }
 
+// SaveToken 将 CSRF 令牌写入响应 Cookie。
 func (r *CookieCsrfTokenRepository) SaveToken(ctx context.Context, request SecurityRequest, response SecurityResponse, token *CsrfToken) {
 	response.SetHeader("Set-Cookie", fmt.Sprintf("%s=%s; Path=/; HttpOnly=%t; Secure=%t; SameSite=%s",
 		r.cookieName, token.Value, r.cookieHttpOnly, r.secure, sameSiteString(r.sameSite)))
 }
 
+// ClearToken 清除响应中的 CSRF 令牌 Cookie。
 func (r *CookieCsrfTokenRepository) ClearToken(ctx context.Context, request SecurityRequest, response SecurityResponse) {
 	response.SetHeader("Set-Cookie", fmt.Sprintf("%s=; Path=/; Max-Age=0", r.cookieName))
 }
 
 func generateSecureToken(length int) (string, error) {
-	b := make([]byte, length)
-	_, err := rand.Read(b)
+	tokenBytes := make([]byte, length)
+	_, err := rand.Read(tokenBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate secure token: %w", err)
 	}
-	return base64.URLEncoding.EncodeToString(b), nil
+	return base64.URLEncoding.EncodeToString(tokenBytes), nil
 }
 
 // CsrfTokenManager CSRF 令牌管理器
@@ -240,12 +245,14 @@ type CsrfTokenManager struct {
 	mu     sync.RWMutex
 }
 
+// NewCsrfTokenManager 创建 CSRF 令牌管理器。
 func NewCsrfTokenManager() *CsrfTokenManager {
 	return &CsrfTokenManager{
 		tokens: make(map[string]string),
 	}
 }
 
+// GenerateToken 为主题生成令牌并保存。
 func (m *CsrfTokenManager) GenerateToken(principal string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -257,6 +264,7 @@ func (m *CsrfTokenManager) GenerateToken(principal string) (string, error) {
 	return token, nil
 }
 
+// ValidateToken 校验主题对应的令牌是否有效。
 func (m *CsrfTokenManager) ValidateToken(principal, token string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -267,6 +275,7 @@ func (m *CsrfTokenManager) ValidateToken(principal, token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(savedToken)) == 1
 }
 
+// RemoveToken 删除主题保存的令牌。
 func (m *CsrfTokenManager) RemoveToken(principal string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -279,6 +288,7 @@ type CsrfAuthenticationStrategy struct {
 	tokenManager *CsrfTokenManager
 }
 
+// NewCsrfAuthenticationStrategy 创建基于 CSRF 令牌的会话认证策略。
 func NewCsrfAuthenticationStrategy() *CsrfAuthenticationStrategy {
 	return &CsrfAuthenticationStrategy{
 		tokenManager: NewCsrfTokenManager(),

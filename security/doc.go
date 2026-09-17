@@ -113,20 +113,28 @@ var (
 
 type (
 	// authentication 包的类型别名
-	Authentication         = authentication.Authentication
-	AuthenticationToken    = authentication.AuthenticationToken
-	AuthenticationManager  = authentication.AuthenticationManager
+	Authentication = authentication.Authentication
+	// AuthenticationToken 认证令牌类型的别名。
+	AuthenticationToken = authentication.AuthenticationToken
+	// AuthenticationManager 认证管理器类型的别名。
+	AuthenticationManager = authentication.AuthenticationManager
+	// AuthenticationProvider 认证提供者类型的别名。
 	AuthenticationProvider = authentication.AuthenticationProvider
-	UserDetails            = authentication.UserDetails
-	UserDetailsService     = authentication.UserDetailsService
-	PasswordEncoder        = authentication.PasswordEncoder
+	// UserDetails 用户详情类型的别名。
+	UserDetails = authentication.UserDetails
+	// UserDetailsService 用户详情服务类型的别名。
+	UserDetailsService = authentication.UserDetailsService
+	// PasswordEncoder 密码编码器类型的别名。
+	PasswordEncoder = authentication.PasswordEncoder
 
 	// authorization 包的类型别名
 	AccessDecisionManager = authorization.AccessDecisionManager
-	AccessDecisionVoter   = authorization.AccessDecisionVoter
+	// AccessDecisionVoter 访问决策投票者类型的别名。
+	AccessDecisionVoter = authorization.AccessDecisionVoter
 
 	// filter 包的类型别名
-	SecurityFilter      = filter.Filter
+	SecurityFilter = filter.Filter
+	// SecurityFilterChain 安全过滤器链类型的别名。
 	SecurityFilterChain = filter.SecurityFilterChain
 )
 
@@ -376,5 +384,6 @@ const (
 // ==================== 条件值常量 ====================
 
 const (
+	// ConditionTrue 条件值常量，表示开启。
 	ConditionTrue = "true"
 )

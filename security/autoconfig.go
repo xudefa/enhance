@@ -211,18 +211,34 @@ func (c *SecurityAutoConfiguration) buildDefaultSecurityFilters(authManager Auth
 	}
 
 	if !skip {
-		contextHolderFilter := NewAuthContextFilter()
-		filters = append(filters, contextHolderFilter)
+		filters = append(filters, NewAuthContextFilter())
 	}
 
 	// 添加 Basic 认证过滤器
-	basicAuthFilter := NewBasicAuthenticationFilter(authManager)
-	filters = append(filters, basicAuthFilter)
+	filters = append(filters, NewBasicAuthenticationFilter(authManager))
 
-	anonymousFilter := NewAnonymousAuthenticationFilter()
-	filters = append(filters, anonymousFilter)
+	filters = append(filters, NewAnonymousAuthenticationFilter())
 
 	// 收集所有投票者（包括容器中的自定义投票者，如 CasbinVoter）
+	accessDecisionManager := NewAffirmativeBased(c.collectVoters(container)...)
+
+	metadataSource := c.buildMetadataSource(env)
+
+	accessDeniedHandler := NewHttp403ForbiddenAccessDeniedHandler()
+	unauthorizedEntryPoint := NewHttp401UnauthorizedEntryPoint()
+	filters = append(filters, NewExceptionTranslationFilter(accessDeniedHandler, unauthorizedEntryPoint))
+
+	filters = append(filters, NewFilterSecurityInterceptor(
+		metadataSource,
+		accessDecisionManager,
+		authManager,
+	))
+
+	return filters
+}
+
+// collectVoters 收集授权投票者（默认投票者 + 容器中的自定义投票者）。
+func (c *SecurityAutoConfiguration) collectVoters(container core.Container) []AccessDecisionVoter {
 	voters := []AccessDecisionVoter{
 		NewWebExpressionVoter(),
 		NewAuthenticatedVoter(),
@@ -248,8 +264,11 @@ func (c *SecurityAutoConfiguration) buildDefaultSecurityFilters(authManager Auth
 		}
 	}
 
-	accessDecisionManager := NewAffirmativeBased(voters...)
+	return voters
+}
 
+// buildMetadataSource 构建安全规则源，并解析 security.rules 配置。
+func (c *SecurityAutoConfiguration) buildMetadataSource(env *environment.Environment) *ExpressionBasedFilterInvocationSecurityMetadataSource {
 	metadataSource := NewExpressionBasedFilterInvocationSecurityMetadataSource()
 	if rules := env.GetString("security.rules", ""); rules != "" {
 		for _, rule := range parseStringSlice(rules) {
@@ -261,20 +280,7 @@ func (c *SecurityAutoConfiguration) buildDefaultSecurityFilters(authManager Auth
 			}
 		}
 	}
-
-	accessDeniedHandler := NewHttp403ForbiddenAccessDeniedHandler()
-	unauthorizedEntryPoint := NewHttp401UnauthorizedEntryPoint()
-	exceptionTranslationFilter := NewExceptionTranslationFilter(accessDeniedHandler, unauthorizedEntryPoint)
-	filters = append(filters, exceptionTranslationFilter)
-
-	filterSecurityInterceptor := NewFilterSecurityInterceptor(
-		metadataSource,
-		accessDecisionManager,
-		authManager,
-	)
-	filters = append(filters, filterSecurityInterceptor)
-
-	return filters
+	return metadataSource
 }
 
 // getOrCreateCorsFilter 获取或创建CORS过滤器
@@ -403,12 +409,12 @@ func parseStringSlice(value string) []string {
 		return []string{}
 	}
 	parts := strings.Split(value, ",")
-	result := make([]string, 0, len(parts))
+	trimmedParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part != "" {
-			result = append(result, part)
+			trimmedParts = append(trimmedParts, part)
 		}
 	}
-	return result
+	return trimmedParts
 }

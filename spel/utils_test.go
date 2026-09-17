@@ -236,12 +236,28 @@ func TestToFloat64(t *testing.T) {
 
 func TestEqualsCrossTypeComparisons(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name     string
-		left     any
-		right    any
-		expected bool
-	}{
+	tests := append(testEqualsCrossTypeCasesInt(), testEqualsCrossTypeCasesFloat()...)
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := equals(tt.left, tt.right); got != tt.expected {
+				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
+			}
+		})
+	}
+}
+
+type equalsCrossTypeCase struct {
+	name     string
+	left     any
+	right    any
+	expected bool
+}
+
+func testEqualsCrossTypeCasesInt() []equalsCrossTypeCase {
+	return []equalsCrossTypeCase{
 		{"int vs int8", int(8), int8(8), true},
 		{"int vs int16", int(16), int16(16), true},
 		{"int vs int32", int(32), int32(32), true},
@@ -277,6 +293,11 @@ func TestEqualsCrossTypeComparisons(t *testing.T) {
 		{"uint64 vs uint64", uint64(64), uint64(64), true},
 		{"uint64 vs float32", uint64(1), float32(1), true},
 		{"uint64 vs float64", uint64(1), float64(1), true},
+	}
+}
+
+func testEqualsCrossTypeCasesFloat() []equalsCrossTypeCase {
+	return []equalsCrossTypeCase{
 		{"float32 vs int", float32(42), int(42), true},
 		{"float32 vs int8", float32(8), int8(8), true},
 		{"float32 vs int16", float32(16), int16(16), true},
@@ -306,16 +327,6 @@ func TestEqualsCrossTypeComparisons(t *testing.T) {
 		{"uint16 vs uint", uint16(42), uint(42), true},
 		{"uint32 vs uint", uint32(42), uint(42), true},
 		{"float64 vs string", float64(1), "a", false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := equals(tt.left, tt.right); got != tt.expected {
-				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
-			}
-		})
 	}
 }
 

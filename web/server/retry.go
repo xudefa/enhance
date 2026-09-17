@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// maxExponentialShift 指数退避最大位移量，防止 baseDelay*(1<<shift) 左移溢出。
+const maxExponentialShift = 62
+
 // Get 发送 GET 请求（支持重试）。
 func (c *RetryableClient) Get(ctx context.Context, url string, opts ...RequestOption) (*HTTPResponse, error) {
 	return c.doWithRetry(ctx, func(ctx context.Context) (*HTTPResponse, error) {
@@ -218,8 +221,8 @@ func (e *ExponentialBackoff) ShouldRetry(resp *HTTPResponse, err error, attempt 
 func (e *ExponentialBackoff) Delay(attempt int) time.Duration {
 	// 限制位移上限，避免 baseDelay * (1<<shift) 溢出 int64 导致负延迟
 	shift := uint(attempt)
-	if shift > 62 {
-		shift = 62
+	if shift > maxExponentialShift {
+		shift = maxExponentialShift
 	}
 	if maxShift := e.maxSafeShift(); shift > maxShift {
 		shift = maxShift

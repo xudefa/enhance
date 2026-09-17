@@ -17,9 +17,9 @@ func TestEnvironment_GetProperty(t *testing.T) {
 	env.AddPropertySource(src2)
 	env.AddPropertySource(src1)
 
-	val := env.GetString("key", "")
-	if val != "value1" {
-		t.Fatalf("expected value1 (higher priority), got %s", val)
+	prop := env.GetString("key", "")
+	if prop != "value1" {
+		t.Fatalf("expected value1 (higher priority), got %s", prop)
 	}
 }
 
@@ -248,13 +248,13 @@ func TestGetProperty_AutoResolvePlaceholders(t *testing.T) {
 		"url":  "http://${host}:${port}",
 	}))
 
-	val, ok := env.GetProperty("url")
+	prop, ok := env.GetProperty("url")
 	if !ok {
 		t.Fatal("expected url to exist")
 	}
-	got, ok := val.(string)
+	got, ok := prop.(string)
 	if !ok {
-		t.Fatalf("expected string, got %T", val)
+		t.Fatalf("expected string, got %T", prop)
 	}
 	if got != "http://localhost:8080" {
 		t.Fatalf("url = %q, want http://localhost:8080", got)
@@ -337,13 +337,13 @@ func TestParseProfiles(t *testing.T) {
 		{"", nil},
 	}
 	for _, tt := range tests {
-		result := ParseProfiles(tt.input)
-		if len(result) != len(tt.expected) {
-			t.Fatalf("ParseProfiles(%q) = %v, want %v", tt.input, result, tt.expected)
+		parsed := ParseProfiles(tt.input)
+		if len(parsed) != len(tt.expected) {
+			t.Fatalf("ParseProfiles(%q) = %v, want %v", tt.input, parsed, tt.expected)
 		}
-		for i := range result {
-			if result[i] != tt.expected[i] {
-				t.Fatalf("ParseProfiles(%q) = %v, want %v", tt.input, result, tt.expected)
+		for i := range parsed {
+			if parsed[i] != tt.expected[i] {
+				t.Fatalf("ParseProfiles(%q) = %v, want %v", tt.input, parsed, tt.expected)
 			}
 		}
 	}
@@ -360,7 +360,7 @@ func TestEnvironment_NotifyAfterClose(t *testing.T) {
 
 	env.Close()
 
-	env.notifyConfigChange(NewConfigChangeEvent("modify", []string{"k"}, nil, nil, "test"))
+	env.notifyConfigChange(NewConfigChangeEvent("modify", WithEventKeys([]string{"k"}), WithEventSource("test")))
 
 	select {
 	case <-done:
@@ -379,7 +379,7 @@ func TestEnvironment_CloseConcurrentWithNotify(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			env.notifyConfigChange(NewConfigChangeEvent("modify", []string{"k"}, nil, nil, "test"))
+			env.notifyConfigChange(NewConfigChangeEvent("modify", WithEventKeys([]string{"k"}), WithEventSource("test")))
 		}()
 	}
 	wg.Add(1)
@@ -404,10 +404,9 @@ func TestEnvironment_ConfigChangeListener(t *testing.T) {
 
 	event := NewConfigChangeEvent(
 		"modify",
-		[]string{"test.key"},
-		map[string]any{"test.key": "old"},
-		map[string]any{"test.key": "new"},
-		"test",
+		WithEventKeys([]string{"test.key"}),
+		WithEventValues(map[string]any{"test.key": "old"}, map[string]any{"test.key": "new"}),
+		WithEventSource("test"),
 	)
 
 	env.notifyConfigChange(event)

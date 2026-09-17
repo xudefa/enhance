@@ -113,8 +113,8 @@ func RegisterFailureAnalyzer(analyzer FailureAnalyzer) {
 
 // formatFailure 格式化失败报告为可读字符串
 func formatFailure(report *FailureReport) string {
-	var result strings.Builder
-	fmt.Fprintf(&result, `
+	var out strings.Builder
+	fmt.Fprintf(&out, `
 ====================
 APPLICATION FAILED TO START
 ====================
@@ -126,12 +126,12 @@ APPLICATION FAILED TO START
 原因: %s
 `, report.Description, report.Action, report.Cause)
 	if len(report.PossibleSolutions) > 0 {
-		result.WriteString("\n可能的解决方案:\n")
+		out.WriteString("\n可能的解决方案:\n")
 		for i, sol := range report.PossibleSolutions {
-			fmt.Fprintf(&result, "  %d. %s\n", i+1, sol)
+			fmt.Fprintf(&out, "  %d. %s\n", i+1, sol)
 		}
 	}
-	return result.String()
+	return out.String()
 }
 
 // ReportFailure 分析并格式化输出失败报告

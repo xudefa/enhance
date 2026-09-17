@@ -76,7 +76,7 @@ func TestRegistryBuilder_MustBuild_Panic(t *testing.T) {
 
 func TestInstanceBuilder_BasicInstance(t *testing.T) {
 	t.Parallel()
-	info := NewInstanceBuilder("user-service").
+	instanceInfo := NewInstanceBuilder("user-service").
 		ID("instance-1").
 		Host("192.168.1.1").
 		Port(8080).
@@ -84,58 +84,58 @@ func TestInstanceBuilder_BasicInstance(t *testing.T) {
 		Metadata("env", "prod").
 		Build()
 
-	if info.ServiceName != "user-service" {
-		t.Errorf("expected ServiceName 'user-service', got %s", info.ServiceName)
+	if instanceInfo.ServiceName != "user-service" {
+		t.Errorf("expected ServiceName 'user-service', got %s", instanceInfo.ServiceName)
 	}
 
-	if info.ID != "instance-1" {
-		t.Errorf("expected ID 'instance-1', got %s", info.ID)
+	if instanceInfo.ID != "instance-1" {
+		t.Errorf("expected ID 'instance-1', got %s", instanceInfo.ID)
 	}
 
-	if info.Host != "192.168.1.1" {
-		t.Errorf("expected Host '192.168.1.1', got %s", info.Host)
+	if instanceInfo.Host != "192.168.1.1" {
+		t.Errorf("expected Host '192.168.1.1', got %s", instanceInfo.Host)
 	}
 
-	if info.Port != 8080 {
-		t.Errorf("expected Port 8080, got %d", info.Port)
+	if instanceInfo.Port != 8080 {
+		t.Errorf("expected Port 8080, got %d", instanceInfo.Port)
 	}
 
-	if info.Weight != 5 {
-		t.Errorf("expected Weight 5, got %d", info.Weight)
+	if instanceInfo.Weight != 5 {
+		t.Errorf("expected Weight 5, got %d", instanceInfo.Weight)
 	}
 
-	if info.Metadata["env"] != "prod" {
-		t.Errorf("expected Metadata['env'] 'prod', got %s", info.Metadata["env"])
+	if instanceInfo.Metadata["env"] != "prod" {
+		t.Errorf("expected Metadata['env'] 'prod', got %s", instanceInfo.Metadata["env"])
 	}
 
-	if !info.Healthy {
+	if !instanceInfo.Healthy {
 		t.Error("expected instance to be healthy by default")
 	}
 }
 
 func TestInstanceBuilder_DefaultValues(t *testing.T) {
 	t.Parallel()
-	info := NewInstanceBuilder("test-service").Build()
+	instanceInfo := NewInstanceBuilder("test-service").Build()
 
-	if info.Weight != 1 {
-		t.Errorf("expected default Weight 1, got %d", info.Weight)
+	if instanceInfo.Weight != 1 {
+		t.Errorf("expected default Weight 1, got %d", instanceInfo.Weight)
 	}
 
-	if !info.Healthy {
+	if !instanceInfo.Healthy {
 		t.Error("expected default Healthy true")
 	}
 
-	if info.Metadata == nil {
+	if instanceInfo.Metadata == nil {
 		t.Error("expected non-nil Metadata")
 	}
 }
 
 func TestInstanceBuilder_InvalidWeight(t *testing.T) {
 	t.Parallel()
-	info := NewInstanceBuilder("test-service").Weight(-1).Build()
+	instanceInfo := NewInstanceBuilder("test-service").Weight(-1).Build()
 
-	if info.Weight != 1 {
-		t.Errorf("expected Weight to remain 1 for negative value, got %d", info.Weight)
+	if instanceInfo.Weight != 1 {
+		t.Errorf("expected Weight to remain 1 for negative value, got %d", instanceInfo.Weight)
 	}
 }
 
@@ -210,13 +210,13 @@ func TestMemoryRegistry_RegisterAndDiscover(t *testing.T) {
 	reg := NewMemoryRegistry()
 	ctx := context.Background()
 
-	info := NewInstanceBuilder("user-service").
+	instanceInfo := NewInstanceBuilder("user-service").
 		ID("instance-1").
 		Host("192.168.1.1").
 		Port(8080).
 		Build()
 
-	err := reg.Register(ctx, info)
+	err := reg.Register(ctx, instanceInfo)
 	if err != nil {
 		t.Fatalf("failed to register: %v", err)
 	}
@@ -240,14 +240,14 @@ func TestMemoryRegistry_Deregister(t *testing.T) {
 	reg := NewMemoryRegistry()
 	ctx := context.Background()
 
-	info := NewInstanceBuilder("user-service").
+	instanceInfo := NewInstanceBuilder("user-service").
 		ID("instance-1").
 		Host("192.168.1.1").
 		Port(8080).
 		Build()
 
-	_ = reg.Register(ctx, info)
-	_ = reg.Deregister(ctx, info)
+	_ = reg.Register(ctx, instanceInfo)
+	_ = reg.Deregister(ctx, instanceInfo)
 
 	instances, err := reg.Discover(ctx, "user-service")
 	if err != nil {
@@ -273,13 +273,13 @@ func TestMemoryRegistry_Watch(t *testing.T) {
 		t.Fatal("expected non-nil channel")
 	}
 
-	info := NewInstanceBuilder("user-service").
+	instanceInfo := NewInstanceBuilder("user-service").
 		ID("instance-1").
 		Host("192.168.1.1").
 		Port(8080).
 		Build()
 
-	_ = reg.Register(ctx, info)
+	_ = reg.Register(ctx, instanceInfo)
 
 	select {
 	case instances := <-ch:

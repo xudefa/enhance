@@ -11,12 +11,12 @@ func TestNewMapEnvironment(t *testing.T) {
 		"key2": "value2",
 	})
 
-	val, ok := env.GetProperty("key1")
+	prop, ok := env.GetProperty("key1")
 	if !ok {
 		t.Fatal("expected property to exist")
 	}
-	if val != "value1" {
-		t.Errorf("expected 'value1', got %v", val)
+	if prop != "value1" {
+		t.Errorf("expected 'value1', got %v", prop)
 	}
 }
 
@@ -29,12 +29,12 @@ func TestNewMapEnvironmentWithProfiles(t *testing.T) {
 		[]string{"dev", "test"},
 	)
 
-	val, ok := env.GetProperty("key1")
+	prop, ok := env.GetProperty("key1")
 	if !ok {
 		t.Fatal("expected property to exist")
 	}
-	if val != "value1" {
-		t.Errorf("expected 'value1', got %v", val)
+	if prop != "value1" {
+		t.Errorf("expected 'value1', got %v", prop)
 	}
 
 	if !env.AcceptsProfiles("dev") {
@@ -68,13 +68,13 @@ func TestEnvironment_GetPropertyWithDefault(t *testing.T) {
 		"app.name": "myapp",
 	})
 
-	val := env.GetPropertyWithDefault("app.name", "default")
-	if val != "myapp" {
-		t.Errorf("expected 'myapp', got %s", val)
+	prop := env.GetPropertyWithDefault("app.name", "default")
+	if prop != "myapp" {
+		t.Errorf("expected 'myapp', got %s", prop)
 	}
 
-	val = env.GetPropertyWithDefault("missing.key", "default")
-	if val != "default" {
-		t.Errorf("expected 'default', got %s", val)
+	prop = env.GetPropertyWithDefault("missing.key", "default")
+	if prop != "default" {
+		t.Errorf("expected 'default', got %s", prop)
 	}
 }

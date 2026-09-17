@@ -124,17 +124,17 @@ func TestAny_SingleCondition(t *testing.T) {
 
 func TestJoinConditions(t *testing.T) {
 	t.Parallel()
-	result := joinConditions([]Condition{OnProperty("a"), OnProperty("b")}, ", ")
+	joined := joinConditions([]Condition{OnProperty("a"), OnProperty("b")}, ", ")
 	expected := "OnProperty(a), OnProperty(b)"
-	if result != expected {
-		t.Errorf("joinConditions() = %q, want %q", result, expected)
+	if joined != expected {
+		t.Errorf("joinConditions() = %q, want %q", joined, expected)
 	}
 }
 
 func TestJoinConditions_Empty(t *testing.T) {
 	t.Parallel()
-	result := joinConditions(nil, ", ")
-	if result != "" {
-		t.Errorf("expected empty string, got %q", result)
+	joined := joinConditions(nil, ", ")
+	if joined != "" {
+		t.Errorf("expected empty string, got %q", joined)
 	}
 }

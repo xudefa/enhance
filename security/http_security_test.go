@@ -17,9 +17,9 @@ func TestHttpSecurity_FormLogin(t *testing.T) {
 	t.Parallel()
 
 	http := NewHttpSecurity()
-	result := http.FormLogin("/login", "/dashboard")
+	securityBuilder := http.FormLogin("/login", "/dashboard")
 
-	if result == nil {
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
 }
@@ -30,15 +30,15 @@ func TestHttpSecurity_FormLogin_Defaults(t *testing.T) {
 	http := NewHttpSecurity()
 	http.FormLogin("")
 
-	h := http.(*httpSecurity)
-	if h.loginProcessingUrl != "/login" {
-		t.Errorf("expected default loginProcessingUrl /login, got %s", h.loginProcessingUrl)
+	httpSec := http.(*httpSecurity)
+	if httpSec.loginProcessingUrl != "/login" {
+		t.Errorf("expected default loginProcessingUrl /login, got %s", httpSec.loginProcessingUrl)
 	}
-	if h.defaultSuccessUrl != "/" {
-		t.Errorf("expected default success url /, got %s", h.defaultSuccessUrl)
+	if httpSec.defaultSuccessUrl != "/" {
+		t.Errorf("expected default success url /, got %s", httpSec.defaultSuccessUrl)
 	}
-	if h.failureUrl != "/login?error" {
-		t.Errorf("expected default failure url /login?error, got %s", h.failureUrl)
+	if httpSec.failureUrl != "/login?error" {
+		t.Errorf("expected default failure url /login?error, got %s", httpSec.failureUrl)
 	}
 }
 
@@ -46,17 +46,17 @@ func TestHttpSecurity_HttpBasic(t *testing.T) {
 	t.Parallel()
 
 	http := NewHttpSecurity()
-	result := http.HttpBasic()
+	securityBuilder := http.HttpBasic()
 
-	if result == nil {
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
-	h := http.(*httpSecurity)
-	if !h.httpBasicEnabled {
+	httpSec := http.(*httpSecurity)
+	if !httpSec.httpBasicEnabled {
 		t.Error("expected httpBasicEnabled to be true")
 	}
-	if h.realmName != "Secured Area" {
-		t.Errorf("expected realmName 'Secured Area', got %s", h.realmName)
+	if httpSec.realmName != "Secured Area" {
+		t.Errorf("expected realmName 'Secured Area', got %s", httpSec.realmName)
 	}
 }
 
@@ -64,14 +64,14 @@ func TestHttpSecurity_Logout(t *testing.T) {
 	t.Parallel()
 
 	http := NewHttpSecurity()
-	result := http.Logout("/logout")
+	securityBuilder := http.Logout("/logout")
 
-	if result == nil {
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
-	h := http.(*httpSecurity)
-	if h.logoutUrl != "/logout" {
-		t.Errorf("expected logoutUrl /logout, got %s", h.logoutUrl)
+	httpSec := http.(*httpSecurity)
+	if httpSec.logoutUrl != "/logout" {
+		t.Errorf("expected logoutUrl /logout, got %s", httpSec.logoutUrl)
 	}
 }
 
@@ -81,9 +81,9 @@ func TestHttpSecurity_Logout_DefaultUrl(t *testing.T) {
 	http := NewHttpSecurity()
 	http.Logout("")
 
-	h := http.(*httpSecurity)
-	if h.logoutUrl != "/logout" {
-		t.Errorf("expected default logoutUrl /logout, got %s", h.logoutUrl)
+	httpSec := http.(*httpSecurity)
+	if httpSec.logoutUrl != "/logout" {
+		t.Errorf("expected default logoutUrl /logout, got %s", httpSec.logoutUrl)
 	}
 }
 
@@ -91,13 +91,13 @@ func TestHttpSecurity_Anonymous(t *testing.T) {
 	t.Parallel()
 
 	http := NewHttpSecurity()
-	result := http.Anonymous()
+	securityBuilder := http.Anonymous()
 
-	if result == nil {
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
-	h := http.(*httpSecurity)
-	if h.anonymousFilter == nil {
+	httpSec := http.(*httpSecurity)
+	if httpSec.anonymousFilter == nil {
 		t.Error("expected anonymousFilter to be set")
 	}
 }
@@ -106,13 +106,13 @@ func TestHttpSecurity_Csrf(t *testing.T) {
 	t.Parallel()
 
 	http := NewHttpSecurity()
-	result := http.Csrf()
+	securityBuilder := http.Csrf()
 
-	if result == nil {
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
-	h := http.(*httpSecurity)
-	if !h.csrfEnabled {
+	httpSec := http.(*httpSecurity)
+	if !httpSec.csrfEnabled {
 		t.Error("expected csrfEnabled to be true")
 	}
 }
@@ -151,8 +151,8 @@ func TestHttpSecurity_AuthorizeRequests(t *testing.T) {
 		authz.AnyRequest().Authenticated()
 	})
 
-	h := http.(*httpSecurity)
-	if len(h.authorizeRules) == 0 {
+	httpSec := http.(*httpSecurity)
+	if len(httpSec.authorizeRules) == 0 {
 		t.Error("expected authorize rules to be set")
 	}
 }
@@ -164,8 +164,8 @@ func TestHttpSecurity_AuthenticationManager(t *testing.T) {
 	mgr := NewProviderManager()
 	http.AuthenticationManager(mgr)
 
-	h := http.(*httpSecurity)
-	if h.authenticationManager == nil {
+	httpSec := http.(*httpSecurity)
+	if httpSec.authenticationManager == nil {
 		t.Error("expected authenticationManager to be set")
 	}
 }
@@ -178,8 +178,8 @@ func TestHttpSecurity_ExceptionHandling_Setter(t *testing.T) {
 	entryPoint := NewHttp401UnauthorizedEntryPoint()
 	http.ExceptionHandling(handler, entryPoint)
 
-	h := http.(*httpSecurity)
-	if h.exceptionTranslationFilter == nil {
+	httpSec := http.(*httpSecurity)
+	if httpSec.exceptionTranslationFilter == nil {
 		t.Error("expected exceptionTranslationFilter to be set")
 	}
 }
@@ -239,8 +239,8 @@ func TestExpressionInterceptUrlRegistry_PermitAll(t *testing.T) {
 		httpSecurity: http,
 		patterns:     []string{"/public/**"},
 	}
-	result := reg.PermitAll()
-	if result == nil {
+	securityBuilder := reg.PermitAll()
+	if securityBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
 	if len(http.authorizeRules) != 1 {
@@ -360,11 +360,11 @@ func TestExpressionInterceptUrlRegistry_EmptyPatterns(t *testing.T) {
 		httpSecurity: http,
 		patterns:     []string{},
 	}
-	result := reg.addRule([]string{"permitAll"})
+	ruleBuilder := reg.addRule([]string{"permitAll"})
 	if len(http.authorizeRules) != 0 {
 		t.Error("expected no rules for empty patterns")
 	}
-	if result == nil {
+	if ruleBuilder == nil {
 		t.Fatal("expected non-nil result")
 	}
 }

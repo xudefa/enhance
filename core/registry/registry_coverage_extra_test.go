@@ -23,29 +23,7 @@ func TestRegisterInstance_Coverage(t *testing.T) {
 			instance: &TestBean{Value: "inst"},
 			typ:      reflect.TypeOf((*TestBean)(nil)),
 			checkFunc: func(t *testing.T, reg BeanRegistry) {
-				t.Helper()
-				def, ok := reg.GetDefinition("id-inst")
-				if !ok {
-					t.Fatal("expected definition to exist")
-				}
-				if !def.Primary {
-					t.Error("expected instance bean to be primary")
-				}
-				if def.Scope != Singleton {
-					t.Errorf("expected singleton scope, got %v", def.Scope)
-				}
-				bean, err := def.Factory()
-				if err != nil {
-					t.Fatalf("factory failed: %v", err)
-				}
-				got, ok := bean.(*TestBean)
-				if !ok || got.Value != "inst" {
-					t.Errorf("unexpected factory result: %v", bean)
-				}
-				primaryID, ok := reg.GetPrimaryByType(reflect.TypeOf((*TestBean)(nil)))
-				if !ok || primaryID != "id-inst" {
-					t.Errorf("expected id-inst as primary, got %q", primaryID)
-				}
+				checkRegisterInstanceSuccess(t, reg)
 			},
 		},
 		{
@@ -77,6 +55,32 @@ func TestRegisterInstance_Coverage(t *testing.T) {
 				tt.checkFunc(t, reg)
 			}
 		})
+	}
+}
+
+func checkRegisterInstanceSuccess(t *testing.T, reg BeanRegistry) {
+	t.Helper()
+	def, ok := reg.GetDefinition("id-inst")
+	if !ok {
+		t.Fatal("expected definition to exist")
+	}
+	if !def.Primary {
+		t.Error("expected instance bean to be primary")
+	}
+	if def.Scope != Singleton {
+		t.Errorf("expected singleton scope, got %v", def.Scope)
+	}
+	bean, err := def.Factory()
+	if err != nil {
+		t.Fatalf("factory failed: %v", err)
+	}
+	got, ok := bean.(*TestBean)
+	if !ok || got.Value != "inst" {
+		t.Errorf("unexpected factory result: %v", bean)
+	}
+	primaryID, ok := reg.GetPrimaryByType(reflect.TypeOf((*TestBean)(nil)))
+	if !ok || primaryID != "id-inst" {
+		t.Errorf("expected id-inst as primary, got %q", primaryID)
 	}
 }
 

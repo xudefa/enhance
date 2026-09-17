@@ -95,7 +95,7 @@ type Mock interface {
 	Expect(method string, args []any, result any, err error) Mock
 
 	// ExpectTimes 设置方法调用期望，指定期望调用次数。
-	ExpectTimes(method string, args []any, result any, err error, times int) Mock
+	ExpectTimes(spec ExpectationRequest) Mock
 
 	// Call 模拟方法调用，返回匹配的期望结果。
 	Call(method string, args ...any) (any, error)

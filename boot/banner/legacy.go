@@ -58,13 +58,13 @@ type LegacyBanner struct {
 // 返回值:
 //   - Banner: 旧版横幅实例，已设置默认控制台输出模式
 func NewLegacyBanner(opts ...LegacyOption) Banner {
-	b := &LegacyBanner{
+	banner := &LegacyBanner{
 		mode: BannerModeConsole,
 	}
 	for _, opt := range opts {
-		opt(b)
+		opt(banner)
 	}
-	return b
+	return banner
 }
 
 // Print 打印旧版横幅到标准输出。

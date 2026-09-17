@@ -64,12 +64,12 @@ func TestHealthAware_Next_HealthyBackends(t *testing.T) {
 		{URL: "http://backend2", ID: "2", Health: HealthDown},
 	}
 
-	result, err := ha.Next(backends)
+	backend, err := ha.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -83,12 +83,12 @@ func TestHealthAware_Next_AllDown(t *testing.T) {
 		{URL: "http://backend2", ID: "2", Health: HealthDown},
 	}
 
-	result, err := ha.Next(backends)
+	backend, err := ha.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
-		t.Fatal("expected non-nil result")
+	if backend == nil {
+		t.Fatal("expected non-nil backend")
 	}
 }
 

@@ -282,8 +282,8 @@ func TestMustLoadTLSConfig_ValidFiles(t *testing.T) {
 	}
 
 	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("MustLoadTLSConfig() panicked: %v", r)
+		if panicValue := recover(); panicValue != nil {
+			t.Fatalf("MustLoadTLSConfig() panicked: %v", panicValue)
 		}
 	}()
 
@@ -449,11 +449,11 @@ func generateTestCertForCoverage(t *testing.T) (certPEM, keyPEM []byte) {
 }
 
 func writeFile(path string, data []byte) error {
-	f, err := os.Create(path)
+	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = f.Write(data)
+	defer file.Close()
+	_, err = file.Write(data)
 	return err
 }

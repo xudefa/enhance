@@ -8,7 +8,33 @@ import (
 func TestASCIIArtBanner_Print_TableDriven(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	for _, tt := range testASCIIArtBannerPrintCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := NewASCIIArtBanner(tt.art, tt.color)
+			output := captureStdout(t, func() {
+				if err := b.Print(tt.version); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+			for _, want := range tt.want {
+				if !strings.Contains(output, want) {
+					t.Errorf("output %q does not contain %q", output, want)
+				}
+			}
+		})
+	}
+}
+
+func testASCIIArtBannerPrintCases() []struct {
+	name    string
+	art     string
+	color   string
+	version string
+	want    []string
+} {
+	return []struct {
 		name    string
 		art     string
 		color   string
@@ -43,24 +69,6 @@ func TestASCIIArtBanner_Print_TableDriven(t *testing.T) {
 			version: "",
 			want:    []string{},
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			b := NewASCIIArtBanner(tt.art, tt.color)
-			output := captureStdout(t, func() {
-				if err := b.Print(tt.version); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			})
-			for _, want := range tt.want {
-				if !strings.Contains(output, want) {
-					t.Errorf("output %q does not contain %q", output, want)
-				}
-			}
-		})
 	}
 }
 

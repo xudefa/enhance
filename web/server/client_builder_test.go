@@ -35,23 +35,23 @@ func TestNewExponentialBackoff_CustomHelper(t *testing.T) {
 
 func TestNewFixedDelay_Helper(t *testing.T) {
 	t.Parallel()
-	d := NewFixedDelay(0)
-	if d.delay != 1*time.Second {
-		t.Errorf("delay = %v, want 1s", d.delay)
+	delayCfg := NewFixedDelay(0)
+	if delayCfg.delay != 1*time.Second {
+		t.Errorf("delay = %v, want 1s", delayCfg.delay)
 	}
-	if len(d.retryableStatus) == 0 {
+	if len(delayCfg.retryableStatus) == 0 {
 		t.Error("retryableStatus should have default values")
 	}
 }
 
 func TestNewFixedDelay_CustomHelper(t *testing.T) {
 	t.Parallel()
-	d := NewFixedDelay(500*time.Millisecond, 500, 502)
-	if d.delay != 500*time.Millisecond {
-		t.Errorf("delay = %v, want 500ms", d.delay)
+	delayCfg := NewFixedDelay(500*time.Millisecond, 500, 502)
+	if delayCfg.delay != 500*time.Millisecond {
+		t.Errorf("delay = %v, want 500ms", delayCfg.delay)
 	}
-	if len(d.retryableStatus) != 2 {
-		t.Errorf("retryableStatus len = %d, want 2", len(d.retryableStatus))
+	if len(delayCfg.retryableStatus) != 2 {
+		t.Errorf("retryableStatus len = %d, want 2", len(delayCfg.retryableStatus))
 	}
 }
 
@@ -76,10 +76,10 @@ func TestNewClient_WithTimeoutHelper(t *testing.T) {
 
 func TestNewClient_WithHeadersHelper(t *testing.T) {
 	t.Parallel()
-	h := make(map[string][]string)
-	h["X-Custom"] = []string{"value"}
+	headers := make(map[string][]string)
+	headers["X-Custom"] = []string{"value"}
 
-	c := NewClient("http://localhost:8080", WithHeaders(h))
+	c := NewClient("http://localhost:8080", WithHeaders(headers))
 	if c.headers.Get("X-Custom") != "value" {
 		t.Errorf("header X-Custom = %s, want value", c.headers.Get("X-Custom"))
 	}

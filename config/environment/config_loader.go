@@ -47,21 +47,55 @@ func NewConfigLoader(configName string, configType ConfigType, configLocation st
 	}
 }
 
+// ConfigLoaderOption 配置加载器的可选参数。
+type ConfigLoaderOption func(*configLoaderOptions)
+
+// configLoaderOptions 保存配置加载器的可选参数。
+type configLoaderOptions struct {
+	configLocation string
+	profiles       []string
+	searchPaths    []string
+}
+
+// WithLoaderLocation 设置自定义配置文件路径，为空时自动搜索。
+func WithLoaderLocation(location string) ConfigLoaderOption {
+	return func(o *configLoaderOptions) {
+		o.configLocation = location
+	}
+}
+
+// WithLoaderProfiles 设置激活的 Profile 列表。
+func WithLoaderProfiles(profiles []string) ConfigLoaderOption {
+	return func(o *configLoaderOptions) {
+		o.profiles = profiles
+	}
+}
+
+// WithLoaderSearchPaths 设置自定义搜索路径列表。
+func WithLoaderSearchPaths(paths []string) ConfigLoaderOption {
+	return func(o *configLoaderOptions) {
+		o.searchPaths = paths
+	}
+}
+
 // NewConfigLoaderWithPaths 创建配置文件加载器并指定搜索路径
 //
 // 参数：
 //   - configName: 配置文件名（不含扩展名），如 "application"
 //   - configType: 配置文件类型，如 ConfigTypeJSON
-//   - configLocation: 自定义配置文件路径，为空时自动搜索
-//   - profiles: 激活的 Profile 列表
-//   - searchPaths: 自定义搜索路径列表
-func NewConfigLoaderWithPaths(configName string, configType ConfigType, configLocation string, profiles []string, searchPaths []string) *ConfigLoader {
+//   - opts: 可选参数（WithLoaderLocation / WithLoaderProfiles / WithLoaderSearchPaths）
+func NewConfigLoaderWithPaths(configName string, configType ConfigType, opts ...ConfigLoaderOption) *ConfigLoader {
+	options := &configLoaderOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return &ConfigLoader{
 		configName:     configName,
 		configType:     configType,
-		configLocation: configLocation,
-		profiles:       profiles,
-		searchPaths:    searchPaths,
+		configLocation: options.configLocation,
+		profiles:       options.profiles,
+		searchPaths:    options.searchPaths,
 	}
 }
 
@@ -75,7 +109,7 @@ func (l *ConfigLoader) Load() ([]PropertySource, error) {
 	if l.configLocation != "" {
 		source, err := l.loadConfigFile(l.configLocation, "custom-config")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("加载自定义配置文件 %s 失败: %w", l.configLocation, err)
 		}
 		sources = append(sources, source)
 		return sources, nil
@@ -83,7 +117,7 @@ func (l *ConfigLoader) Load() ([]PropertySource, error) {
 
 	baseConfigPath, err := l.findConfigFile(l.configName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("查找配置文件 %s 失败: %w", l.configName, err)
 	}
 
 	if baseConfigPath != "" {
@@ -98,7 +132,7 @@ func (l *ConfigLoader) Load() ([]PropertySource, error) {
 		profileConfigName := fmt.Sprintf("%s-%s", l.configName, profile)
 		profileConfigPath, err := l.findConfigFile(profileConfigName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("查找 profile 配置文件 %s 失败: %w", profileConfigName, err)
 		}
 
 		if profileConfigPath != "" {

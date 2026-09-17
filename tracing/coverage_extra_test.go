@@ -49,47 +49,7 @@ func (m *mockApplicationContext) EventBus() boot.EventBusResult {
 
 func TestTracingAutoConfiguration_Configure_Coverage(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name       string
-		props      map[string]any
-		wantErr    bool
-		wantRate   float64
-		wantSpans  int
-		wantLoaded bool
-	}{
-		{
-			name: "default config",
-			props: map[string]any{
-				"tracing.enabled": "true",
-			},
-			wantRate:   DefaultSamplingRate,
-			wantSpans:  DefaultMaxSpans,
-			wantLoaded: true,
-		},
-		{
-			name: "custom config with sampling",
-			props: map[string]any{
-				"tracing.enabled":       "true",
-				"tracing.service_name":  "my-svc",
-				"tracing.sampling_rate": "0.5",
-				"tracing.max_spans":     "500",
-			},
-			wantRate:   0.5,
-			wantSpans:  500,
-			wantLoaded: true,
-		},
-		{
-			name: "custom config without sampling",
-			props: map[string]any{
-				"tracing.enabled":      "true",
-				"tracing.service_name": "full-svc",
-				"tracing.max_spans":    "2000",
-			},
-			wantRate:   1.0,
-			wantSpans:  2000,
-			wantLoaded: true,
-		},
-	}
+	tests := testTracingAutoConfigurationConfigureCases()
 
 	for _, tt := range tests {
 		tt := tt
@@ -126,6 +86,52 @@ func TestTracingAutoConfiguration_Configure_Coverage(t *testing.T) {
 	}
 }
 
+type tracingAutoConfigurationConfigureCase struct {
+	name       string
+	props      map[string]any
+	wantErr    bool
+	wantRate   float64
+	wantSpans  int
+	wantLoaded bool
+}
+
+func testTracingAutoConfigurationConfigureCases() []tracingAutoConfigurationConfigureCase {
+	return []tracingAutoConfigurationConfigureCase{
+		{
+			name: "default config",
+			props: map[string]any{
+				"tracing.enabled": "true",
+			},
+			wantRate:   DefaultSamplingRate,
+			wantSpans:  DefaultMaxSpans,
+			wantLoaded: true,
+		},
+		{
+			name: "custom config with sampling",
+			props: map[string]any{
+				"tracing.enabled":       "true",
+				"tracing.service_name":  "my-svc",
+				"tracing.sampling_rate": "0.5",
+				"tracing.max_spans":     "500",
+			},
+			wantRate:   0.5,
+			wantSpans:  500,
+			wantLoaded: true,
+		},
+		{
+			name: "custom config without sampling",
+			props: map[string]any{
+				"tracing.enabled":      "true",
+				"tracing.service_name": "full-svc",
+				"tracing.max_spans":    "2000",
+			},
+			wantRate:   1.0,
+			wantSpans:  2000,
+			wantLoaded: true,
+		},
+	}
+}
+
 func TestTracingAutoConfiguration_GetTracer_Coverage(t *testing.T) {
 	t.Parallel()
 	cfg := &TracingAutoConfiguration{}
@@ -141,13 +147,44 @@ func TestTracingAutoConfiguration_GetTracer_Coverage(t *testing.T) {
 
 func TestTracingAutoConfiguration_LoadConfig_Coverage(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name     string
-		props    map[string]any
-		wantName string
-		wantRate float64
-		wantMax  int
-	}{
+	tests := testTracingAutoConfigurationLoadConfigCases()
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			env := environment.NewEnvironment()
+			env.AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityNormal, tt.props))
+
+			cfg := &TracingAutoConfiguration{}
+			got, err := cfg.loadConfig(env)
+			if err != nil {
+				t.Fatalf("loadConfig() error = %v", err)
+			}
+
+			if got.ServiceName != tt.wantName {
+				t.Errorf("ServiceName = %s, want %s", got.ServiceName, tt.wantName)
+			}
+			if got.SamplingRate != tt.wantRate {
+				t.Errorf("SamplingRate = %f, want %f", got.SamplingRate, tt.wantRate)
+			}
+			if got.MaxSpans != tt.wantMax {
+				t.Errorf("MaxSpans = %d, want %d", got.MaxSpans, tt.wantMax)
+			}
+		})
+	}
+}
+
+type tracingAutoConfigurationLoadConfigCase struct {
+	name     string
+	props    map[string]any
+	wantName string
+	wantRate float64
+	wantMax  int
+}
+
+func testTracingAutoConfigurationLoadConfigCases() []tracingAutoConfigurationLoadConfigCase {
+	return []tracingAutoConfigurationLoadConfigCase{
 		{
 			name:     "defaults",
 			props:    map[string]any{},
@@ -173,31 +210,6 @@ func TestTracingAutoConfiguration_LoadConfig_Coverage(t *testing.T) {
 			wantRate: 0.0,
 			wantMax:  DefaultMaxSpans,
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			env := environment.NewEnvironment()
-			env.AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityNormal, tt.props))
-
-			cfg := &TracingAutoConfiguration{}
-			got, err := cfg.loadConfig(env)
-			if err != nil {
-				t.Fatalf("loadConfig() error = %v", err)
-			}
-
-			if got.ServiceName != tt.wantName {
-				t.Errorf("ServiceName = %s, want %s", got.ServiceName, tt.wantName)
-			}
-			if got.SamplingRate != tt.wantRate {
-				t.Errorf("SamplingRate = %f, want %f", got.SamplingRate, tt.wantRate)
-			}
-			if got.MaxSpans != tt.wantMax {
-				t.Errorf("MaxSpans = %d, want %d", got.MaxSpans, tt.wantMax)
-			}
-		})
 	}
 }
 
@@ -231,20 +243,20 @@ func TestSpan_MarshalJSON_NotEnded_Coverage(t *testing.T) {
 		Events:    make([]SpanEvent, 0),
 	}
 
-	data, err := span.MarshalJSON()
+	jsonBytes, err := span.MarshalJSON()
 	if err != nil {
 		t.Fatalf("MarshalJSON() error = %v", err)
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
+	var parsed map[string]any
+	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
 		t.Fatalf("Unmarshal error = %v", err)
 	}
 
-	if result["ended"] != false {
-		t.Errorf("expected ended=false, got %v", result["ended"])
+	if parsed["ended"] != false {
+		t.Errorf("expected ended=false, got %v", parsed["ended"])
 	}
-	if result["duration_ms"] == nil {
+	if parsed["duration_ms"] == nil {
 		t.Error("expected duration_ms to be set")
 	}
 }
@@ -411,9 +423,9 @@ func TestSpan_Duration_Ended_Coverage(t *testing.T) {
 		Ended:     true,
 	}
 
-	d := span.Duration()
-	if d < time.Second-time.Millisecond || d > time.Second+time.Millisecond {
-		t.Errorf("expected ~1s duration, got %v", d)
+	duration := span.Duration()
+	if duration < time.Second-time.Millisecond || duration > time.Second+time.Millisecond {
+		t.Errorf("expected ~1s duration, got %v", duration)
 	}
 }
 

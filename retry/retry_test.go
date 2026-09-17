@@ -135,7 +135,7 @@ func TestExecutor_Success(t *testing.T) {
 	ctx := context.Background()
 	var callCount atomic.Int32
 
-	result, err := Execute(ctx, exec, func(ctx context.Context) (string, error) {
+	value, err := Execute(ctx, exec, func(ctx context.Context) (string, error) {
 		callCount.Add(1)
 		return "success", nil
 	})
@@ -143,8 +143,8 @@ func TestExecutor_Success(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if result != "success" {
-		t.Errorf("expected result='success', got %s", result)
+	if value != "success" {
+		t.Errorf("expected result='success', got %s", value)
 	}
 	if callCount.Load() != 1 {
 		t.Errorf("expected 1 call, got %d", callCount.Load())
@@ -165,7 +165,7 @@ func TestExecutor_RetryThenSuccess(t *testing.T) {
 	ctx := context.Background()
 	var callCount atomic.Int32
 
-	result, err := Execute(ctx, exec, func(ctx context.Context) (string, error) {
+	value, err := Execute(ctx, exec, func(ctx context.Context) (string, error) {
 		count := callCount.Add(1)
 		if count < 3 {
 			return "", fmt.Errorf("transient error %d", count)
@@ -176,8 +176,8 @@ func TestExecutor_RetryThenSuccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if result != "success" {
-		t.Errorf("expected result='success', got %s", result)
+	if value != "success" {
+		t.Errorf("expected result='success', got %s", value)
 	}
 	if callCount.Load() != 3 {
 		t.Errorf("expected 3 calls, got %d", callCount.Load())

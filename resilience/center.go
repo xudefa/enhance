@@ -66,9 +66,9 @@ func (r *InMemoryRegistry) Discover(ctx context.Context, serviceName string) ([]
 	}
 
 	// 返回副本，避免外部修改
-	result := make([]InstanceInfo, len(instances))
-	copy(result, instances)
-	return result, nil
+	instancesCopy := make([]InstanceInfo, len(instances))
+	copy(instancesCopy, instances)
+	return instancesCopy, nil
 }
 
 // Watch 监听服务实例变更。

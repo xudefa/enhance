@@ -29,7 +29,7 @@ func NewPrometheusExporter(writer io.Writer) Exporter {
 func (e *PrometheusExporter) Export(metrics []Metric) error {
 	for _, metric := range metrics {
 		if err := e.writeMetric(metric); err != nil {
-			return err
+			return fmt.Errorf("导出指标 %s 失败: %w", metric.Name, err)
 		}
 	}
 	return nil
@@ -53,7 +53,7 @@ func (e *PrometheusExporter) writeMetric(metric Metric) error {
 func (e *PrometheusExporter) writeCounter(metric Metric, labels string) error {
 	name := metric.Name + "_total"
 	if err := e.writeHeader(name, "counter"); err != nil {
-		return err
+		return fmt.Errorf("写 Counter 指标 %s 失败: %w", name, err)
 	}
 	return e.writeLine(name, labels, metric.Value)
 }
@@ -61,7 +61,7 @@ func (e *PrometheusExporter) writeCounter(metric Metric, labels string) error {
 // writeGauge 写入 Gauge 指标
 func (e *PrometheusExporter) writeGauge(metric Metric, labels string) error {
 	if err := e.writeHeader(metric.Name, "gauge"); err != nil {
-		return err
+		return fmt.Errorf("写 Gauge 指标 %s 失败: %w", metric.Name, err)
 	}
 	return e.writeLine(metric.Name, labels, metric.Value)
 }
@@ -71,17 +71,17 @@ func (e *PrometheusExporter) writeGauge(metric Metric, labels string) error {
 // 快照未包含桶边界数据，因此只导出累计桶（le="+Inf"）、总和与计数。
 func (e *PrometheusExporter) writeHistogram(metric Metric, labels string) error {
 	if err := e.writeHeader(metric.Name, "histogram"); err != nil {
-		return err
+		return fmt.Errorf("写 Histogram 指标 %s 失败: %w", metric.Name, err)
 	}
 	bucketLabels := `{le="+Inf"}`
 	if labels != "" {
 		bucketLabels = `{le="+Inf",` + strings.TrimPrefix(labels, "{")
 	}
 	if err := e.writeLine(metric.Name+"_bucket", bucketLabels, float64(metric.Count)); err != nil {
-		return err
+		return fmt.Errorf("写 Histogram 桶 %s 失败: %w", metric.Name, err)
 	}
 	if err := e.writeLine(metric.Name+"_sum", labels, metric.Sum); err != nil {
-		return err
+		return fmt.Errorf("写 Histogram 总和 %s 失败: %w", metric.Name, err)
 	}
 	return e.writeLine(metric.Name+"_count", labels, float64(metric.Count))
 }
@@ -89,16 +89,20 @@ func (e *PrometheusExporter) writeHistogram(metric Metric, labels string) error 
 // writeHeader 写入 TYPE 和 HELP 注释行
 func (e *PrometheusExporter) writeHeader(name, mtype string) error {
 	if _, err := fmt.Fprintf(e.writer, "# HELP %s %s metric\n", name, mtype); err != nil {
-		return err
+		return fmt.Errorf("写入指标 HELP 头 %s 失败: %w", name, err)
 	}
-	_, err := fmt.Fprintf(e.writer, "# TYPE %s %s\n", name, mtype)
-	return err
+	if _, err := fmt.Fprintf(e.writer, "# TYPE %s %s\n", name, mtype); err != nil {
+		return fmt.Errorf("写入指标 TYPE 头 %s 失败: %w", name, err)
+	}
+	return nil
 }
 
 // writeLine 写入指标样本行
 func (e *PrometheusExporter) writeLine(name, labels string, value float64) error {
-	_, err := fmt.Fprintf(e.writer, "%s%s %g\n", name, labels, value)
-	return err
+	if _, err := fmt.Fprintf(e.writer, "%s%s %g\n", name, labels, value); err != nil {
+		return fmt.Errorf("写入指标样本行 %s 失败: %w", name, err)
+	}
+	return nil
 }
 
 // FormatLabels 格式化标签，并对标签值做 Prometheus 转义。

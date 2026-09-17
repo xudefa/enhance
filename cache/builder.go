@@ -69,23 +69,23 @@ func (h *CacheHelper) Set(ctx context.Context, key string, value any, ttl time.D
 // GetOrSet 获取缓存值，如果不存在则使用提供的函数获取并缓存
 func (h *CacheHelper) GetOrSet(ctx context.Context, key string, fn func() (any, error), ttl time.Duration) (any, error) {
 	// 尝试从缓存获取
-	val, err := h.cache.Get(ctx, key)
+	cached, err := h.cache.Get(ctx, key)
 	if err == nil {
-		return val, nil
+		return cached, nil
 	}
 
 	// 缓存未命中，调用函数获取
-	result, err := fn()
+	computed, err := fn()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("加载缓存值失败: %w", err)
 	}
 
 	// 存储到缓存
-	if setErr := h.cache.Set(ctx, key, result, ttl); setErr != nil {
-		return result, fmt.Errorf("failed to cache value: %w", setErr)
+	if setErr := h.cache.Set(ctx, key, computed, ttl); setErr != nil {
+		return computed, fmt.Errorf("failed to cache value: %w", setErr)
 	}
 
-	return result, nil
+	return computed, nil
 }
 
 // Invalidate 使缓存失效
@@ -180,21 +180,21 @@ func (t *CacheTemplate) TTL(ctx context.Context, key string) (time.Duration, err
 func (t *CacheTemplate) GetOrSet(ctx context.Context, key string, fn func() (any, error), ttl time.Duration) (any, error) {
 	fullKey := t.Key(key)
 
-	val, err := t.cache.Get(ctx, fullKey)
+	cached, err := t.cache.Get(ctx, fullKey)
 	if err == nil {
-		return val, nil
+		return cached, nil
 	}
 
-	result, err := fn()
+	computed, err := fn()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("加载缓存值失败: %w", err)
 	}
 
-	if setErr := t.cache.Set(ctx, fullKey, result, ttl); setErr != nil {
-		return result, fmt.Errorf("failed to cache value: %w", setErr)
+	if setErr := t.cache.Set(ctx, fullKey, computed, ttl); setErr != nil {
+		return computed, fmt.Errorf("failed to cache value: %w", setErr)
 	}
 
-	return result, nil
+	return computed, nil
 }
 
 // CacheConfig 缓存配置

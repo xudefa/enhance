@@ -196,59 +196,81 @@ func (r *StartupReport) Print() {
 func (r *StartupReport) format() string {
 	var sb strings.Builder
 
+	writeStartupReportHeader(&sb)
+	writeStartupAppInfo(&sb, r.appName, r.version, r.elapsed)
+	writeStartupStats(&sb, r.beanCount, r.autoConfigCount, r.starterCount, r.moduleCount)
+
+	// 已启动的 Starter
+	writeStartupList(&sb, "  🔌 已启动的 Starters:\n", r.sortStrings(r.starters))
+
+	// 已安装的模块
+	writeStartupList(&sb, "  📦 已安装的模块:\n", r.sortStrings(r.modules))
+
+	// 警告信息
+	writeStartupWarnings(&sb, r.warnings)
+
+	// 网络信息
+	writeStartupNetInfo(&sb, r.serverAddr, r.actuatorAddr)
+
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+// writeStartupReportHeader 写入启动报告边框和标题。
+func writeStartupReportHeader(sb *strings.Builder) {
 	sb.WriteString("\n")
 	sb.WriteString("┌─────────────────────────────────────────────────────────────┐\n")
 	sb.WriteString("│                     🚀 enhance 启动报告                      │\n")
 	sb.WriteString("└─────────────────────────────────────────────────────────────┘\n\n")
+}
 
-	// 应用信息
-	sb.WriteString(fmt.Sprintf("  📦 应用: %s v%s\n", r.appName, r.version))
-	sb.WriteString(fmt.Sprintf("  ⏱️  启动耗时: %s\n\n", r.elapsed.Round(time.Millisecond)))
+// writeStartupAppInfo 写入应用名称、版本和启动耗时。
+func writeStartupAppInfo(sb *strings.Builder, appName string, version string, elapsed time.Duration) {
+	sb.WriteString(fmt.Sprintf("  📦 应用: %s v%s\n", appName, version))
+	sb.WriteString(fmt.Sprintf("  ⏱️  启动耗时: %s\n\n", elapsed.Round(time.Millisecond)))
+}
 
-	// 统计信息
+// writeStartupStats 写入 Bean、自动配置、Starters、模块的统计信息。
+func writeStartupStats(sb *strings.Builder, beanCount int, autoConfigCount int, starterCount int, moduleCount int) {
 	sb.WriteString("  📊 统计信息:\n")
-	sb.WriteString(fmt.Sprintf("    ✅ IoC 容器: %d 个 Bean 已注册\n", r.beanCount))
-	sb.WriteString(fmt.Sprintf("    ✅ 自动配置: %d 个配置已应用\n", r.autoConfigCount))
-	sb.WriteString(fmt.Sprintf("    ✅ Starters: %d 个已启动\n", r.starterCount))
-	sb.WriteString(fmt.Sprintf("    ✅ 模块: %d 个已安装\n\n", r.moduleCount))
+	sb.WriteString(fmt.Sprintf("    ✅ IoC 容器: %d 个 Bean 已注册\n", beanCount))
+	sb.WriteString(fmt.Sprintf("    ✅ 自动配置: %d 个配置已应用\n", autoConfigCount))
+	sb.WriteString(fmt.Sprintf("    ✅ Starters: %d 个已启动\n", starterCount))
+	sb.WriteString(fmt.Sprintf("    ✅ 模块: %d 个已安装\n\n", moduleCount))
+}
 
-	// 已启动的 Starter
-	if len(r.starters) > 0 {
-		sb.WriteString("  🔌 已启动的 Starters:\n")
-		for _, s := range r.sortStrings(r.starters) {
-			sb.WriteString(fmt.Sprintf("    ✅ %s\n", s))
-		}
-		sb.WriteString("\n")
+// writeStartupList 写入一个已排序的列表节（列表为空时无输出）。
+func writeStartupList(sb *strings.Builder, header string, items []string) {
+	if len(items) == 0 {
+		return
 	}
-
-	// 已安装的模块
-	if len(r.modules) > 0 {
-		sb.WriteString("  📦 已安装的模块:\n")
-		for _, m := range r.sortStrings(r.modules) {
-			sb.WriteString(fmt.Sprintf("    ✅ %s\n", m))
-		}
-		sb.WriteString("\n")
+	sb.WriteString(header)
+	for _, item := range items {
+		sb.WriteString(fmt.Sprintf("    ✅ %s\n", item))
 	}
-
-	// 警告信息
-	if len(r.warnings) > 0 {
-		sb.WriteString("  ⚠️  警告:\n")
-		for _, w := range r.warnings {
-			sb.WriteString(fmt.Sprintf("    ⚠️  %s\n", w))
-		}
-		sb.WriteString("\n")
-	}
-
-	// 网络信息
-	if r.serverAddr != "" {
-		sb.WriteString(fmt.Sprintf("  🌐 服务地址: http://%s\n", r.serverAddr))
-	}
-	if r.actuatorAddr != "" {
-		sb.WriteString(fmt.Sprintf("  📝 Actuator: http://%s/actuator\n", r.actuatorAddr))
-	}
-
 	sb.WriteString("\n")
-	return sb.String()
+}
+
+// writeStartupWarnings 写入警告信息列表。
+func writeStartupWarnings(sb *strings.Builder, warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	sb.WriteString("  ⚠️  警告:\n")
+	for _, w := range warnings {
+		sb.WriteString(fmt.Sprintf("    ⚠️  %s\n", w))
+	}
+	sb.WriteString("\n")
+}
+
+// writeStartupNetInfo 写入服务地址和 Actuator 地址（有值时输出）。
+func writeStartupNetInfo(sb *strings.Builder, serverAddr string, actuatorAddr string) {
+	if serverAddr != "" {
+		sb.WriteString(fmt.Sprintf("  🌐 服务地址: http://%s\n", serverAddr))
+	}
+	if actuatorAddr != "" {
+		sb.WriteString(fmt.Sprintf("  📝 Actuator: http://%s/actuator\n", actuatorAddr))
+	}
 }
 
 // sortStrings 对字符串切片排序
@@ -262,12 +284,23 @@ func (r *StartupReport) sortStrings(ss []string) []string {
 // globalStartupReport 全局启动报告实例
 var globalStartupReport = NewStartupReport()
 
+// globalStartupReportMu 保护 globalStartupReport 指针替换的读写锁。
+// GetStartupReport 可能被并发调用（如并行测试各自启动应用），
+// ResetStartupReport 会在其中裸替换指针——若无锁即在同一地址产生
+// 数据竞争（go test -race 可复现）。各报告实例的字段写入由自身 mu
+// 保护，这里只需保证指针本身的读写原子可见。
+var globalStartupReportMu sync.RWMutex
+
 // GetStartupReport 获取全局启动报告实例
 func GetStartupReport() *StartupReport {
+	globalStartupReportMu.RLock()
+	defer globalStartupReportMu.RUnlock()
 	return globalStartupReport
 }
 
 // ResetStartupReport 重置全局启动报告
 func ResetStartupReport() {
+	globalStartupReportMu.Lock()
+	defer globalStartupReportMu.Unlock()
 	globalStartupReport = NewStartupReport()
 }

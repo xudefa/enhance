@@ -12,243 +12,250 @@ func equals(left, right any) bool {
 		return false
 	}
 
-	switch l := left.(type) {
+	switch leftVal := left.(type) {
 	case bool:
-		r, ok := right.(bool)
-		return ok && l == r
+		rightVal, ok := right.(bool)
+		return ok && leftVal == rightVal
 	case string:
-		r, ok := right.(string)
-		return ok && l == r
+		rightVal, ok := right.(string)
+		return ok && leftVal == rightVal
 	case int:
-		switch r := right.(type) {
-		case int:
-			return l == r
-		case int8:
-			return l == int(r)
-		case int16:
-			return l == int(r)
-		case int32:
-			return l == int(r)
-		case int64:
-			return int64(l) == r
-		case uint:
-			return l >= 0 && uint(l) == r
-		case uint8:
-			return l >= 0 && uint8(l) == r
-		case uint16:
-			return l >= 0 && uint16(l) == r
-		case uint32:
-			return l >= 0 && uint32(l) == r
-		case uint64:
-			return l >= 0 && uint64(l) == r
-		case float32:
-			return float64(l) == float64(r)
-		case float64:
-			return float64(l) == r
-		}
+		return equalsInt(leftVal, right)
 	case int8:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(int64(l), toInt64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsSignedInt(int64(leftVal), right)
 	case int16:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(int64(l), toInt64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsSignedInt(int64(leftVal), right)
 	case int32:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(int64(l), toInt64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsSignedInt(int64(leftVal), right)
 	case int64:
-		switch r := right.(type) {
-		case int:
-			return l == int64(r)
-		case int8:
-			return l == int64(r)
-		case int16:
-			return l == int64(r)
-		case int32:
-			return l == int64(r)
-		case int64:
-			return l == r
-		case uint:
-			return l >= 0 && uint64(l) == uint64(r)
-		case uint8:
-			return l >= 0 && uint64(l) == uint64(r)
-		case uint16:
-			return l >= 0 && uint64(l) == uint64(r)
-		case uint32:
-			return l >= 0 && uint64(l) == uint64(r)
-		case uint64:
-			return l >= 0 && uint64(l) == r
-		case float32:
-			return float64(l) == float64(r)
-		case float64:
-			return float64(l) == r
-		}
+		return equalsInt64(leftVal, right)
 	case uint:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(uint64(l), toUint64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsUnsignedInt(uint64(leftVal), right)
 	case uint8:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(uint64(l), toUint64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsUnsignedInt(uint64(leftVal), right)
 	case uint16:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(uint64(l), toUint64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsUnsignedInt(uint64(leftVal), right)
 	case uint32:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			return equals(uint64(l), toUint64(r))
-		case float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsUnsignedInt(uint64(leftVal), right)
 	case uint64:
-		switch r := right.(type) {
-		case int:
-			return int64(l) >= 0 && l == uint64(r)
-		case int8:
-			return l == uint64(r)
-		case int16:
-			return l == uint64(r)
-		case int32:
-			return l == uint64(r)
-		case int64:
-			return r >= 0 && l == uint64(r)
-		case uint:
-			return l == uint64(r)
-		case uint8:
-			return l == uint64(r)
-		case uint16:
-			return l == uint64(r)
-		case uint32:
-			return l == uint64(r)
-		case uint64:
-			return l == r
-		case float32:
-			return float64(l) == float64(r)
-		case float64:
-			return float64(l) == r
-		}
+		return equalsUint64(leftVal, right)
 	case float32:
-		switch r := right.(type) {
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-			return equals(float64(l), toFloat64Value(r))
-		}
+		return equalsFloat(float64(leftVal), right)
 	case float64:
-		switch r := right.(type) {
-		case int:
-			return l == float64(r)
-		case int8:
-			return l == float64(r)
-		case int16:
-			return l == float64(r)
-		case int32:
-			return l == float64(r)
-		case int64:
-			return l == float64(r)
-		case uint:
-			return l == float64(r)
-		case uint8:
-			return l == float64(r)
-		case uint16:
-			return l == float64(r)
-		case uint32:
-			return l == float64(r)
-		case uint64:
-			return l == float64(r)
-		case float32:
-			return l == float64(r)
-		case float64:
-			return l == r
-		}
+		return equalsFloat(leftVal, right)
 	default:
 		// 对于无法直接比较的类型，使用 reflect.DeepEqual 作为兜底
 		return reflect.DeepEqual(left, right)
+	}
+}
+
+// equalsInt 比较 int 与任意数值类型。
+func equalsInt(leftVal int, right any) bool {
+	switch rightVal := right.(type) {
+	case int:
+		return leftVal == rightVal
+	case int8:
+		return leftVal == int(rightVal)
+	case int16:
+		return leftVal == int(rightVal)
+	case int32:
+		return leftVal == int(rightVal)
+	case int64:
+		return int64(leftVal) == rightVal
+	case uint:
+		return leftVal >= 0 && uint(leftVal) == rightVal
+	case uint8:
+		return leftVal >= 0 && uint8(leftVal) == rightVal
+	case uint16:
+		return leftVal >= 0 && uint16(leftVal) == rightVal
+	case uint32:
+		return leftVal >= 0 && uint32(leftVal) == rightVal
+	case uint64:
+		return leftVal >= 0 && uint64(leftVal) == rightVal
+	case float32:
+		return float64(leftVal) == float64(rightVal)
+	case float64:
+		return float64(leftVal) == rightVal
+	}
+	return false
+}
+
+// equalsInt64 比较 int64 与任意数值类型。
+func equalsInt64(leftVal int64, right any) bool {
+	switch rightVal := right.(type) {
+	case int:
+		return leftVal == int64(rightVal)
+	case int8:
+		return leftVal == int64(rightVal)
+	case int16:
+		return leftVal == int64(rightVal)
+	case int32:
+		return leftVal == int64(rightVal)
+	case int64:
+		return leftVal == rightVal
+	case uint:
+		return leftVal >= 0 && uint64(leftVal) == uint64(rightVal)
+	case uint8:
+		return leftVal >= 0 && uint64(leftVal) == uint64(rightVal)
+	case uint16:
+		return leftVal >= 0 && uint64(leftVal) == uint64(rightVal)
+	case uint32:
+		return leftVal >= 0 && uint64(leftVal) == uint64(rightVal)
+	case uint64:
+		return leftVal >= 0 && uint64(leftVal) == rightVal
+	case float32:
+		return float64(leftVal) == float64(rightVal)
+	case float64:
+		return float64(leftVal) == rightVal
+	}
+	return false
+}
+
+// equalsSignedInt 比较有符号整数与任意数值类型。
+func equalsSignedInt(leftVal int64, right any) bool {
+	switch rightVal := right.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return equals(leftVal, toInt64(rightVal))
+	case float32, float64:
+		return equals(float64(leftVal), toFloat64Value(rightVal))
+	}
+	return false
+}
+
+// equalsUnsignedInt 比较无符号整数与任意数值类型。
+func equalsUnsignedInt(leftVal uint64, right any) bool {
+	switch rightVal := right.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return equals(leftVal, toUint64(rightVal))
+	case float32, float64:
+		return equals(float64(leftVal), toFloat64Value(rightVal))
+	}
+	return false
+}
+
+// equalsUint64 比较 uint64 与任意数值类型，处理有符号数溢出情况。
+func equalsUint64(leftVal uint64, right any) bool {
+	switch rightVal := right.(type) {
+	case int:
+		return int64(leftVal) >= 0 && leftVal == uint64(rightVal)
+	case int8:
+		return leftVal == uint64(rightVal)
+	case int16:
+		return leftVal == uint64(rightVal)
+	case int32:
+		return leftVal == uint64(rightVal)
+	case int64:
+		return rightVal >= 0 && leftVal == uint64(rightVal)
+	case uint:
+		return leftVal == uint64(rightVal)
+	case uint8:
+		return leftVal == uint64(rightVal)
+	case uint16:
+		return leftVal == uint64(rightVal)
+	case uint32:
+		return leftVal == uint64(rightVal)
+	case uint64:
+		return leftVal == rightVal
+	case float32:
+		return float64(leftVal) == float64(rightVal)
+	case float64:
+		return float64(leftVal) == rightVal
+	}
+	return false
+}
+
+// equalsFloat 比较浮点数与任意数值类型。
+func equalsFloat(leftVal float64, right any) bool {
+	switch rightVal := right.(type) {
+	case int:
+		return leftVal == float64(rightVal)
+	case int8:
+		return leftVal == float64(rightVal)
+	case int16:
+		return leftVal == float64(rightVal)
+	case int32:
+		return leftVal == float64(rightVal)
+	case int64:
+		return leftVal == float64(rightVal)
+	case uint:
+		return leftVal == float64(rightVal)
+	case uint8:
+		return leftVal == float64(rightVal)
+	case uint16:
+		return leftVal == float64(rightVal)
+	case uint32:
+		return leftVal == float64(rightVal)
+	case uint64:
+		return leftVal == float64(rightVal)
+	case float32:
+		return leftVal == float64(rightVal)
+	case float64:
+		return leftVal == rightVal
 	}
 	return false
 }
 
 // toInt64 attempts to convert v to int64.
 func toInt64(v any) int64 {
-	switch val := v.(type) {
+	switch typed := v.(type) {
 	case int:
-		return int64(val)
+		return int64(typed)
 	case int8:
-		return int64(val)
+		return int64(typed)
 	case int16:
-		return int64(val)
+		return int64(typed)
 	case int32:
-		return int64(val)
+		return int64(typed)
 	case int64:
-		return val
+		return typed
 	}
 	return 0
 }
 
 // toUint64 attempts to convert v to uint64.
 func toUint64(v any) uint64 {
-	switch val := v.(type) {
+	switch typed := v.(type) {
 	case uint:
-		return uint64(val)
+		return uint64(typed)
 	case uint8:
-		return uint64(val)
+		return uint64(typed)
 	case uint16:
-		return uint64(val)
+		return uint64(typed)
 	case uint32:
-		return uint64(val)
+		return uint64(typed)
 	case uint64:
-		return val
+		return typed
 	}
 	return 0
 }
 
 // toFloat64Value attempts to convert v to float64.
 func toFloat64Value(v any) float64 {
-	switch val := v.(type) {
+	switch typed := v.(type) {
 	case int:
-		return float64(val)
+		return float64(typed)
 	case int8:
-		return float64(val)
+		return float64(typed)
 	case int16:
-		return float64(val)
+		return float64(typed)
 	case int32:
-		return float64(val)
+		return float64(typed)
 	case int64:
-		return float64(val)
+		return float64(typed)
 	case uint:
-		return float64(val)
+		return float64(typed)
 	case uint8:
-		return float64(val)
+		return float64(typed)
 	case uint16:
-		return float64(val)
+		return float64(typed)
 	case uint32:
-		return float64(val)
+		return float64(typed)
 	case uint64:
-		return float64(val)
+		return float64(typed)
 	case float32:
-		return float64(val)
+		return float64(typed)
 	case float64:
-		return val
+		return typed
 	}
 	return 0
 }

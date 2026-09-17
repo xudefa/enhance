@@ -99,7 +99,7 @@ func (s *HttpServer) SetContext(ctx context.Context) {
 
 // NewHTTPServer 创建一个新的基于 net/http 的 HTTP 服务器。
 func NewHTTPServer(opts ...ServerOption) *HttpServer {
-	s := &HttpServer{
+	server := &HttpServer{
 		host:         ":8080",
 		readTimeout:  30 * time.Second,
 		writeTimeout: 30 * time.Second,
@@ -109,19 +109,19 @@ func NewHTTPServer(opts ...ServerOption) *HttpServer {
 	}
 
 	for _, opt := range opts {
-		opt(s)
+		opt(server)
 	}
 
-	s.server = &http.Server{
-		Addr:              s.host,
-		ReadTimeout:       s.readTimeout,
+	server.server = &http.Server{
+		Addr:              server.host,
+		ReadTimeout:       server.readTimeout,
 		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      s.writeTimeout,
-		IdleTimeout:       s.idleTimeout,
+		WriteTimeout:      server.writeTimeout,
+		IdleTimeout:       server.idleTimeout,
 		MaxHeaderBytes:    1 << 20, // 1 MB
 	}
 
-	return s
+	return server
 }
 
 // logCtx 返回用于日志的上下文，优先使用应用上下文。
@@ -175,11 +175,11 @@ func (s *HttpServer) wireHandlerLocked() error {
 	}
 
 	// 根据处理器类型包装
-	switch h := s.handler.(type) {
+	switch handler := s.handler.(type) {
 	case mvc.Router:
-		s.server.Handler = s.wrapRouter(h)
+		s.server.Handler = s.wrapRouter(handler)
 	case http.Handler:
-		s.server.Handler = s.wrapHTTPHandler(h)
+		s.server.Handler = s.wrapHTTPHandler(handler)
 	default:
 		return fmt.Errorf("unsupported handler type: %T", s.handler)
 	}

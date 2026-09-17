@@ -11,11 +11,11 @@ import (
 
 // ToJSON 将元数据转换为 JSON 字符串。
 func (m *ConfigurationMetadata) ToJSON() (string, error) {
-	data, err := json.MarshalIndent(m, "", "  ")
+	jsonBytes, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("序列化元数据为 JSON 失败: %w", err)
 	}
-	return string(data), nil
+	return string(jsonBytes), nil
 }
 
 // ==================== MetadataGenerator 实现 ====================
@@ -34,25 +34,25 @@ func NewMetadataGenerator() MetadataGenerator {
 
 // Register 注册配置结构体。
 func (g *metadataGeneratorImpl) Register(config any) MetadataGenerator {
-	t := reflect.TypeOf(config)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	typ := reflect.TypeOf(config)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
 	}
 
-	if t.Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Struct {
 		return g
 	}
 
-	groupName := g.extractGroupName(t.Name())
+	groupName := g.extractGroupName(typ.Name())
 
 	group := GroupMetadata{
 		Name:       groupName,
-		Type:       t.Name(),
-		SourceType: t.String(),
+		Type:       typ.Name(),
+		SourceType: typ.String(),
 	}
 	g.groups = append(g.groups, group)
 
-	g.extractProperties(t, groupName)
+	g.extractProperties(typ, groupName)
 
 	return g
 }
@@ -171,19 +171,19 @@ func (g *metadataGeneratorImpl) extractGroupName(structName string) string {
 
 // camelToKebab 驼峰命名转短横线命名。
 func (g *metadataGeneratorImpl) camelToKebab(s string) string {
-	var result strings.Builder
+	var builder strings.Builder
 	for i, c := range s {
 		if i > 0 && c >= 'A' && c <= 'Z' {
 			prevRune := rune(s[i-1])
 			if prevRune >= 'a' && prevRune <= 'z' {
-				result.WriteByte('-')
+				builder.WriteByte('-')
 			} else if i+1 < len(s) && s[i+1] >= 'a' && s[i+1] <= 'z' {
-				result.WriteByte('-')
+				builder.WriteByte('-')
 			}
 		}
-		result.WriteRune(c)
+		builder.WriteRune(c)
 	}
-	return strings.ToLower(result.String())
+	return strings.ToLower(builder.String())
 }
 
 // mapType 映射 Go 类型到配置类型字符串。

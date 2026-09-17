@@ -11,8 +11,8 @@ import (
 func TestRefreshManager_NewRefreshManager(t *testing.T) {
 	t.Parallel()
 	env := environment.NewMapEnvironment(map[string]string{})
-	m := NewRefreshManager(env)
-	if m == nil {
+	manager := NewRefreshManager(env)
+	if manager == nil {
 		t.Fatal("NewRefreshManager returned nil")
 	}
 }
@@ -20,17 +20,17 @@ func TestRefreshManager_NewRefreshManager(t *testing.T) {
 func TestRefreshManager_RefreshBeforeStart(t *testing.T) {
 	t.Parallel()
 	env := environment.NewMapEnvironment(map[string]string{})
-	m := NewRefreshManager(env)
+	manager := NewRefreshManager(env)
 
 	called := false
-	m.AddRefreshListener(&mockRefreshListener{
+	manager.AddRefreshListener(&mockRefreshListener{
 		onRefresh: func(event RefreshEvent) error {
 			called = true
 			return nil
 		},
 	})
 
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	if called {
 		t.Error("listener should not be called before Start()")
 	}
@@ -39,15 +39,15 @@ func TestRefreshManager_RefreshBeforeStart(t *testing.T) {
 func TestRefreshManager_StopIdempotent(t *testing.T) {
 	t.Parallel()
 	env := environment.NewMapEnvironment(map[string]string{})
-	m := NewRefreshManager(env)
+	manager := NewRefreshManager(env)
 
-	if err := m.Start(); err != nil {
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if err := m.Stop(); err != nil {
+	if err := manager.Stop(); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if err := m.Stop(); err != nil {
+	if err := manager.Stop(); err != nil {
 		t.Fatalf("second Stop: %v", err)
 	}
 }
@@ -55,17 +55,17 @@ func TestRefreshManager_StopIdempotent(t *testing.T) {
 func TestRefreshManager_MultipleListenersError(t *testing.T) {
 	t.Parallel()
 	env := environment.NewMapEnvironment(map[string]string{})
-	m := NewRefreshManager(env)
-	if err := m.Start(); err != nil {
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
 	err1 := errors.New("err1")
 	err2 := errors.New("err2")
-	m.AddRefreshListener(&mockRefreshListener{onRefresh: func(event RefreshEvent) error { return err1 }})
-	m.AddRefreshListener(&mockRefreshListener{onRefresh: func(event RefreshEvent) error { return err2 }})
+	manager.AddRefreshListener(&mockRefreshListener{onRefresh: func(event RefreshEvent) error { return err1 }})
+	manager.AddRefreshListener(&mockRefreshListener{onRefresh: func(event RefreshEvent) error { return err2 }})
 
-	err := m.Refresh()
+	err := manager.Refresh()
 	if err == nil {
 		t.Fatal("expected error from listeners")
 	}
@@ -79,14 +79,14 @@ func TestRefreshManager_RefreshDetectsChange(t *testing.T) {
 	env := environment.NewMapEnvironment(map[string]string{
 		"k1": "v1",
 	})
-	m := NewRefreshManager(env)
-	if err := m.Start(); err != nil {
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
 	var firstKeys, secondKeys []string
 	callCount := 0
-	m.AddRefreshListener(&mockRefreshListener{
+	manager.AddRefreshListener(&mockRefreshListener{
 		onRefresh: func(event RefreshEvent) error {
 			callCount++
 			if callCount == 1 {
@@ -98,7 +98,7 @@ func TestRefreshManager_RefreshDetectsChange(t *testing.T) {
 		},
 	})
 
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	if len(firstKeys) != 0 {
 		t.Errorf("first refresh should have no changes, got %v", firstKeys)
 	}
@@ -107,7 +107,7 @@ func TestRefreshManager_RefreshDetectsChange(t *testing.T) {
 	env.AddPropertySource(environment.NewMapPropertySource("override", environment.PriorityHigh, map[string]any{
 		"k1": "v1-new",
 	}))
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	if len(secondKeys) != 1 || secondKeys[0] != "k1" {
 		t.Errorf("expected changed=[k1], got %v", secondKeys)
 	}
@@ -118,26 +118,26 @@ func TestRefreshManager_RefreshDetectsNewKey(t *testing.T) {
 	env := environment.NewMapEnvironment(map[string]string{
 		"k1": "v1",
 	})
-	m := NewRefreshManager(env)
-	if err := m.Start(); err != nil {
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	_ = m.Refresh() // init snapshot
+	_ = manager.Refresh() // init snapshot
 
 	env.AddPropertySource(environment.NewMapPropertySource("override", environment.PriorityHigh, map[string]any{
 		"k2": "v2",
 	}))
 
 	var changed []string
-	m.AddRefreshListener(&mockRefreshListener{
+	manager.AddRefreshListener(&mockRefreshListener{
 		onRefresh: func(event RefreshEvent) error {
 			changed = event.ChangedKeys
 			return nil
 		},
 	})
 
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	if len(changed) != 1 || changed[0] != "k2" {
 		t.Errorf("expected new key k2 detected, got %v", changed)
 	}
@@ -148,25 +148,25 @@ func TestRefreshManager_RefreshDetectsDeletedKey(t *testing.T) {
 	env := environment.NewMapEnvironment(map[string]string{
 		"k1": "v1",
 	})
-	m := NewRefreshManager(env)
-	if err := m.Start(); err != nil {
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
-	_ = m.Refresh() // init snapshot with k1
+	_ = manager.Refresh() // init snapshot with k1
 
 	// Add override that shadows k1 with empty
 	env.AddPropertySource(environment.NewMapPropertySource("override", environment.PriorityHigh, map[string]any{}))
 
 	var changed []string
-	m.AddRefreshListener(&mockRefreshListener{
+	manager.AddRefreshListener(&mockRefreshListener{
 		onRefresh: func(event RefreshEvent) error {
 			changed = event.ChangedKeys
 			return nil
 		},
 	})
 
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	// k1 may or may not be detected as changed depending on MapPropertySource behavior
 	_ = changed // just ensure no panic
 }
@@ -174,17 +174,17 @@ func TestRefreshManager_RefreshDetectsDeletedKey(t *testing.T) {
 func TestRefreshManager_ListenersAreCopied(t *testing.T) {
 	t.Parallel()
 	env := environment.NewMapEnvironment(map[string]string{})
-	m := NewRefreshManager(env)
-	if err := m.Start(); err != nil {
+	manager := NewRefreshManager(env)
+	if err := manager.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 
 	callCount := 0
-	m.AddRefreshListener(&mockRefreshListener{
+	manager.AddRefreshListener(&mockRefreshListener{
 		onRefresh: func(event RefreshEvent) error {
 			callCount++
 			// Add another listener during callback
-			m.AddRefreshListener(&mockRefreshListener{
+			manager.AddRefreshListener(&mockRefreshListener{
 				onRefresh: func(event RefreshEvent) error {
 					callCount++
 					return nil
@@ -194,7 +194,7 @@ func TestRefreshManager_ListenersAreCopied(t *testing.T) {
 		},
 	})
 
-	_ = m.Refresh()
+	_ = manager.Refresh()
 	if callCount != 1 {
 		t.Errorf("expected 1 call during refresh (listeners copied), got %d", callCount)
 	}

@@ -23,12 +23,12 @@ func TestReflectPropertyAccessor_GetProperty_PointerTarget(t *testing.T) {
 	accessor := NewReflectPropertyAccessor()
 	user := &testUser{Name: "Alice"}
 
-	val, err := accessor.GetProperty(user, "Name")
+	got, err := accessor.GetProperty(user, "Name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Alice" {
-		t.Errorf("got %v, want 'Alice'", val)
+	if got != "Alice" {
+		t.Errorf("got %v, want 'Alice'", got)
 	}
 }
 

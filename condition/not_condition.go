@@ -15,10 +15,12 @@ func Not(condition Condition) Condition {
 	return &notCondition{condition: condition}
 }
 
+// Matches 返回子条件匹配结果的取反值。
 func (n *notCondition) Matches(ctx ConditionContext) bool {
 	return !n.condition.Matches(ctx)
 }
 
+// String 返回逻辑非复合条件的可读描述。
 func (n *notCondition) String() string {
 	return "Not(" + n.condition.String() + ")"
 }

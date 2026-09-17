@@ -27,15 +27,15 @@ type defaultBinder struct {
 
 // BindFields 将容器中的 Bean 注入到目标对象的字段中。
 func (b *defaultBinder) BindFields(target any, container core.BeanGet) error {
-	val := reflect.ValueOf(target)
-	if val.Kind() != reflect.Ptr || val.IsNil() {
+	value := reflect.ValueOf(target)
+	if value.Kind() != reflect.Ptr || value.IsNil() {
 		return core.ErrInjectFailed
 	}
 
-	val = val.Elem()
-	typ := val.Type()
+	value = value.Elem()
+	typ := value.Type()
 
-	for i := 0; i < val.NumField(); i++ {
+	for i := 0; i < value.NumField(); i++ {
 		field := typ.Field(i)
 		if !field.IsExported() {
 			continue
@@ -43,7 +43,7 @@ func (b *defaultBinder) BindFields(target any, container core.BeanGet) error {
 
 		// 检查 inject 标签
 		if tag, ok := field.Tag.Lookup(injectTag); ok {
-			if err := b.injectField(val, field, tag, container); err != nil {
+			if err := b.injectField(value, field, tag, container); err != nil {
 				return err
 			}
 		}
@@ -66,7 +66,7 @@ func (b *defaultBinder) injectField(val reflect.Value, field reflect.StructField
 	if beanName != "" {
 		bean, err = container.GetByTypeAndName(beanName, fieldType)
 		if err != nil {
-			return err
+			return fmt.Errorf("注入字段 %s（名称 %s）失败: %w", field.Name, beanName, err)
 		}
 		if bean == nil {
 			return fmt.Errorf("no bean found with name '%s'", beanName)
@@ -79,7 +79,7 @@ func (b *defaultBinder) injectField(val reflect.Value, field reflect.StructField
 	// 按类型获取
 	beans, err := container.Get(fieldType)
 	if err != nil {
-		return err
+		return fmt.Errorf("注入字段 %s（类型 %v）失败: %w", field.Name, fieldType, err)
 	}
 	if len(beans) == 0 {
 		return fmt.Errorf("no bean found for type %v", fieldType)
@@ -92,15 +92,15 @@ func (b *defaultBinder) injectField(val reflect.Value, field reflect.StructField
 
 // BindValue 将配置值绑定到目标对象的字段中。
 func (b *defaultBinder) BindValue(target any, resolver ValueResolver) error {
-	val := reflect.ValueOf(target)
-	if val.Kind() != reflect.Ptr || val.IsNil() {
+	value := reflect.ValueOf(target)
+	if value.Kind() != reflect.Ptr || value.IsNil() {
 		return core.ErrInjectFailed
 	}
 
-	val = val.Elem()
-	typ := val.Type()
+	value = value.Elem()
+	typ := value.Type()
 
-	for i := 0; i < val.NumField(); i++ {
+	for i := 0; i < value.NumField(); i++ {
 		field := typ.Field(i)
 		if !field.IsExported() {
 			continue
@@ -108,8 +108,8 @@ func (b *defaultBinder) BindValue(target any, resolver ValueResolver) error {
 
 		// 检查 value 标签
 		if tag := field.Tag.Get(valueTag); tag != "" {
-			if err := b.bindValueField(val, field, tag, resolver); err != nil {
-				return err
+			if err := b.bindValueField(value, field, tag, resolver); err != nil {
+				return fmt.Errorf("绑定配置值字段 %s 失败: %w", field.Name, err)
 			}
 		}
 	}
@@ -132,75 +132,91 @@ func (b *defaultBinder) bindValueField(val reflect.Value, field reflect.StructFi
 // setFieldValue 设置字段值（支持类型转换）。
 func (b *defaultBinder) setFieldValue(fieldValue reflect.Value, valueStr string, fieldType reflect.Type) error {
 	// 使用类型转换器
-	if b.converter != nil {
-		converted, err := b.converter.Convert(valueStr, fieldType.String())
-		if err == nil {
-			// 转换器返回 (nil, nil) 时不能使用反射操作
-			if converted == nil {
-				return fmt.Errorf("type converter returned nil for field type %v", fieldType)
-			}
-			convertedVal := reflect.ValueOf(converted)
-			if convertedVal.Type().AssignableTo(fieldType) {
-				fieldValue.Set(convertedVal)
-				return nil
-			}
-			return fmt.Errorf("type converter returned %v which is not assignable to field type %v", convertedVal.Type(), fieldType)
-		}
+	if handled, err := b.applyCustomConverter(fieldValue, valueStr, fieldType); handled {
+		return err
 	}
 
 	// 特殊类型处理：time.Duration 的 Kind 是 Int64，
 	// 必须先于 kind switch 判断，否则会落入 Int64 分支导致 "30s" 解析失败
 	if fieldType == reflect.TypeOf(time.Duration(0)) {
-		v, err := time.ParseDuration(valueStr)
+		duration, err := time.ParseDuration(valueStr)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析时长 %q 失败: %w", valueStr, err)
 		}
-		fieldValue.Set(reflect.ValueOf(v))
+		fieldValue.Set(reflect.ValueOf(duration))
 		return nil
 	}
 
 	// 内置类型转换
+	return setBuiltinTypeValue(fieldValue, valueStr, fieldType)
+}
+
+// applyCustomConverter 使用注册的类型转换器转换并设置字段值。
+// 返回是否已由转换器处理；转换器未注册或转换失败返回 false，回退到内置类型转换。
+func (b *defaultBinder) applyCustomConverter(fieldValue reflect.Value, valueStr string, fieldType reflect.Type) (bool, error) {
+	if b.converter == nil {
+		return false, nil
+	}
+	converted, err := b.converter.Convert(valueStr, fieldType.String())
+	if err != nil {
+		// 转换器失败时回退到内置类型转换
+		return false, nil
+	}
+	// 转换器返回 (nil, nil) 时不能使用反射操作
+	if converted == nil {
+		return true, fmt.Errorf("type converter returned nil for field type %v", fieldType)
+	}
+	convertedVal := reflect.ValueOf(converted)
+	if convertedVal.Type().AssignableTo(fieldType) {
+		fieldValue.Set(convertedVal)
+		return true, nil
+	}
+	return true, fmt.Errorf("type converter returned %v which is not assignable to field type %v", convertedVal.Type(), fieldType)
+}
+
+// setBuiltinTypeValue 按内置类型转换并设置字段值。
+func setBuiltinTypeValue(fieldValue reflect.Value, valueStr string, fieldType reflect.Type) error {
 	switch fieldValue.Kind() {
 	case reflect.String:
 		fieldValue.SetString(valueStr)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(valueStr, 10, 64)
+		parsedInt, err := strconv.ParseInt(valueStr, 10, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析整数 %q 失败: %w", valueStr, err)
 		}
 		bits := fieldType.Bits()
 		if bits > 0 && bits < 64 {
 			min, max := int64(-1)<<(bits-1), (int64(1)<<(bits-1))-1
-			if v < min || v > max {
-				return fmt.Errorf("value %d overflows %s (range [%d, %d])", v, fieldType, min, max)
+			if parsedInt < min || parsedInt > max {
+				return fmt.Errorf("value %d overflows %s (range [%d, %d])", parsedInt, fieldType, min, max)
 			}
 		}
-		fieldValue.SetInt(v)
+		fieldValue.SetInt(parsedInt)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(valueStr, 10, 64)
+		parsedUint, err := strconv.ParseUint(valueStr, 10, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析无符号整数 %q 失败: %w", valueStr, err)
 		}
 		bits := fieldType.Bits()
 		if bits > 0 && bits < 64 {
 			max := (uint64(1) << bits) - 1
-			if v > max {
-				return fmt.Errorf("value %d overflows %s (max %d)", v, fieldType, max)
+			if parsedUint > max {
+				return fmt.Errorf("value %d overflows %s (max %d)", parsedUint, fieldType, max)
 			}
 		}
-		fieldValue.SetUint(v)
+		fieldValue.SetUint(parsedUint)
 	case reflect.Float32, reflect.Float64:
-		v, err := strconv.ParseFloat(valueStr, 64)
+		parsedFloat, err := strconv.ParseFloat(valueStr, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析浮点数 %q 失败: %w", valueStr, err)
 		}
-		fieldValue.SetFloat(v)
+		fieldValue.SetFloat(parsedFloat)
 	case reflect.Bool:
-		v, err := strconv.ParseBool(valueStr)
+		parsedBool, err := strconv.ParseBool(valueStr)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析布尔值 %q 失败: %w", valueStr, err)
 		}
-		fieldValue.SetBool(v)
+		fieldValue.SetBool(parsedBool)
 	default:
 		return fmt.Errorf("unsupported field type: %v", fieldType)
 	}

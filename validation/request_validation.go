@@ -83,7 +83,7 @@ type RequestValidator struct {
 
 // NewRequestValidator 创建请求验证器
 func NewRequestValidator(config ValidationConfig) (*RequestValidator, error) {
-	v := &RequestValidator{
+	validator := &RequestValidator{
 		config: config,
 		regexs: make(map[string]*regexp.Regexp),
 	}
@@ -95,12 +95,12 @@ func NewRequestValidator(config ValidationConfig) (*RequestValidator, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid regular expression for field %s: %w", rule.Field, err)
 			}
-			v.regexs[rule.Field] = regex
+			validator.regexs[rule.Field] = regex
 			config.Rules[i].Pattern = "" // 清空，使用预编译的
 		}
 	}
 
-	return v, nil
+	return validator, nil
 }
 
 // GetConfig 获取验证配置。
@@ -110,68 +110,89 @@ func (v *RequestValidator) GetConfig() ValidationConfig {
 
 // Validate 验证请求。
 func (v *RequestValidator) Validate(req *http.Request) *RuleValidationResult {
-	result := &RuleValidationResult{Valid: true}
+	validationResult := &RuleValidationResult{Valid: true}
 
 	// body 验证需要读取并解析请求体
-	var bodyData map[string]any
+	var bodyFields map[string]any
 	if v.config.Source == "body" {
-		if req.Body != nil {
-			if err := json.NewDecoder(req.Body).Decode(&bodyData); err != nil {
-				result.Valid = false
-				result.Errors = append(result.Errors, RuleValidationError{
-					Field:   "body",
-					Message: "Invalid JSON body: " + err.Error(),
-					Type:    "json",
-				})
-				return result
-			}
+		parsed, err := decodeRequestBody(req)
+		if err != nil {
+			return invalidJSONResult(err)
 		}
+		bodyFields = parsed
 	}
 
 	for _, rule := range v.config.Rules {
-		var value string
-
-		// 根据来源提取值
-		switch v.config.Source {
-		case "query":
-			value = req.URL.Query().Get(rule.Field)
-		case "header":
-			value = req.Header.Get(rule.Field)
-		case "body":
-			if bodyData != nil {
-				if v, exists := bodyData[rule.Field]; exists {
-					value = formatValueToString(v)
-				}
-			}
-		}
+		value := v.extractFieldValue(req, rule.Field, bodyFields)
 
 		// 执行验证
 		if err := v.validateRule(rule, value); err != nil {
-			result.Valid = false
-			result.Errors = append(result.Errors, RuleValidationError{
+			validationResult.Valid = false
+			validationResult.Errors = append(validationResult.Errors, RuleValidationError{
 				Field:   rule.Field,
 				Message: err.Error(),
 				Type:    rule.Type,
 			})
 
 			if v.config.FailFast {
-				return result
+				return validationResult
 			}
 		}
 	}
 
-	return result
+	return validationResult
+}
+
+// decodeRequestBody 解析 JSON 请求体。
+func decodeRequestBody(req *http.Request) (map[string]any, error) {
+	if req.Body == nil {
+		return nil, nil
+	}
+	var bodyFields map[string]any
+	if err := json.NewDecoder(req.Body).Decode(&bodyFields); err != nil {
+		return nil, err
+	}
+	return bodyFields, nil
+}
+
+// invalidJSONResult 构造 JSON 解析失败结果。
+func invalidJSONResult(err error) *RuleValidationResult {
+	return &RuleValidationResult{
+		Valid: false,
+		Errors: []RuleValidationError{{
+			Field:   "body",
+			Message: "Invalid JSON body: " + err.Error(),
+			Type:    "json",
+		}},
+	}
+}
+
+// extractFieldValue 根据配置来源提取字段值。
+func (v *RequestValidator) extractFieldValue(req *http.Request, field string, bodyFields map[string]any) string {
+	switch v.config.Source {
+	case "query":
+		return req.URL.Query().Get(field)
+	case "header":
+		return req.Header.Get(field)
+	case "body":
+		if bodyFields != nil {
+			if fieldValue, exists := bodyFields[field]; exists {
+				return formatValueToString(fieldValue)
+			}
+		}
+	}
+	return ""
 }
 
 // formatValueToString 将任意值格式化为字符串
 func formatValueToString(v any) string {
-	switch val := v.(type) {
+	switch typed := v.(type) {
 	case string:
-		return val
+		return typed
 	case float64:
-		return strconv.FormatFloat(val, 'f', -1, 64)
+		return strconv.FormatFloat(typed, 'f', -1, 64)
 	case bool:
-		return strconv.FormatBool(val)
+		return strconv.FormatBool(typed)
 	case nil:
 		return ""
 	default:
@@ -183,108 +204,150 @@ func formatValueToString(v any) string {
 func (v *RequestValidator) validateRule(rule ValidationRule, value string) error {
 	switch rule.Type {
 	case "required":
-		if value == "" {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s is required", rule.Field))
-		}
-
+		return validateRequiredValue(rule, value)
 	case "string":
-		if value == "" {
-			return nil // 空值不验证
-		}
-		if rule.MinLength != nil && len(value) < *rule.MinLength {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %d characters", rule.Field, *rule.MinLength))
-		}
-		if rule.MaxLength != nil && len(value) > *rule.MaxLength {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %d characters", rule.Field, *rule.MaxLength))
-		}
-
+		return validateStringRule(rule, value)
 	case "number":
-		if value == "" {
+		return validateNumberRule(rule, value)
+	case "email":
+		return validateEmailRule(rule, value)
+	case "regex":
+		return v.validateRegexRule(rule, value)
+	case "enum":
+		return validateEnumRule(rule, value)
+	case "min":
+		return validateMinRule(rule, value)
+	case "max":
+		return validateMaxRule(rule, value)
+	case "length":
+		return validateLengthRule(rule, value)
+	default:
+		return nil
+	}
+}
+
+// validateRequiredValue 验证必填字段。
+func validateRequiredValue(rule ValidationRule, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s is required", rule.Field))
+	}
+	return nil
+}
+
+// validateStringRule 验证字符串长度限制。
+func validateStringRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil // 空值不验证
+	}
+	if rule.MinLength != nil && len(value) < *rule.MinLength {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %d characters", rule.Field, *rule.MinLength))
+	}
+	if rule.MaxLength != nil && len(value) > *rule.MaxLength {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %d characters", rule.Field, *rule.MaxLength))
+	}
+	return nil
+}
+
+// validateNumberRule 验证数值格式与范围。
+func validateNumberRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	num, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+	}
+	if rule.Min != nil && num < *rule.Min {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %f", rule.Field, *rule.Min))
+	}
+	if rule.Max != nil && num > *rule.Max {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %f", rule.Field, *rule.Max))
+	}
+	return nil
+}
+
+// validateEmailRule 验证邮箱格式。
+func validateEmailRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	if !strings.Contains(value, "@") || !strings.Contains(value, ".") {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a valid email", rule.Field))
+	}
+	return nil
+}
+
+// validateRegexRule 使用预编译正则验证格式。
+func (v *RequestValidator) validateRegexRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	if regex, ok := v.regexs[rule.Field]; ok {
+		if !regex.MatchString(value) {
+			return fmt.Errorf("%s", rule.MessageOrDefault("%s format is invalid", rule.Field))
+		}
+	}
+	return nil
+}
+
+// validateEnumRule 验证枚举取值。
+func validateEnumRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	for _, val := range rule.In {
+		if value == val {
 			return nil
 		}
+	}
+	return fmt.Errorf("%s", rule.MessageOrDefault("%s must be one of %v", rule.Field, rule.In))
+}
+
+// validateMinRule 验证最小值。
+func validateMinRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	if rule.Min != nil {
 		num, err := strconv.ParseFloat(value, 64)
 		if err != nil {
 			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
 		}
-		if rule.Min != nil && num < *rule.Min {
+		if num < *rule.Min {
 			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %f", rule.Field, *rule.Min))
 		}
-		if rule.Max != nil && num > *rule.Max {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %f", rule.Field, *rule.Max))
-		}
+	}
+	return nil
+}
 
-	case "email":
-		if value == "" {
-			return nil
-		}
-		if !strings.Contains(value, "@") || !strings.Contains(value, ".") {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a valid email", rule.Field))
-		}
-
-	case "regex":
-		if value == "" {
-			return nil
-		}
-		if regex, ok := v.regexs[rule.Field]; ok {
-			if !regex.MatchString(value) {
-				return fmt.Errorf("%s", rule.MessageOrDefault("%s format is invalid", rule.Field))
-			}
-		}
-
-	case "enum":
-		if value == "" {
-			return nil
-		}
-		for _, val := range rule.In {
-			if value == val {
-				return nil
-			}
-		}
-		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be one of %v", rule.Field, rule.In))
-
-	case "min":
-		if value == "" {
-			return nil
-		}
-		if rule.Min != nil {
-			num, err := strconv.ParseFloat(value, 64)
-			if err != nil {
-				return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
-			}
-			if num < *rule.Min {
-				return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %f", rule.Field, *rule.Min))
-			}
-		}
-
-	case "max":
-		if value == "" {
-			return nil
-		}
-		if rule.Max != nil {
-			num, err := strconv.ParseFloat(value, 64)
-			if err != nil {
-				return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
-			}
-			if num > *rule.Max {
-				return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %f", rule.Field, *rule.Max))
-			}
-		}
-
-	case "length":
-		if value == "" {
-			return nil
-		}
-		if rule.MinLength != nil && len(value) < *rule.MinLength {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s length must be at least %d", rule.Field, *rule.MinLength))
-		}
-		if rule.MaxLength != nil && len(value) > *rule.MaxLength {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s length must be at most %d", rule.Field, *rule.MaxLength))
-		}
-
-	default:
+// validateMaxRule 验证最大值。
+func validateMaxRule(rule ValidationRule, value string) error {
+	if value == "" {
 		return nil
 	}
+	if rule.Max != nil {
+		num, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+		}
+		if num > *rule.Max {
+			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %f", rule.Field, *rule.Max))
+		}
+	}
+	return nil
+}
 
+// validateLengthRule 验证长度范围。
+func validateLengthRule(rule ValidationRule, value string) error {
+	if value == "" {
+		return nil
+	}
+	if rule.MinLength != nil && len(value) < *rule.MinLength {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s length must be at least %d", rule.Field, *rule.MinLength))
+	}
+	if rule.MaxLength != nil && len(value) > *rule.MaxLength {
+		return fmt.Errorf("%s", rule.MessageOrDefault("%s length must be at most %d", rule.Field, *rule.MaxLength))
+	}
 	return nil
 }
 
@@ -298,50 +361,38 @@ func (r ValidationRule) MessageOrDefault(format string, args ...any) string {
 
 // ValidateJSONBody 验证 JSON body。
 func ValidateJSONBody(body []byte, rules []ValidationRule) *RuleValidationResult {
-	result := &RuleValidationResult{Valid: true}
-
-	var data map[string]any
-	if err := json.Unmarshal(body, &data); err != nil {
-		result.Valid = false
-		result.Errors = append(result.Errors, RuleValidationError{
-			Field:   "body",
-			Message: "Invalid JSON body",
-			Type:    "json",
-		})
-		return result
+	var bodyFields map[string]any
+	if err := json.Unmarshal(body, &bodyFields); err != nil {
+		return &RuleValidationResult{
+			Valid: false,
+			Errors: []RuleValidationError{{
+				Field:   "body",
+				Message: "Invalid JSON body",
+				Type:    "json",
+			}},
+		}
 	}
 
+	validationResult := &RuleValidationResult{Valid: true}
 	for _, rule := range rules {
-		value, exists := data[rule.Field]
 		valueStr := ""
-		if exists {
+		if value, exists := bodyFields[rule.Field]; exists {
 			// 处理不同类型的值，保留原始类型信息
-			switch v := value.(type) {
-			case string:
-				valueStr = v
-			case float64: // JSON 中的数字都是 float64
-				valueStr = strconv.FormatFloat(v, 'f', -1, 64)
-			case bool:
-				valueStr = strconv.FormatBool(v)
-			case nil:
-				valueStr = ""
-			default:
-				valueStr = fmt.Sprintf("%v", v)
-			}
+			valueStr = formatValueToString(value)
 		}
-		v, err := NewRequestValidator(ValidationConfig{Rules: []ValidationRule{rule}})
+		ruleValidator, err := NewRequestValidator(ValidationConfig{Rules: []ValidationRule{rule}})
 		if err != nil {
-			result.Valid = false
-			result.Errors = append(result.Errors, RuleValidationError{
+			validationResult.Valid = false
+			validationResult.Errors = append(validationResult.Errors, RuleValidationError{
 				Field:   rule.Field,
 				Message: err.Error(),
 				Type:    "config",
 			})
 			continue
 		}
-		if err := v.validateRule(rule, valueStr); err != nil {
-			result.Valid = false
-			result.Errors = append(result.Errors, RuleValidationError{
+		if err := ruleValidator.validateRule(rule, valueStr); err != nil {
+			validationResult.Valid = false
+			validationResult.Errors = append(validationResult.Errors, RuleValidationError{
 				Field:   rule.Field,
 				Message: err.Error(),
 				Type:    rule.Type,
@@ -349,7 +400,7 @@ func ValidateJSONBody(body []byte, rules []ValidationRule) *RuleValidationResult
 		}
 	}
 
-	return result
+	return validationResult
 }
 
 // ValidateHeaders 快速验证请求头。

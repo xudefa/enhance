@@ -154,6 +154,15 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		}
 	}
 
+	span := t.newSpan(name, serviceName, opts)
+
+	t.recordSpan(span)
+
+	return span
+}
+
+// newSpan 根据采样结果构建 Span，应用选项并推导追踪上下文。
+func (t *Tracer) newSpan(name string, serviceName string, opts []SpanOption) *Span {
 	span := &Span{
 		TraceID:   TraceID(generateID()),
 		SpanID:    SpanID(generateID()),
@@ -187,6 +196,11 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		Sampled:      sampled,
 	}
 
+	return span
+}
+
+// recordSpan 将 Span 记录到追踪器，并在超出上限时淘汰最旧的 Span。
+func (t *Tracer) recordSpan(span *Span) {
 	t.mu.Lock()
 	if t.maxSpans > 0 && len(t.spans) >= t.maxSpans {
 		t.spans = t.spans[1:]
@@ -195,8 +209,6 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 	t.mu.Unlock()
 
 	t.spanCount.Add(1)
-
-	return span
 }
 
 // Inject 注入追踪上下文到 HTTP 头部。
@@ -299,12 +311,12 @@ func (t *Tracer) Clear() {
 // 使用 crypto/rand 生成密码学安全的随机 ID。
 // 如果 crypto/rand 失败，回退到时间戳方案。
 func generateID() string {
-	b := make([]byte, 8)
-	n, err := rand.Read(b)
-	if err != nil || n != len(b) {
+	idBytes := make([]byte, 8)
+	n, err := rand.Read(idBytes)
+	if err != nil || n != len(idBytes) {
 		return fmt.Sprintf("%016x", time.Now().UnixNano())
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(idBytes)
 }
 
 // ShouldSample 实现 Sampler 接口，始终返回 true。

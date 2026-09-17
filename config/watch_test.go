@@ -8,18 +8,18 @@ import (
 
 func TestNewWatchManager(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
-	if m == nil {
+	manager := NewWatchManager()
+	if manager == nil {
 		t.Fatal("NewWatchManager returned nil")
 	}
 }
 
 func TestWatchManager_RegisterAndNotify(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
+	manager := NewWatchManager()
 
 	var received WatchEvent
-	m.Register("test", func(event WatchEvent) {
+	manager.Register("test", func(event WatchEvent) {
 		received = event
 	})
 
@@ -30,7 +30,7 @@ func TestWatchManager_RegisterAndNotify(t *testing.T) {
 		Timestamp: time.Now(),
 		Source:    "test",
 	}
-	m.Notify(evt)
+	manager.Notify(evt)
 
 	if received.Key != "app.name" {
 		t.Errorf("Key = %q, want %q", received.Key, "app.name")
@@ -42,14 +42,14 @@ func TestWatchManager_RegisterAndNotify(t *testing.T) {
 
 func TestWatchManager_Unregister(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
+	manager := NewWatchManager()
 
 	called := false
-	m.Register("test", func(event WatchEvent) {
+	manager.Register("test", func(event WatchEvent) {
 		called = true
 	})
-	m.Unregister("test")
-	m.Notify(WatchEvent{})
+	manager.Unregister("test")
+	manager.Notify(WatchEvent{})
 
 	if called {
 		t.Error("callback should not be called after Unregister")
@@ -58,20 +58,20 @@ func TestWatchManager_Unregister(t *testing.T) {
 
 func TestWatchManager_MultipleCallbacks(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
+	manager := NewWatchManager()
 
 	var mu sync.Mutex
 	callCount := 0
 	for i := 0; i < 3; i++ {
 		key := "cb" + string(rune('0'+i))
-		m.Register(key, func(event WatchEvent) {
+		manager.Register(key, func(event WatchEvent) {
 			mu.Lock()
 			callCount++
 			mu.Unlock()
 		})
 	}
 
-	m.Notify(WatchEvent{})
+	manager.Notify(WatchEvent{})
 
 	if callCount != 3 {
 		t.Errorf("expected 3 calls, got %d", callCount)
@@ -80,43 +80,43 @@ func TestWatchManager_MultipleCallbacks(t *testing.T) {
 
 func TestWatchManager_NilCallback(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
-	m.Register("nil-cb", nil)
+	manager := NewWatchManager()
+	manager.Register("nil-cb", nil)
 	// Should not panic
-	m.Notify(WatchEvent{})
+	manager.Notify(WatchEvent{})
 }
 
 func TestWatchManager_Close(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
-	m.Register("cb", func(event WatchEvent) {})
-	m.AddSource("src", make(chan WatchEvent))
-	m.Close()
+	manager := NewWatchManager()
+	manager.Register("cb", func(event WatchEvent) {})
+	manager.AddSource("src", make(chan WatchEvent))
+	manager.Close()
 
 	// After close, operations should be no-ops
-	m.Register("cb2", func(event WatchEvent) {}) // no panic
-	m.Unregister("cb")                           // no panic
-	m.Notify(WatchEvent{})                       // no panic
-	m.AddSource("src2", make(chan WatchEvent))   // no panic
+	manager.Register("cb2", func(event WatchEvent) {}) // no panic
+	manager.Unregister("cb")                           // no panic
+	manager.Notify(WatchEvent{})                       // no panic
+	manager.AddSource("src2", make(chan WatchEvent))   // no panic
 }
 
 func TestWatchManager_CloseIdempotent(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
-	m.Close()
-	m.Close() // no panic
+	manager := NewWatchManager()
+	manager.Close()
+	manager.Close() // no panic
 }
 
 func TestWatchManager_NotifyAfterClose(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
+	manager := NewWatchManager()
 
 	called := false
-	m.Register("cb", func(event WatchEvent) {
+	manager.Register("cb", func(event WatchEvent) {
 		called = true
 	})
-	m.Close()
-	m.Notify(WatchEvent{})
+	manager.Close()
+	manager.Notify(WatchEvent{})
 
 	if called {
 		t.Error("callback should not be called after Close")
@@ -125,11 +125,11 @@ func TestWatchManager_NotifyAfterClose(t *testing.T) {
 
 func TestWatchManager_GetSourceAfterClose(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
-	m.AddSource("src", make(chan WatchEvent))
-	m.Close()
+	manager := NewWatchManager()
+	manager.AddSource("src", make(chan WatchEvent))
+	manager.Close()
 
-	_, ok := m.GetSource("src")
+	_, ok := manager.GetSource("src")
 	if ok {
 		t.Error("GetSource should return false after Close")
 	}
@@ -161,14 +161,14 @@ func TestWatchEvent_Fields(t *testing.T) {
 
 func TestWatchManager_OverwriteCallback(t *testing.T) {
 	t.Parallel()
-	m := NewWatchManager()
+	manager := NewWatchManager()
 
 	called1 := false
 	called2 := false
-	m.Register("key", func(event WatchEvent) { called1 = true })
-	m.Register("key", func(event WatchEvent) { called2 = true })
+	manager.Register("key", func(event WatchEvent) { called1 = true })
+	manager.Register("key", func(event WatchEvent) { called2 = true })
 
-	m.Notify(WatchEvent{})
+	manager.Notify(WatchEvent{})
 
 	if called1 {
 		t.Error("first callback should be overwritten")

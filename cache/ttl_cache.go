@@ -85,21 +85,21 @@ func (c *TTLCache) Get(ctx context.Context, key string) (any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, exists := c.items[key]
+	entry, exists := c.items[key]
 	if !exists {
 		return nil, ErrNotFound
 	}
 
 	// 检查是否过期
-	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
-		c.deleteItem(item)
+	if !entry.expireAt.IsZero() && time.Now().After(entry.expireAt) {
+		c.deleteItem(entry)
 		return nil, ErrNotFound
 	}
 
 	// 更新 LRU 位置（移到尾部表示最近使用）
-	c.lru.MoveToBack(item.lruElement)
+	c.lru.MoveToBack(entry.lruElement)
 
-	return item.value, nil
+	return entry.value, nil
 }
 
 // Set 在缓存中存储一个带 TTL 的值。
@@ -136,13 +136,13 @@ func (c *TTLCache) Set(ctx context.Context, key string, value any, ttl time.Dura
 	}
 
 	// 添加新项
-	item := &ttlItem{
+	entry := &ttlItem{
 		key:      key,
 		value:    value,
 		expireAt: expireAt,
 	}
-	item.lruElement = c.lru.PushBack(item)
-	c.items[key] = item
+	entry.lruElement = c.lru.PushBack(entry)
+	c.items[key] = entry
 
 	return nil
 }
@@ -154,8 +154,8 @@ func (c *TTLCache) Del(ctx context.Context, keys ...string) error {
 	defer c.mu.Unlock()
 
 	for _, key := range keys {
-		if item, exists := c.items[key]; exists {
-			c.deleteItem(item)
+		if entry, exists := c.items[key]; exists {
+			c.deleteItem(entry)
 		}
 	}
 
@@ -168,13 +168,13 @@ func (c *TTLCache) Exists(ctx context.Context, key string) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, exists := c.items[key]
+	entry, exists := c.items[key]
 	if !exists {
 		return false, nil
 	}
 
-	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
-		c.deleteItem(item)
+	if !entry.expireAt.IsZero() && time.Now().After(entry.expireAt) {
+		c.deleteItem(entry)
 		return false, nil
 	}
 
@@ -188,22 +188,22 @@ func (c *TTLCache) TTL(ctx context.Context, key string) (time.Duration, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, exists := c.items[key]
+	entry, exists := c.items[key]
 	if !exists {
 		return 0, ErrNotFound
 	}
 
 	// 永不过期
-	if item.expireAt.IsZero() {
+	if entry.expireAt.IsZero() {
 		return -1, nil
 	}
 
-	if !item.expireAt.IsZero() && time.Now().After(item.expireAt) {
-		c.deleteItem(item)
+	if !entry.expireAt.IsZero() && time.Now().After(entry.expireAt) {
+		c.deleteItem(entry)
 		return 0, ErrNotFound
 	}
 
-	return time.Until(item.expireAt), nil
+	return time.Until(entry.expireAt), nil
 }
 
 // Close 关闭缓存并释放所有资源。
@@ -235,11 +235,11 @@ func (c *TTLCache) evictLRU() {
 		return
 	}
 
-	item, ok := front.Value.(*ttlItem)
+	entry, ok := front.Value.(*ttlItem)
 	if !ok {
 		return
 	}
-	c.deleteItem(item)
+	c.deleteItem(entry)
 }
 
 // Size 返回缓存中当前的条目数量。

@@ -29,9 +29,9 @@ func TestHTTPServerBuilder_Host(t *testing.T) {
 	t.Parallel()
 
 	builder := NewHTTPServerBuilder()
-	result := builder.Host(":9090")
+	returned := builder.Host(":9090")
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.host != ":9090" {
@@ -43,9 +43,9 @@ func TestHTTPServerBuilder_ReadTimeout(t *testing.T) {
 	t.Parallel()
 
 	builder := NewHTTPServerBuilder()
-	result := builder.ReadTimeout(10 * time.Second)
+	returned := builder.ReadTimeout(10 * time.Second)
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.readTimeout != 10*time.Second {
@@ -57,9 +57,9 @@ func TestHTTPServerBuilder_WriteTimeout(t *testing.T) {
 	t.Parallel()
 
 	builder := NewHTTPServerBuilder()
-	result := builder.WriteTimeout(15 * time.Second)
+	returned := builder.WriteTimeout(15 * time.Second)
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.writeTimeout != 15*time.Second {
@@ -71,9 +71,9 @@ func TestHTTPServerBuilder_IdleTimeout(t *testing.T) {
 	t.Parallel()
 
 	builder := NewHTTPServerBuilder()
-	result := builder.IdleTimeout(60 * time.Second)
+	returned := builder.IdleTimeout(60 * time.Second)
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.idleTimeout != 60*time.Second {
@@ -85,9 +85,9 @@ func TestHTTPServerBuilder_TLS(t *testing.T) {
 	t.Parallel()
 
 	builder := NewHTTPServerBuilder()
-	result := builder.TLS("/path/to/cert.pem", "/path/to/key.pem")
+	returned := builder.TLS("/path/to/cert.pem", "/path/to/key.pem")
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.certFile != "/path/to/cert.pem" {
@@ -108,9 +108,9 @@ func TestHTTPServerBuilder_Middleware(t *testing.T) {
 		})
 	}
 
-	result := builder.Middleware(middleware)
+	returned := builder.Middleware(middleware)
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if len(builder.middlewares) != 1 {
@@ -126,9 +126,9 @@ func TestHTTPServerBuilder_Handler(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	result := builder.Handler(handler)
+	returned := builder.Handler(handler)
 
-	if result != builder {
+	if returned != builder {
 		t.Error("expected builder to return itself for chaining")
 	}
 	if builder.handler == nil {
@@ -221,8 +221,8 @@ func TestHTTPServerBuilder_MustBuild(t *testing.T) {
 	t.Parallel()
 
 	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("unexpected panic: %v", r)
+		if panicValue := recover(); panicValue != nil {
+			t.Fatalf("unexpected panic: %v", panicValue)
 		}
 	}()
 

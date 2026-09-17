@@ -266,9 +266,9 @@ func TestIsEmptyValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := reflect.ValueOf(tt.value)
-			result := isEmptyValue(v)
-			if result != tt.expected {
-				t.Errorf("isEmptyValue(%v) = %v, want %v", tt.value, result, tt.expected)
+			got := isEmptyValue(v)
+			if got != tt.expected {
+				t.Errorf("isEmptyValue(%v) = %v, want %v", tt.value, got, tt.expected)
 			}
 		})
 	}
@@ -281,8 +281,8 @@ func TestMustBindConfig_Panic(t *testing.T) {
 	// 但由于我们的配置绑定总是成功（即使字段为空），
 	// 所以我们只验证函数可以正常调用
 	defer func() {
-		if r := recover(); r != nil {
-			t.Logf("panic occurred (expected in some cases): %v", r)
+		if recovered := recover(); recovered != nil {
+			t.Logf("panic occurred (expected in some cases): %v", recovered)
 		}
 	}()
 
@@ -306,8 +306,8 @@ func TestMustBindConfigPrefix_Panic(t *testing.T) {
 	// 但由于我们的配置绑定总是成功（即使字段为空），
 	// 所以我们只验证函数可以正常调用
 	defer func() {
-		if r := recover(); r != nil {
-			t.Logf("panic occurred (expected in some cases): %v", r)
+		if recovered := recover(); recovered != nil {
+			t.Logf("panic occurred (expected in some cases): %v", recovered)
 		}
 	}()
 

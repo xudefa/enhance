@@ -17,16 +17,16 @@ var defaultFactories sync.Map // reflect.Type -> func(c ...any) (any, error)
 
 // getDefaultFactory 返回指定类型的默认工厂函数。
 func getDefaultFactory(defType reflect.Type) func(c ...any) (any, error) {
-	if f, ok := defaultFactories.Load(defType); ok {
-		return f.(func(c ...any) (any, error))
+	if factory, ok := defaultFactories.Load(defType); ok {
+		return factory.(func(c ...any) (any, error))
 	}
-	f := func(c ...any) (any, error) {
+	factory := func(c ...any) (any, error) {
 		if defType.Kind() == reflect.Ptr {
 			return reflect.New(defType.Elem()).Interface(), nil
 		}
 		return reflect.Zero(defType).Interface(), nil
 	}
-	actual, _ := defaultFactories.LoadOrStore(defType, f)
+	actual, _ := defaultFactories.LoadOrStore(defType, factory)
 	return actual.(func(c ...any) (any, error))
 }
 
@@ -77,29 +77,29 @@ func GetByName[T any](container Container, name string) (T, error) {
 	if name != "" {
 		instance, err := container.GetByTypeAndName(name, typ)
 		if err != nil {
-			return zero, err
+			return zero, fmt.Errorf("按名称获取 Bean %q 失败: %w", name, err)
 		}
-		result, ok := instance.(T)
+		bean, ok := instance.(T)
 		if !ok {
 			return zero, fmt.Errorf("bean %q type mismatch: got %T, want %v", name, instance, typ)
 		}
-		return result, nil
+		return bean, nil
 	}
 
 	instances, err := container.Get(typ)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("获取类型 %v 的 Bean 失败: %w", typ, err)
 	}
 
 	if len(instances) == 0 {
 		return zero, ErrBeanNotFound
 	}
 
-	result, ok := instances[0].(T)
+	bean, ok := instances[0].(T)
 	if !ok {
 		return zero, fmt.Errorf("bean type mismatch: got %T, want %v", instances[0], typ)
 	}
-	return result, nil
+	return bean, nil
 }
 
 // MustGet 泛型获取函数，失败时 panic。

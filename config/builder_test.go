@@ -162,11 +162,11 @@ func TestValidationRuleBuilder_Required(t *testing.T) {
 		Required("name", "email").
 		Build()
 
-	data := map[string]any{
+	input := map[string]any{
 		"name": "test",
 	}
 
-	err := validator.Validate(data)
+	err := validator.Validate(input)
 	if err == nil {
 		t.Fatal("expected validation error for missing 'email'")
 	}
@@ -193,23 +193,23 @@ func TestValidationRuleBuilder_MinMax(t *testing.T) {
 		Max("port", 65535).
 		Build()
 
-	data := map[string]any{
+	input := map[string]any{
 		"port": 8080,
 	}
 
-	err := validator.Validate(data)
+	err := validator.Validate(input)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["port"] = 0
-	err = validator.Validate(data)
+	input["port"] = 0
+	err = validator.Validate(input)
 	if err == nil {
 		t.Error("expected validation error for port below minimum")
 	}
 
-	data["port"] = 70000
-	err = validator.Validate(data)
+	input["port"] = 70000
+	err = validator.Validate(input)
 	if err == nil {
 		t.Error("expected validation error for port above maximum")
 	}
@@ -221,17 +221,17 @@ func TestValidationRuleBuilder_Regex(t *testing.T) {
 		Regex("email", `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`).
 		Build()
 
-	data := map[string]any{
+	input := map[string]any{
 		"email": "test@example.com",
 	}
 
-	err := validator.Validate(data)
+	err := validator.Validate(input)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["email"] = "invalid-email"
-	err = validator.Validate(data)
+	input["email"] = "invalid-email"
+	err = validator.Validate(input)
 	if err == nil {
 		t.Error("expected validation error for invalid email")
 	}
@@ -243,17 +243,17 @@ func TestValidationRuleBuilder_Enum(t *testing.T) {
 		Enum("status", "active", "inactive").
 		Build()
 
-	data := map[string]any{
+	input := map[string]any{
 		"status": "active",
 	}
 
-	err := validator.Validate(data)
+	err := validator.Validate(input)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["status"] = "unknown"
-	err = validator.Validate(data)
+	input["status"] = "unknown"
+	err = validator.Validate(input)
 	if err == nil {
 		t.Error("expected validation error for invalid enum value")
 	}
@@ -274,17 +274,17 @@ func TestValidationRuleBuilder_Custom(t *testing.T) {
 		}).
 		Build()
 
-	data := map[string]any{
+	input := map[string]any{
 		"age": 25,
 	}
 
-	err := validator.Validate(data)
+	err := validator.Validate(input)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["age"] = 200
-	err = validator.Validate(data)
+	input["age"] = 200
+	err = validator.Validate(input)
 	if err == nil {
 		t.Error("expected validation error for invalid age")
 	}

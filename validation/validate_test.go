@@ -40,199 +40,57 @@ func TestValidateStruct_InvalidStruct(t *testing.T) {
 	}
 }
 
+func testValidateStringCases() []struct {
+	name    string
+	value   any
+	rules   string
+	wantErr bool
+} {
+	return []struct {
+		name    string
+		value   any
+		rules   string
+		wantErr bool
+	}{
+		{"valid string", "hello", "required,min=3,max=10", false},
+		{"invalid min", "hi", "min=5", true},
+		{"invalid max", "hello world", "max=5", true},
+		{"valid email", "user@example.com", "email", false},
+		{"invalid email", "invalid", "email", true},
+		{"valid url", "https://example.com", "url", false},
+		{"invalid url", "not-a-url", "url", true},
+		{"valid ip", "192.168.1.1", "ip", false},
+		{"invalid ip", "999.999.999.999", "ip", true},
+		{"valid regexp", "hello123", "regexp=^[a-z]+\\d+$", false},
+		{"invalid regexp", "hello", "regexp=^\\d+$", true},
+		{"valid oneof", "admin", "oneof=admin user guest", false},
+		{"invalid oneof", "superadmin", "oneof=admin user guest", true},
+		{"valid gt", 42, "gt=10", false},
+		{"invalid gt", 5, "gt=10", true},
+		{"valid gte", 10, "gte=10", false},
+		{"valid lt", 5, "lt=10", false},
+		{"invalid lt", 10, "lt=10", true},
+		{"valid lte", 10, "lte=10", false},
+		{"valid len", "hello", "len=5", false},
+		{"invalid len", "hello", "len=3", true},
+		{"required nil", nil, "required", true},
+		{"empty rules", "hello", "", false},
+		{"unknown rule", "hello", "unknown", false},
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Parallel()
-	t.Run("valid string", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "required,min=3,max=10")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid min", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hi", "min=5")
-		if err == nil {
-			t.Error("expected error for string too short")
-		}
-	})
-
-	t.Run("invalid max", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello world", "max=5")
-		if err == nil {
-			t.Error("expected error for string too long")
-		}
-	})
-
-	t.Run("valid email", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("user@example.com", "email")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid email", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("invalid", "email")
-		if err == nil {
-			t.Error("expected error for invalid email")
-		}
-	})
-
-	t.Run("valid url", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("https://example.com", "url")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid url", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("not-a-url", "url")
-		if err == nil {
-			t.Error("expected error for invalid url")
-		}
-	})
-
-	t.Run("valid ip", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("192.168.1.1", "ip")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid ip", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("999.999.999.999", "ip")
-		if err == nil {
-			t.Error("expected error for invalid ip")
-		}
-	})
-
-	t.Run("valid regexp", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello123", "regexp=^[a-z]+\\d+$")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid regexp", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "regexp=^\\d+$")
-		if err == nil {
-			t.Error("expected error for regexp mismatch")
-		}
-	})
-
-	t.Run("valid oneof", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("admin", "oneof=admin user guest")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid oneof", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("superadmin", "oneof=admin user guest")
-		if err == nil {
-			t.Error("expected error for invalid oneof")
-		}
-	})
-
-	t.Run("valid gt", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(42, "gt=10")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid gt", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(5, "gt=10")
-		if err == nil {
-			t.Error("expected error for value not greater than 10")
-		}
-	})
-
-	t.Run("valid gte", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(10, "gte=10")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("valid lt", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(5, "lt=10")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid lt", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(10, "lt=10")
-		if err == nil {
-			t.Error("expected error for value not less than 10")
-		}
-	})
-
-	t.Run("valid lte", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(10, "lte=10")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("valid len", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "len=5")
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-	})
-
-	t.Run("invalid len", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "len=3")
-		if err == nil {
-			t.Error("expected error for wrong length")
-		}
-	})
-
-	t.Run("required nil", func(t *testing.T) {
-		t.Parallel()
-		err := Validate(nil, "required")
-		if err == nil {
-			t.Error("expected error for nil value")
-		}
-	})
-
-	t.Run("empty rules", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "")
-		if err != nil {
-			t.Errorf("expected no error for empty rules, got %v", err)
-		}
-	})
-
-	t.Run("unknown rule", func(t *testing.T) {
-		t.Parallel()
-		err := Validate("hello", "unknown")
-		if err != nil {
-			t.Errorf("expected no error for unknown rule, got %v", err)
-		}
-	})
+	for _, tt := range testValidateStringCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := Validate(tt.value, tt.rules)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate(%v, %q) error = %v, wantErr %v", tt.value, tt.rules, err, tt.wantErr)
+			}
+		})
+	}
 }
 
 func TestValidate_IntValues(t *testing.T) {

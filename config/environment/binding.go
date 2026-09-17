@@ -10,38 +10,38 @@ import (
 
 // Bind 将整个环境配置绑定到目标结构体
 func (e *Environment) Bind(target any) error {
-	val := reflectValueOf(target)
-	if val.Kind() != reflect.Pointer || val.IsNil() {
+	targetValue := reflectValueOf(target)
+	if targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
 		return fmt.Errorf("target must be a non-nil pointer")
 	}
-	return e.bindStruct(val.Elem(), "")
+	return e.bindStruct(targetValue.Elem(), "")
 }
 
 // BindKey 将指定键的值绑定到目标
 func (e *Environment) BindKey(key string, target any) error {
-	val := reflectValueOf(target)
-	if val.Kind() != reflect.Pointer || val.IsNil() {
+	targetValue := reflectValueOf(target)
+	if targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
 		return fmt.Errorf("target must be a non-nil pointer")
 	}
 	v, ok := e.GetProperty(key)
 	if !ok {
 		return fmt.Errorf("property not found: %s", key)
 	}
-	converted, err := globalTypeConverter.ConvertTo(v, val.Elem().Type())
+	converted, err := globalTypeConverter.ConvertTo(v, targetValue.Elem().Type())
 	if err != nil {
 		return fmt.Errorf("failed to convert property %q: %w", key, err)
 	}
-	val.Elem().Set(converted)
+	targetValue.Elem().Set(converted)
 	return nil
 }
 
 // BindPrefix 将指定前缀的配置绑定到目标结构体
 func (e *Environment) BindPrefix(prefix string, target any) error {
-	val := reflectValueOf(target)
-	if val.Kind() != reflect.Pointer || val.IsNil() {
+	targetValue := reflectValueOf(target)
+	if targetValue.Kind() != reflect.Pointer || targetValue.IsNil() {
 		return fmt.Errorf("target must be a non-nil pointer")
 	}
-	return e.bindStruct(val.Elem(), prefix+".")
+	return e.bindStruct(targetValue.Elem(), prefix+".")
 }
 
 // Validate 验证配置，返回所有错误
@@ -136,20 +136,20 @@ func (e *Environment) parsePlaceholder(val string, startIdx int) (key, defaultVa
 //   - ${key:defaultValue} — 引用 key，不存在时使用 defaultValue
 //     defaultValue 中支持嵌套 ${...} 占位符
 func (e *Environment) resolvePlaceholders(val string, resolving map[string]bool) string {
-	var result strings.Builder
+	var builder strings.Builder
 	i := 0
 	for i < len(val) {
 		if val[i] == '$' && i+1 < len(val) && val[i+1] == '{' {
 			key, defaultVal, hasDefault, j, ok := e.parsePlaceholder(val, i)
 			if !ok {
-				result.WriteByte(val[i])
+				builder.WriteByte(val[i])
 				i++
 				continue
 			}
 
 			if resolving[key] {
 				slog.Warn("[environment] circular placeholder reference", "key", key)
-				result.WriteString(val[i : j+1])
+				builder.WriteString(val[i : j+1])
 				i = j + 1
 				continue
 			}
@@ -171,14 +171,14 @@ func (e *Environment) resolvePlaceholders(val string, resolving map[string]bool)
 				replacement = val[i : j+1]
 			}
 
-			result.WriteString(replacement)
+			builder.WriteString(replacement)
 			i = j + 1
 			continue
 		}
-		result.WriteByte(val[i])
+		builder.WriteByte(val[i])
 		i++
 	}
-	return result.String()
+	return builder.String()
 }
 
 func (e *Environment) bindStruct(val reflect.Value, prefix string) error {
@@ -196,7 +196,7 @@ func (e *Environment) bindStruct(val reflect.Value, prefix string) error {
 		// 优先处理 value tag（支持 ${...} 占位符）
 		if valueTag, ok := field.Tag.Lookup("value"); ok {
 			if err := e.bindValueTag(fieldVal, valueTag); err != nil {
-				return err
+				return fmt.Errorf("绑定 value 标签字段 %s 失败: %w", field.Name, err)
 			}
 			continue
 		}
@@ -205,21 +205,9 @@ func (e *Environment) bindStruct(val reflect.Value, prefix string) error {
 		key, hasExplicitKey := e.resolveConfigKey(field)
 		fullKey := prefix + key
 		if fieldVal.Kind() == reflect.Struct {
-			// 嵌套结构体：如果字段有显式 key，检查嵌套字段是否也有显式 key
-			// 如果嵌套字段有显式完整路径（如 db.url），则不添加父前缀
-			if hasExplicitKey && hasNestedExplicitKeys(fieldVal) {
-				// 嵌套字段已有完整路径，不添加父前缀
-				if err := e.bindStruct(fieldVal, ""); err != nil {
-					return err
-				}
-			} else if hasExplicitKey {
-				if err := e.bindStruct(fieldVal, key+"."); err != nil {
-					return err
-				}
-			} else {
-				if err := e.bindStruct(fieldVal, fullKey+"."); err != nil {
-					return err
-				}
+			// 嵌套结构体：根据显式 key 情况决定前缀
+			if err := e.bindNestedStruct(fieldVal, key, fullKey, hasExplicitKey); err != nil {
+				return fmt.Errorf("绑定嵌套结构体 %s 失败: %w", field.Name, err)
 			}
 			continue
 		}
@@ -234,6 +222,19 @@ func (e *Environment) bindStruct(val reflect.Value, prefix string) error {
 		}
 	}
 	return nil
+}
+
+// bindNestedStruct 处理嵌套结构体：根据字段是否有显式 key 决定是否沿用父前缀。
+func (e *Environment) bindNestedStruct(fieldVal reflect.Value, key string, fullKey string, hasExplicitKey bool) error {
+	// 如果嵌套字段有显式完整路径（如 db.url），则不添加父前缀
+	if hasExplicitKey && hasNestedExplicitKeys(fieldVal) {
+		// 嵌套字段已有完整路径，不添加父前缀
+		return e.bindStruct(fieldVal, "")
+	}
+	if hasExplicitKey {
+		return e.bindStruct(fieldVal, key+".")
+	}
+	return e.bindStruct(fieldVal, fullKey+".")
 }
 
 // bindValueTag 处理 value tag，支持 ${key} 和 ${key:defaultValue} 语法
@@ -276,22 +277,22 @@ var globalTypeConverter = NewTypeConverter()
 
 // toConfigKey 将 PascalCase 字段名转换为 config key（如 SSL → ssl, ServerConfig → server.config）
 func toConfigKey(name string) string {
-	var result strings.Builder
+	var builder strings.Builder
 	for i, r := range name {
 		if unicode.IsUpper(r) {
 			// 在连续大写后接小写时插入分隔符（如 HTTPServer → http.server）
 			if i > 0 {
 				prev := rune(name[i-1])
 				if !unicode.IsUpper(prev) || (i+1 < len(name) && unicode.IsLower(rune(name[i+1]))) {
-					result.WriteRune('.')
+					builder.WriteRune('.')
 				}
 			}
-			result.WriteRune(unicode.ToLower(r))
+			builder.WriteRune(unicode.ToLower(r))
 		} else {
-			result.WriteRune(r)
+			builder.WriteRune(r)
 		}
 	}
-	return result.String()
+	return builder.String()
 }
 
 func setField(fieldVal reflect.Value, val any) error {

@@ -23,6 +23,7 @@ func NewAuditInterceptor(auditor Auditor) AuditInterceptor {
 	}
 }
 
+// Intercept 拦截一次方法调用并记录审计事件，出错时标记为失败事件。
 func (i *auditInterceptorImpl) Intercept(methodName string, args []any, result any, err error) {
 	event := Event{
 		Actor:    i.actorFunc(),

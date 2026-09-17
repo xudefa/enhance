@@ -55,71 +55,79 @@ func TestEnhancedRateLimitFilter_ClientKey(t *testing.T) {
 
 // TestEnhancedRateLimitFilter_DoFilter 测试增强限流过滤器的各种场景
 
+func testEnhancedRateLimitFilterExcludePath(t *testing.T) {
+	t.Parallel()
+	filterWithExclude := NewEnhancedRateLimitFilter(&mockRateLimitStrategy{}, WithExcludePaths("/health"))
+	req := &mockSecurityRequest{method: "GET", uri: "/health"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+	err := filterWithExclude.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called for excluded path")
+	}
+}
+
+func testEnhancedRateLimitFilterRateLimitTriggered(t *testing.T) {
+	t.Parallel()
+	denyStrategy := &mockRateLimitStrategy{allow: false}
+	filterDeny := NewEnhancedRateLimitFilter(denyStrategy)
+	req := &mockSecurityRequest{method: "GET", uri: "/api"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+	err := filterDeny.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.statusCode != 429 {
+		t.Errorf("expected status 429, got %d", resp.statusCode)
+	}
+}
+
+func testEnhancedRateLimitFilterCustomCallback(t *testing.T) {
+	t.Parallel()
+	customCalled := false
+	denyStrategy := &mockRateLimitStrategy{allow: false}
+	filterCustom := NewEnhancedRateLimitFilter(denyStrategy, WithOnRateLimit(func(ctx context.Context, request SecurityRequest, response SecurityResponse) {
+		customCalled = true
+		response.SetStatusCode(429)
+	}))
+	req := &mockSecurityRequest{method: "GET", uri: "/api"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+	err := filterCustom.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !customCalled {
+		t.Error("expected custom onRateLimit to be called")
+	}
+}
+
+func testEnhancedRateLimitFilterAllowedPassThrough(t *testing.T) {
+	t.Parallel()
+	allowStrategy := &mockRateLimitStrategy{allow: true}
+	filterAllow := NewEnhancedRateLimitFilter(allowStrategy)
+	req := &mockSecurityRequest{method: "GET", uri: "/api"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+	err := filterAllow.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called for allowed request")
+	}
+}
+
 func TestEnhancedRateLimitFilter_DoFilter(t *testing.T) {
 	t.Parallel()
-
-	t.Run("exclude path", func(t *testing.T) {
-		filterWithExclude := NewEnhancedRateLimitFilter(&mockRateLimitStrategy{}, WithExcludePaths("/health"))
-		req := &mockSecurityRequest{method: "GET", uri: "/health"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-		err := filterWithExclude.DoFilter(context.Background(), req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !chain.called {
-			t.Error("expected chain to be called for excluded path")
-		}
-	})
-
-	t.Run("rate limit triggered", func(t *testing.T) {
-		denyStrategy := &mockRateLimitStrategy{allow: false}
-		filterDeny := NewEnhancedRateLimitFilter(denyStrategy)
-		req := &mockSecurityRequest{method: "GET", uri: "/api"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-		err := filterDeny.DoFilter(context.Background(), req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if resp.statusCode != 429 {
-			t.Errorf("expected status 429, got %d", resp.statusCode)
-		}
-	})
-
-	t.Run("custom onRateLimit callback", func(t *testing.T) {
-		customCalled := false
-		denyStrategy := &mockRateLimitStrategy{allow: false}
-		filterCustom := NewEnhancedRateLimitFilter(denyStrategy, WithOnRateLimit(func(ctx context.Context, request SecurityRequest, response SecurityResponse) {
-			customCalled = true
-			response.SetStatusCode(429)
-		}))
-		req := &mockSecurityRequest{method: "GET", uri: "/api"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-		err := filterCustom.DoFilter(context.Background(), req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !customCalled {
-			t.Error("expected custom onRateLimit to be called")
-		}
-	})
-
-	t.Run("allowed request passes through", func(t *testing.T) {
-		allowStrategy := &mockRateLimitStrategy{allow: true}
-		filterAllow := NewEnhancedRateLimitFilter(allowStrategy)
-		req := &mockSecurityRequest{method: "GET", uri: "/api"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-		err := filterAllow.DoFilter(context.Background(), req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !chain.called {
-			t.Error("expected chain to be called for allowed request")
-		}
-	})
+	t.Run("exclude path", testEnhancedRateLimitFilterExcludePath)
+	t.Run("rate limit triggered", testEnhancedRateLimitFilterRateLimitTriggered)
+	t.Run("custom onRateLimit callback", testEnhancedRateLimitFilterCustomCallback)
+	t.Run("allowed request passes through", testEnhancedRateLimitFilterAllowedPassThrough)
 }
 
 // TestEnhancedRateLimitFilter_InvalidTypes 测试 EnhancedRateLimitFilter 的类型检查
@@ -127,24 +135,24 @@ func TestEnhancedRateLimitFilter_DoFilter(t *testing.T) {
 func TestEnhancedRateLimitFilter_InvalidTypes(t *testing.T) {
 	t.Parallel()
 
-	f := NewEnhancedRateLimitFilter(&mockRateLimitStrategy{})
+	enhancedFilter := NewEnhancedRateLimitFilter(&mockRateLimitStrategy{})
 
 	t.Run("invalid context", func(t *testing.T) {
-		err := f.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := enhancedFilter.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid context")
 		}
 	})
 
 	t.Run("invalid request", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := enhancedFilter.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid request")
 		}
 	})
 
 	t.Run("invalid response", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
+		err := enhancedFilter.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid response")
 		}
@@ -160,7 +168,7 @@ func TestEnhancedRateLimitFilter_InvalidTypes(t *testing.T) {
 func TestRateLimitFilter_DoFilter_InvalidTypes(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled: true,
 		Rate:    10,
 		Burst:   20,
@@ -168,21 +176,21 @@ func TestRateLimitFilter_DoFilter_InvalidTypes(t *testing.T) {
 	})
 
 	t.Run("invalid context", func(t *testing.T) {
-		err := f.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := rateLimiter.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid context")
 		}
 	})
 
 	t.Run("invalid request", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := rateLimiter.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid request")
 		}
 	})
 
 	t.Run("invalid response", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
+		err := rateLimiter.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid response")
 		}
@@ -194,7 +202,7 @@ func TestRateLimitFilter_DoFilter_InvalidTypes(t *testing.T) {
 func TestRateLimitFilter_DoFilter_RateLimited(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled: true,
 		Rate:    1,
 		Burst:   1,
@@ -206,7 +214,7 @@ func TestRateLimitFilter_DoFilter_RateLimited(t *testing.T) {
 	chain := &mockSecurityFilterChain{}
 
 	// First request should be allowed
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := rateLimiter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +224,7 @@ func TestRateLimitFilter_DoFilter_RateLimited(t *testing.T) {
 
 	// Second request should be rate limited
 	chain.called = false
-	err = f.DoFilter(context.Background(), req, resp, chain)
+	err = rateLimiter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

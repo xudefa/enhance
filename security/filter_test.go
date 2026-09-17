@@ -11,10 +11,10 @@ import (
 func TestAuthContextFilter_DoFilter(t *testing.T) {
 	t.Parallel()
 
-	f := NewAuthContextFilter()
+	authContextFilter := NewAuthContextFilter()
 
-	if f.Order() != AuthContextFilterOrder {
-		t.Errorf("expected order %d, got %d", AuthContextFilterOrder, f.Order())
+	if authContextFilter.Order() != AuthContextFilterOrder {
+		t.Errorf("expected order %d, got %d", AuthContextFilterOrder, authContextFilter.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -22,7 +22,7 @@ func TestAuthContextFilter_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := authContextFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -31,10 +31,10 @@ func TestAuthContextFilter_DoFilter(t *testing.T) {
 func TestAnonymousAuthenticationFilter_DoFilter(t *testing.T) {
 	t.Parallel()
 
-	f := NewAnonymousAuthenticationFilter()
+	anonymousFilter := NewAnonymousAuthenticationFilter()
 
-	if f.Order() != AnonymousAuthenticationFilterOrder {
-		t.Errorf("expected order %d, got %d", AnonymousAuthenticationFilterOrder, f.Order())
+	if anonymousFilter.Order() != AnonymousAuthenticationFilterOrder {
+		t.Errorf("expected order %d, got %d", AnonymousAuthenticationFilterOrder, anonymousFilter.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -42,7 +42,7 @@ func TestAnonymousAuthenticationFilter_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := anonymousFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -85,14 +85,14 @@ func TestExceptionTranslationFilter_DoFilter(t *testing.T) {
 
 	accessDeniedHandler := &mockAccessDeniedHandler{}
 	authEntryPoint := &mockAuthenticationEntryPoint{}
-	f := NewExceptionTranslationFilter(accessDeniedHandler, authEntryPoint)
+	exceptionFilter := NewExceptionTranslationFilter(accessDeniedHandler, authEntryPoint)
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := exceptionFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -101,13 +101,13 @@ func TestExceptionTranslationFilter_DoFilter(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidContext(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	req := &mockSecurityRequest{}
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter("invalid", req, resp, chain)
+	err := exceptionFilter.DoFilter("invalid", req, resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid context")
 	}
@@ -116,12 +116,12 @@ func TestExceptionTranslationFilter_DoFilter_InvalidContext(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), "invalid", resp, chain)
+	err := exceptionFilter.DoFilter(context.Background(), "invalid", resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid request")
 	}
@@ -130,12 +130,12 @@ func TestExceptionTranslationFilter_DoFilter_InvalidRequest(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidResponse(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	req := &mockSecurityRequest{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), req, "invalid", chain)
+	err := exceptionFilter.DoFilter(context.Background(), req, "invalid", chain)
 	if err == nil {
 		t.Fatal("expected error for invalid response")
 	}
@@ -148,10 +148,10 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 	decisionManager := NewAffirmativeBased()
 	metadataSource := NewExpressionBasedFilterInvocationSecurityMetadataSource()
 
-	f := NewFilterSecurityInterceptor(metadataSource, decisionManager, authManager)
+	interceptor := NewFilterSecurityInterceptor(metadataSource, decisionManager, authManager)
 
-	if f.Order() != FilterSecurityInterceptorOrder {
-		t.Errorf("expected order %d, got %d", FilterSecurityInterceptorOrder, f.Order())
+	if interceptor.Order() != FilterSecurityInterceptorOrder {
+		t.Errorf("expected order %d, got %d", FilterSecurityInterceptorOrder, interceptor.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -159,7 +159,7 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := interceptor.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -178,7 +178,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter("invalid", req, resp, chain)
+	err := interceptor.DoFilter("invalid", req, resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid context")
 	}
@@ -187,7 +187,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -196,7 +196,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), "invalid", resp, chain)
+	err := interceptor.DoFilter(context.Background(), "invalid", resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid request")
 	}
@@ -205,7 +205,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidResponse(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -214,7 +214,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidResponse(t *testing.T) {
 	req := &mockSecurityRequest{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), req, "invalid", chain)
+	err := interceptor.DoFilter(context.Background(), req, "invalid", chain)
 	if err == nil {
 		t.Fatal("expected error for invalid response")
 	}

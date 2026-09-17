@@ -330,7 +330,7 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
 	tenant, err := i.manager.GetTenant(tenantID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("查询租户 %s 失败: %w", tenantID, err)
 	}
 
 	if tenant.Database == "" {
@@ -344,7 +344,7 @@ func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
 func (i *tenantIsolationImpl) IsolateSchema(tenantID string) (string, error) {
 	_, err := i.manager.GetTenant(tenantID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("查询租户 %s 失败: %w", tenantID, err)
 	}
 
 	return fmt.Sprintf("tenant_%s", tenantID), nil

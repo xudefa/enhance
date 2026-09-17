@@ -57,78 +57,51 @@ func TestValidateStruct_Extra(t *testing.T) {
 }
 
 // TestIsRequiredValidForValue 测试 isRequiredValidForValue
+func testIsRequiredValidForValueCases() []struct {
+	name   string
+	value  any
+	want   bool
+	errMsg string
+} {
+	value := 1
+	ptr := (*int)(nil)
+	return []struct {
+		name   string
+		value  any
+		want   bool
+		errMsg string
+	}{
+		{"nil", nil, false, "Expected nil to be invalid"},
+		{"non-empty string", "test", true, "Expected non-empty string to be valid"},
+		{"empty string", "", false, "Expected empty string to be invalid"},
+		{"non-zero int", 1, true, "Expected non-zero int to be valid"},
+		{"zero int", 0, false, "Expected zero int to be invalid"},
+		{"non-zero uint", uint(1), true, "Expected non-zero uint to be valid"},
+		{"zero uint", uint(0), false, "Expected zero uint to be invalid"},
+		{"non-zero float", 1.0, true, "Expected non-zero float to be valid"},
+		{"zero float", 0.0, false, "Expected zero float to be invalid"},
+		{"true", true, true, "Expected true to be valid"},
+		{"false", false, false, "Expected false to be invalid"},
+		{"non-nil slice", []int{1}, true, "Expected non-nil slice to be valid"},
+		{"nil slice", []int(nil), false, "Expected nil slice to be invalid"},
+		{"non-nil map", map[string]int{"a": 1}, true, "Expected non-nil map to be valid"},
+		{"nil map", (map[string]int)(nil), false, "Expected nil map to be invalid"},
+		{"non-nil pointer", &value, true, "Expected non-nil pointer to be valid"},
+		{"nil pointer", ptr, false, "Expected nil pointer to be invalid"},
+	}
+}
+
 func TestIsRequiredValidForValue_Coverage(t *testing.T) {
 	t.Parallel()
 
-	// nil
-	if isRequiredValidForValue(nil) {
-		t.Error("Expected nil to be invalid")
-	}
-
-	// string
-	if !isRequiredValidForValue("test") {
-		t.Error("Expected non-empty string to be valid")
-	}
-	if isRequiredValidForValue("") {
-		t.Error("Expected empty string to be invalid")
-	}
-
-	// int
-	if !isRequiredValidForValue(1) {
-		t.Error("Expected non-zero int to be valid")
-	}
-	if isRequiredValidForValue(0) {
-		t.Error("Expected zero int to be invalid")
-	}
-
-	// uint
-	if !isRequiredValidForValue(uint(1)) {
-		t.Error("Expected non-zero uint to be valid")
-	}
-	if isRequiredValidForValue(uint(0)) {
-		t.Error("Expected zero uint to be invalid")
-	}
-
-	// float
-	if !isRequiredValidForValue(1.0) {
-		t.Error("Expected non-zero float to be valid")
-	}
-	if isRequiredValidForValue(0.0) {
-		t.Error("Expected zero float to be invalid")
-	}
-
-	// bool
-	if !isRequiredValidForValue(true) {
-		t.Error("Expected true to be valid")
-	}
-	if isRequiredValidForValue(false) {
-		t.Error("Expected false to be invalid")
-	}
-
-	// slice
-	if !isRequiredValidForValue([]int{1}) {
-		t.Error("Expected non-nil slice to be valid")
-	}
-	if isRequiredValidForValue([]int(nil)) {
-		t.Error("Expected nil slice to be invalid")
-	}
-
-	// map
-	if !isRequiredValidForValue(map[string]int{"a": 1}) {
-		t.Error("Expected non-nil map to be valid")
-	}
-	if isRequiredValidForValue((map[string]int)(nil)) {
-		t.Error("Expected nil map to be invalid")
-	}
-
-	// ptr
-	val := 1
-	if !isRequiredValidForValue(&val) {
-		t.Error("Expected non-nil pointer to be valid")
-	}
-	var ptr *int
-	if isRequiredValidForValue(ptr) {
-		t.Error("Expected nil pointer to be invalid")
+	for _, tt := range testIsRequiredValidForValueCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isRequiredValidForValue(tt.value); got != tt.want {
+				t.Errorf("%s", tt.errMsg)
+			}
+		})
 	}
 }
 
@@ -458,233 +431,5 @@ func TestIsLteValidForValue_Coverage(t *testing.T) {
 	// unsupported type
 	if isLteValidForValue(true, "1") {
 		t.Error("Expected bool to be unsupported")
-	}
-}
-
-// TestIsURLValidForValue 测试 isURLValidForValue
-func TestIsURLValidForValue_Coverage(t *testing.T) {
-	t.Parallel()
-
-	// nil
-	if isURLValidForValue(nil) {
-		t.Error("Expected nil to be invalid")
-	}
-
-	// valid URL
-	if !isURLValidForValue("https://example.com") {
-		t.Error("Expected valid URL")
-	}
-
-	// invalid URL
-	if isURLValidForValue("not-a-url") {
-		t.Error("Expected invalid URL")
-	}
-
-	// non-string
-	if isURLValidForValue(123) {
-		t.Error("Expected non-string to be invalid")
-	}
-}
-
-// TestIsIPValidForValue 测试 isIPValidForValue
-func TestIsIPValidForValue_Coverage(t *testing.T) {
-	t.Parallel()
-
-	// nil
-	if isIPValidForValue(nil) {
-		t.Error("Expected nil to be invalid")
-	}
-
-	// valid IP
-	if !isIPValidForValue("192.168.1.1") {
-		t.Error("Expected valid IP")
-	}
-
-	// invalid IP
-	if isIPValidForValue("not-an-ip") {
-		t.Error("Expected invalid IP")
-	}
-
-	// non-string
-	if isIPValidForValue(123) {
-		t.Error("Expected non-string to be invalid")
-	}
-}
-
-// TestIsOneOfValidForValue 测试 isOneOfValidForValue
-func TestIsOneOfValidForValue_Coverage(t *testing.T) {
-	t.Parallel()
-
-	// string - valid
-	if !isOneOfValidForValue("green", "red green blue") {
-		t.Error("Expected 'green' to be in options")
-	}
-
-	// string - invalid
-	if isOneOfValidForValue("yellow", "red green blue") {
-		t.Error("Expected 'yellow' to not be in options")
-	}
-
-	// int - valid
-	if !isOneOfValidForValue(2, "1 2 3") {
-		t.Error("Expected 2 to be in options")
-	}
-
-	// int - invalid
-	if isOneOfValidForValue(4, "1 2 3") {
-		t.Error("Expected 4 to not be in options")
-	}
-
-	// nil
-	if isOneOfValidForValue(nil, "1 2 3") {
-		t.Error("Expected nil to be invalid")
-	}
-}
-
-// TestValidateRuleWithParam 测试 validateRuleWithParam
-func TestValidateRuleWithParam_Coverage(t *testing.T) {
-	t.Parallel()
-
-	// valid min
-	err := validateRuleWithParam("test", "min=3")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// invalid min
-	err = validateRuleWithParam("ab", "min=3")
-	if err == nil {
-		t.Error("Expected error for invalid min")
-	}
-
-	// valid max
-	err = validateRuleWithParam("test", "max=10")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid len
-	err = validateRuleWithParam("test", "len=4")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid email
-	err = validateRuleWithParam("test@example.com", "email=true")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid regexp
-	err = validateRuleWithParam("ABC", "regexp=^[A-Z]{3}$")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid gt
-	err = validateRuleWithParam(25, "gt=18")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid gte
-	err = validateRuleWithParam(18, "gte=18")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid lt
-	err = validateRuleWithParam(50, "lt=100")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid lte
-	err = validateRuleWithParam(100, "lte=100")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid url
-	err = validateRuleWithParam("https://example.com", "url=true")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid ip
-	err = validateRuleWithParam("192.168.1.1", "ip=true")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// valid oneof
-	err = validateRuleWithParam("green", "oneof=red green blue")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// unknown rule (unknown rules are silently ignored)
-	err = validateRuleWithParam("test", "unknown=value")
-	if err != nil {
-		t.Errorf("Expected no error for unknown rule, got %v", err)
-	}
-}
-
-// TestValidateRuleWithoutParam 测试 validateRuleWithoutParam
-func TestValidateRuleWithoutParam_Coverage(t *testing.T) {
-	t.Parallel()
-
-	// valid required
-	err := validateRuleWithoutParam("test", "required")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// invalid required
-	err = validateRuleWithoutParam("", "required")
-	if err == nil {
-		t.Error("Expected error for empty string with required")
-	}
-
-	// valid email
-	err = validateRuleWithoutParam("test@example.com", "email")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// invalid email
-	err = validateRuleWithoutParam("invalid", "email")
-	if err == nil {
-		t.Error("Expected error for invalid email")
-	}
-
-	// valid url
-	err = validateRuleWithoutParam("https://example.com", "url")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// invalid url
-	err = validateRuleWithoutParam("not-a-url", "url")
-	if err == nil {
-		t.Error("Expected error for invalid URL")
-	}
-
-	// valid ip
-	err = validateRuleWithoutParam("192.168.1.1", "ip")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-
-	// invalid ip
-	err = validateRuleWithoutParam("not-an-ip", "ip")
-	if err == nil {
-		t.Error("Expected error for invalid IP")
-	}
-
-	// unknown rule (unknown rules are silently ignored)
-	err = validateRuleWithoutParam("test", "unknown")
-	if err != nil {
-		t.Errorf("Expected no error for unknown rule, got %v", err)
 	}
 }

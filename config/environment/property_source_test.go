@@ -13,16 +13,16 @@ func TestMapPropertySource_GetProperty(t *testing.T) {
 		"server.host": "localhost",
 	})
 
-	val, ok := src.GetProperty("server.port")
+	prop, ok := src.GetProperty("server.port")
 	if !ok {
 		t.Fatal("expected property to exist")
 	}
-	v, ok := val.(int)
+	v, ok := prop.(int)
 	if !ok {
-		t.Fatalf("expected int, got %T", val)
+		t.Fatalf("expected int, got %T", prop)
 	}
 	if v != 8080 {
-		t.Fatalf("expected 8080, got %v", val)
+		t.Fatalf("expected 8080, got %v", prop)
 	}
 
 	_, ok = src.GetProperty("nonexistent")
@@ -49,28 +49,28 @@ func TestArgsPropertySource(t *testing.T) {
 		"--some-flag",
 	})
 
-	val, ok := src.GetProperty("server.port")
+	prop, ok := src.GetProperty("server.port")
 	if !ok {
 		t.Fatal("expected server.port to exist")
 	}
-	v, ok := val.(string)
+	v, ok := prop.(string)
 	if !ok {
-		t.Fatalf("expected string, got %T", val)
+		t.Fatalf("expected string, got %T", prop)
 	}
 	if v != "9090" {
-		t.Fatalf("expected 9090, got %v", val)
+		t.Fatalf("expected 9090, got %v", prop)
 	}
 
-	val, ok = src.GetProperty("server.host")
+	prop, ok = src.GetProperty("server.host")
 	if !ok {
 		t.Fatal("expected server.host to exist")
 	}
-	s, ok := val.(string)
+	s, ok := prop.(string)
 	if !ok {
-		t.Fatalf("expected string, got %T", val)
+		t.Fatalf("expected string, got %T", prop)
 	}
 	if s != "example.com" {
-		t.Fatalf("expected example.com, got %v", val)
+		t.Fatalf("expected example.com, got %v", prop)
 	}
 }
 
@@ -87,9 +87,9 @@ func TestToEnvKey(t *testing.T) {
 		{"nested.key.path", "NESTED_KEY_PATH"},
 	}
 	for _, tt := range tests {
-		result := toEnvKey(tt.input)
-		if result != tt.expected {
-			t.Errorf("toEnvKey(%q) = %q, want %q", tt.input, result, tt.expected)
+		parsed := toEnvKey(tt.input)
+		if parsed != tt.expected {
+			t.Errorf("toEnvKey(%q) = %q, want %q", tt.input, parsed, tt.expected)
 		}
 	}
 }
@@ -106,16 +106,16 @@ func TestEnvPropertySource_GetProperty(t *testing.T) {
 	}
 
 	src := NewEnvPropertySource("env", "GO_BOOT")
-	val, ok := src.GetProperty("server.port")
+	prop, ok := src.GetProperty("server.port")
 	if !ok {
 		t.Fatal("expected server.port to exist")
 	}
-	v, ok := val.(string)
+	v, ok := prop.(string)
 	if !ok {
-		t.Fatalf("expected string, got %T", val)
+		t.Fatalf("expected string, got %T", prop)
 	}
 	if v != "9090" {
-		t.Fatalf("expected 9090, got %v", val)
+		t.Fatalf("expected 9090, got %v", prop)
 	}
 }
 
@@ -133,13 +133,13 @@ func TestNewDefaultPropertySource(t *testing.T) {
 		t.Fatalf("Priority() = %d, want %d", src.Priority(), PriorityFallback)
 	}
 
-	val, ok := src.GetProperty("server.port")
+	prop, ok := src.GetProperty("server.port")
 	if !ok {
 		t.Fatal("expected server.port to exist")
 	}
-	v, ok := val.(int)
+	v, ok := prop.(int)
 	if !ok || v != 8080 {
-		t.Fatalf("server.port = %v, want 8080", val)
+		t.Fatalf("server.port = %v, want 8080", prop)
 	}
 }
 
@@ -206,15 +206,15 @@ func TestEnvPropertySource_EmptyPrefix(t *testing.T) {
 	}
 
 	src := NewEnvPropertySource("env", "")
-	val, ok := src.GetProperty("server.port")
+	prop, ok := src.GetProperty("server.port")
 	if !ok {
 		t.Fatal("expected server.port to exist with empty prefix")
 	}
-	v, ok := val.(string)
+	v, ok := prop.(string)
 	if !ok {
-		t.Fatalf("expected string, got %T", val)
+		t.Fatalf("expected string, got %T", prop)
 	}
 	if v != "8080" {
-		t.Fatalf("expected 8080, got %v", val)
+		t.Fatalf("expected 8080, got %v", prop)
 	}
 }

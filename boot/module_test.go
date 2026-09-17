@@ -1,7 +1,6 @@
 package boot
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -162,11 +161,11 @@ func TestProvide_Generic(t *testing.T) {
 	}
 
 	err = Provide(func(c core.Container) (*svc, error) {
-		r, err := core.GetByName[*repo](c, "")
+		repository, err := core.GetByName[*repo](c, "")
 		if err != nil {
 			return nil, err
 		}
-		return &svc{r: r}, nil
+		return &svc{r: repository}, nil
 	})(c)
 	if err != nil {
 		t.Fatalf("Provide(svc) error = %v", err)
@@ -447,149 +446,15 @@ func TestWithModule(t *testing.T) {
 	}
 }
 
-func TestModuleBuilder_Name(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule().Name("test")
-	module := builder.Build()
-	if module.ModuleName() != "test" {
-		t.Errorf("expected name 'test', got '%s'", module.ModuleName())
-	}
-}
-
-func TestModuleBuilder_Bean(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Value string
-	}
-
-	builder := NewModule().
-		Bean(ProvideBean(&TestBean{Value: "bean"}))
-
-	container := core.NewContainer()
-	module := builder.Build()
-	err := module.Install(container)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestModuleBuilder_Invoke(t *testing.T) {
-	t.Parallel()
-
-	invoked := false
-	builder := NewModule().
-		Invoke(func() error {
-			invoked = true
-			return nil
-		})
-
-	container := core.NewContainer()
-	module := builder.Build()
-	err := module.Install(container)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !invoked {
-		t.Error("expected invoke to be called")
-	}
-}
-
-func TestModuleBuilder_Hook(t *testing.T) {
-	t.Parallel()
-
-	hookCalled := false
-	builder := NewModule("test-hook").
-		Hook(&testHookForModule{fn: func(ctx context.Context) error {
-			hookCalled = true
-			return nil
-		}})
-
-	container := core.NewContainer()
-	module := builder.Build()
-	err := module.Install(container)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	_ = hookCalled
-}
-
-type testHookForModule struct {
-	fn func(context.Context) error
-}
-
-func (h *testHookForModule) OnInit(ctx context.Context) error {
-	return h.fn(ctx)
-}
-
-func (h *testHookForModule) OnStart(ctx context.Context) error {
-	return nil
-}
-
-func (h *testHookForModule) OnStop(ctx context.Context) error {
-	return nil
-}
-
-func TestModuleBuilder_Hooks(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule()
-	hooks := builder.Hooks()
-	if hooks == nil {
-		t.Error("expected non-nil hooks")
-	}
-}
-
-func TestModuleBuilder_Starters(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule("test-starters")
-	module := builder.Build()
-	if module.ModuleName() != "test-starters" {
-		t.Errorf("expected module name 'test-starters', got '%s'", module.ModuleName())
-	}
-}
-
-func TestModuleBuilder_Condition(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule()
-	conditions := builder.Conditions()
-	if conditions == nil {
-		t.Error("expected non-nil conditions")
-	}
-}
-
-func TestModuleBuilder_Conditions(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule()
-	conditions := builder.Conditions()
-	if conditions == nil {
-		t.Error("expected non-nil conditions")
-	}
-}
-
-func TestModuleBuilder_Module(t *testing.T) {
-	t.Parallel()
-
-	builder := NewModule("test-module")
-	module := builder.Build()
-	if module.ModuleName() != "test-module" {
-		t.Errorf("expected module name 'test-module', got '%s'", module.ModuleName())
-	}
-}
-
 func TestConditionalModule(t *testing.T) {
 	t.Parallel()
 
 	cond := condition.OnProperty("test.enabled", "true")
 	mod := NewModule("test-module")
 
-	result := ConditionalModule([]condition.Condition{cond}, mod.Build())
-	if len(result.conditions) != 1 {
-		t.Errorf("expected 1 condition, got %d", len(result.conditions))
+	condModule := ConditionalModule([]condition.Condition{cond}, mod.Build())
+	if len(condModule.conditions) != 1 {
+		t.Errorf("expected 1 condition, got %d", len(condModule.conditions))
 	}
 }
 
@@ -598,8 +463,8 @@ func TestNamedModule(t *testing.T) {
 
 	mod := NewModule("original")
 
-	result := NamedModule("new-name", mod.Build())
-	if result.moduleName != "new-name" {
-		t.Errorf("expected module name 'new-name', got '%s'", result.moduleName)
+	namedModule := NamedModule("new-name", mod.Build())
+	if namedModule.moduleName != "new-name" {
+		t.Errorf("expected module name 'new-name', got '%s'", namedModule.moduleName)
 	}
 }

@@ -73,12 +73,12 @@ func NewContextLogger(logger Logger) *ContextLogger {
 // 返回:
 //   - *DynamicLevelLogger: 动态级别日志器实例
 func NewDynamicLevelLogger(logger Logger, initialLevel Level) *DynamicLevelLogger {
-	d := &DynamicLevelLogger{
+	dynamicLogger := &DynamicLevelLogger{
 		logger: logger,
 		level:  &atomic.Int32{},
 	}
-	d.level.Store(int32(initialLevel))
-	return d
+	dynamicLogger.level.Store(int32(initialLevel))
+	return dynamicLogger
 }
 
 // Debug 记录调试日志
@@ -293,10 +293,10 @@ func appendContextKeys(ctx context.Context, keys []KeyValue) []KeyValue {
 
 	// 如果 keys 的容量足够且没有共享底层数组，可以直接 append
 	// 但为了安全起见，始终创建新切片避免污染调用方
-	result := make([]KeyValue, len(keys)+1)
-	copy(result, keys)
-	result[len(keys)] = KeyValue{Key: "trace_id", Value: traceID}
-	return result
+	merged := make([]KeyValue, len(keys)+1)
+	copy(merged, keys)
+	merged[len(keys)] = KeyValue{Key: "trace_id", Value: traceID}
+	return merged
 }
 
 var _ Logger = (*ContextLogger)(nil)

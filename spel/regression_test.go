@@ -34,14 +34,14 @@ func TestEvaluate_MethodCall_IntArg(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(counter)
-	val, err := expr.GetValue(ctx)
+	evaluated, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	got, ok := val.(int)
+	got, ok := evaluated.(int)
 	if !ok || got != 15 {
-		t.Errorf("expected 15, got %v (%T)", val, val)
+		t.Errorf("expected 15, got %v (%T)", evaluated, evaluated)
 	}
 }
 
@@ -68,19 +68,19 @@ func TestEvaluate_MethodCall_ArgTypeMismatch(t *testing.T) {
 func TestReflectPropertyAccessor_GetProperty_Unexported(t *testing.T) {
 	t.Parallel()
 	accessor := NewReflectPropertyAccessor()
-	obj := &testUnexported{hidden: "secret", Public: "open"}
+	target := &testUnexported{hidden: "secret", Public: "open"}
 
-	_, err := accessor.GetProperty(obj, "hidden")
+	_, err := accessor.GetProperty(target, "hidden")
 	if err == nil {
 		t.Error("expected error for unexported field")
 	}
 
-	val, err := accessor.GetProperty(obj, "Public")
+	got, err := accessor.GetProperty(target, "Public")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "open" {
-		t.Errorf("expected 'open', got %v", val)
+	if got != "open" {
+		t.Errorf("expected 'open', got %v", got)
 	}
 }
 
@@ -134,8 +134,8 @@ func TestEvaluate_MethodCall_MissingClosingParen(t *testing.T) {
 	var evalErr error
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("expected no panic, got: %v", r)
+			if rec := recover(); rec != nil {
+				t.Errorf("expected no panic, got: %v", rec)
 			}
 		}()
 		_, evalErr = expr.GetValue(ctx)

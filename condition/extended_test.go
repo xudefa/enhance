@@ -153,6 +153,71 @@ func TestOnEnvVarMissing(t *testing.T) {
 	}
 }
 
+func testConditionBuilderSingle(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b1 := New().OnProperty("feature.enabled", "true").Build()
+	if !b1.Matches(ctx) {
+		t.Fatal("expected single condition to match")
+	}
+}
+
+func testConditionBuilderAnd(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b2 := New().
+		OnProperty("feature.enabled", "true").
+		And().
+		OnBean("dataSource").
+		Build()
+	if !b2.Matches(ctx) {
+		t.Fatal("expected AND condition to match")
+	}
+}
+
+func testConditionBuilderOr(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b3 := New().
+		OnProperty("nonexistent").
+		Or().
+		OnProperty("feature.enabled").
+		Build()
+	if !b3.Matches(ctx) {
+		t.Fatal("expected OR condition to match when one matches")
+	}
+}
+
+func testConditionBuilderNot(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b4 := New().
+		Not().
+		OnProperty("nonexistent").
+		Build()
+	if !b4.Matches(ctx) {
+		t.Fatal("expected NOT condition to match when condition is false")
+	}
+}
+
+func testConditionBuilderMixed(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b5 := New().
+		OnProperty("feature.enabled", "true").
+		And().
+		OnBean("dataSource").
+		Or().
+		OnProperty("app.name").
+		Build()
+	if !b5.Matches(ctx) {
+		t.Fatal("expected mixed AND/OR condition to match")
+	}
+}
+
+func testConditionBuilderEmpty(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	b6 := New().Build()
+	if !b6.Matches(ctx) {
+		t.Fatal("expected empty builder to always match")
+	}
+}
+
 // TestConditionBuilder 验证 ConditionBuilder 的流式 DSL:
 //  1. 单个条件构建
 //  2. And 操作
@@ -178,58 +243,12 @@ func TestConditionBuilder(t *testing.T) {
 		},
 	}
 
-	// 测试单个条件
-	b1 := New().OnProperty("feature.enabled", "true").Build()
-	if !b1.Matches(ctx) {
-		t.Fatal("expected single condition to match")
-	}
-
-	// 测试 And 操作
-	b2 := New().
-		OnProperty("feature.enabled", "true").
-		And().
-		OnBean("dataSource").
-		Build()
-	if !b2.Matches(ctx) {
-		t.Fatal("expected AND condition to match")
-	}
-
-	// 测试 Or 操作
-	b3 := New().
-		OnProperty("nonexistent").
-		Or().
-		OnProperty("feature.enabled").
-		Build()
-	if !b3.Matches(ctx) {
-		t.Fatal("expected OR condition to match when one matches")
-	}
-
-	// 测试 Not 操作
-	b4 := New().
-		Not().
-		OnProperty("nonexistent").
-		Build()
-	if !b4.Matches(ctx) {
-		t.Fatal("expected NOT condition to match when condition is false")
-	}
-
-	// 测试混合操作（AND + OR）
-	b5 := New().
-		OnProperty("feature.enabled", "true").
-		And().
-		OnBean("dataSource").
-		Or().
-		OnProperty("app.name").
-		Build()
-	if !b5.Matches(ctx) {
-		t.Fatal("expected mixed AND/OR condition to match")
-	}
-
-	// 测试空构建
-	b6 := New().Build()
-	if !b6.Matches(ctx) {
-		t.Fatal("expected empty builder to always match")
-	}
+	testConditionBuilderSingle(t, ctx)
+	testConditionBuilderAnd(t, ctx)
+	testConditionBuilderOr(t, ctx)
+	testConditionBuilderNot(t, ctx)
+	testConditionBuilderMixed(t, ctx)
+	testConditionBuilderEmpty(t, ctx)
 }
 
 // TestConditionBuilderExtended 验证扩展条件的构建器支持:
@@ -283,6 +302,49 @@ func TestConditionBuilderExtended(t *testing.T) {
 	}
 }
 
+func testAllWithDSLOr(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	dsl1 := AllWith(
+		OnProperty("feature.enabled", "true"),
+		OnBean("dataSource"),
+	).Or(
+		OnProfile("dev"),
+	).Build()
+
+	if !dsl1.Matches(ctx) {
+		t.Fatal("expected All(...).Or(...) DSL to match")
+	}
+}
+
+func testAllWithDSLAnd(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	dsl2 := AllWith(
+		OnProperty("feature.enabled", "true"),
+	).And(
+		OnProperty("app.mode"),
+	).Build()
+
+	if !dsl2.Matches(ctx) {
+		t.Fatal("expected All(...).And(...) DSL to match")
+	}
+}
+
+func testAllWithDSLNested(t *testing.T, ctx ConditionContext) {
+	t.Helper()
+	dsl3 := AllWith(
+		OnProperty("feature.enabled", "true"),
+	).Or(
+		OnProfile("dev"),
+		OnProfile("test"),
+	).And(
+		OnBean("dataSource"),
+	).Build()
+
+	if !dsl3.Matches(ctx) {
+		t.Fatal("expected nested DSL to match")
+	}
+}
+
 // TestAllWithDSL 验证改进的 DSL:
 //  1. All(...).Or(...) 链式调用
 //  2. All(...).And(...) 链式调用
@@ -305,42 +367,9 @@ func TestAllWithDSL(t *testing.T) {
 		},
 	}
 
-	// 测试 All(...).Or(...) DSL
-	dsl1 := AllWith(
-		OnProperty("feature.enabled", "true"),
-		OnBean("dataSource"),
-	).Or(
-		OnProfile("dev"),
-	).Build()
-
-	if !dsl1.Matches(ctx) {
-		t.Fatal("expected All(...).Or(...) DSL to match")
-	}
-
-	// 测试 All(...).And(...) DSL
-	dsl2 := AllWith(
-		OnProperty("feature.enabled", "true"),
-	).And(
-		OnProperty("app.mode"),
-	).Build()
-
-	if !dsl2.Matches(ctx) {
-		t.Fatal("expected All(...).And(...) DSL to match")
-	}
-
-	// 测试嵌套组合
-	dsl3 := AllWith(
-		OnProperty("feature.enabled", "true"),
-	).Or(
-		OnProfile("dev"),
-		OnProfile("test"),
-	).And(
-		OnBean("dataSource"),
-	).Build()
-
-	if !dsl3.Matches(ctx) {
-		t.Fatal("expected nested DSL to match")
-	}
+	testAllWithDSLOr(t, ctx)
+	testAllWithDSLAnd(t, ctx)
+	testAllWithDSLNested(t, ctx)
 }
 
 // TestConditionString 验证新增条件的 String 输出:

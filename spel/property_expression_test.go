@@ -48,12 +48,12 @@ func TestPropertyExpression_GetValue_WithVariable(t *testing.T) {
 	ctx := NewStandardEvaluationContext(nil)
 	ctx.SetVariable("myVar", 42)
 
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != 42 {
-		t.Errorf("got %v, want 42", val)
+	if got != 42 {
+		t.Errorf("got %v, want 42", got)
 	}
 }
 
@@ -66,11 +66,11 @@ func TestPropertyExpression_GetValue_WithTag(t *testing.T) {
 	accessor := NewReflectPropertyAccessor()
 	u := TaggedUser{FullName: "Alice"}
 
-	val, err := accessor.GetProperty(u, "full_name")
+	got, err := accessor.GetProperty(u, "full_name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Alice" {
-		t.Errorf("got %v, want 'Alice'", val)
+	if got != "Alice" {
+		t.Errorf("got %v, want 'Alice'", got)
 	}
 }

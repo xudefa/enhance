@@ -141,8 +141,8 @@ func TestEmailValidation(t *testing.T) {
 	}
 
 	for _, email := range validEmails {
-		obj := TestStruct{Email: email}
-		err := validator.Validate(obj)
+		target := TestStruct{Email: email}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期邮箱 %s 验证成功，但得到错误: %v", email, err)
 		}
@@ -156,8 +156,8 @@ func TestEmailValidation(t *testing.T) {
 	}
 
 	for _, email := range invalidEmails {
-		obj := TestStruct{Email: email}
-		err := validator.Validate(obj)
+		target := TestStruct{Email: email}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期邮箱 %s 验证失败，但没有得到错误", email)
 		}
@@ -181,8 +181,8 @@ func TestURLValidation(t *testing.T) {
 	}
 
 	for _, url := range validURLs {
-		obj := TestStruct{URL: url}
-		err := validator.Validate(obj)
+		target := TestStruct{URL: url}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期URL %s 验证成功，但得到错误: %v", url, err)
 		}
@@ -196,8 +196,8 @@ func TestURLValidation(t *testing.T) {
 	}
 
 	for _, url := range invalidURLs {
-		obj := TestStruct{URL: url}
-		err := validator.Validate(obj)
+		target := TestStruct{URL: url}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期URL %s 验证失败，但没有得到错误", url)
 		}
@@ -221,8 +221,8 @@ func TestIPValidation(t *testing.T) {
 	}
 
 	for _, ip := range validIPs {
-		obj := TestStruct{IP: ip}
-		err := validator.Validate(obj)
+		target := TestStruct{IP: ip}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期IP %s 验证成功，但得到错误: %v", ip, err)
 		}
@@ -237,8 +237,8 @@ func TestIPValidation(t *testing.T) {
 	}
 
 	for _, ip := range invalidIPs {
-		obj := TestStruct{IP: ip}
-		err := validator.Validate(obj)
+		target := TestStruct{IP: ip}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期IP %s 验证失败，但没有得到错误", ip)
 		}
@@ -257,8 +257,8 @@ func TestOneOfValidation(t *testing.T) {
 	validRoles := []string{"admin", "user", "guest"}
 
 	for _, role := range validRoles {
-		obj := TestStruct{Role: role}
-		err := validator.Validate(obj)
+		target := TestStruct{Role: role}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期角色 %s 验证成功，但得到错误: %v", role, err)
 		}
@@ -267,8 +267,8 @@ func TestOneOfValidation(t *testing.T) {
 	invalidRoles := []string{"superadmin", "moderator", "owner"}
 
 	for _, role := range invalidRoles {
-		obj := TestStruct{Role: role}
-		err := validator.Validate(obj)
+		target := TestStruct{Role: role}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期角色 %s 验证失败，但没有得到错误", role)
 		}
@@ -290,18 +290,18 @@ func TestBindingPackage(t *testing.T) {
 		Number int    `json:"number" form:"number"`
 	}
 
-	obj := &TestStruct{}
-	err := binder.Bind(req, obj)
+	target := &TestStruct{}
+	err := binder.Bind(req, target)
 	if err != nil {
 		t.Errorf("预期没有绑定错误，但得到: %v", err)
 	}
 
-	if obj.Field != "value" {
-		t.Errorf("预期Field为'value'，但得到: '%s'", obj.Field)
+	if target.Field != "value" {
+		t.Errorf("预期Field为'value'，但得到: '%s'", target.Field)
 	}
 
-	if obj.Number != 42 {
-		t.Errorf("预期Number为42，但得到: %d", obj.Number)
+	if target.Number != 42 {
+		t.Errorf("预期Number为42，但得到: %d", target.Number)
 	}
 }
 
@@ -319,18 +319,18 @@ func TestBindAndValidate(t *testing.T) {
 		Age   int    `json:"age" validate:"required,min=1,max=120"`
 	}
 
-	obj := &TestStruct{}
-	err := BindAndValidate(req, obj)
+	target := &TestStruct{}
+	err := BindAndValidate(req, target)
 	if err != nil {
 		t.Errorf("预期没有绑定/验证错误，但得到: %v", err)
 	}
 
-	if obj.Field != "test" {
-		t.Errorf("预期Field为'test'，但得到: '%s'", obj.Field)
+	if target.Field != "test" {
+		t.Errorf("预期Field为'test'，但得到: '%s'", target.Field)
 	}
 
-	if obj.Age != 25 {
-		t.Errorf("预期Age为25，但得到: %d", obj.Age)
+	if target.Age != 25 {
+		t.Errorf("预期Age为25，但得到: %d", target.Age)
 	}
 }
 

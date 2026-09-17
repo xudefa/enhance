@@ -109,31 +109,16 @@ func (s *Span) Context() SpanContext {
 // 添加 duration_ms 字段，表示 Span 持续时间（毫秒）。
 // 该方法在锁内完成所有操作，避免递归锁定。
 func (s *Span) MarshalJSON() ([]byte, error) {
-	s.mu.Lock()
-	endTime := s.EndTime
-	startTime := s.StartTime
-	ended := s.Ended
-	traceID := s.TraceID
-	spanID := s.SpanID
-	parentSpanID := s.ParentSpanID
-	name := s.Name
-	status := s.Status
-	tags := make(map[string]string)
-	for k, v := range s.Tags {
-		tags[k] = v
-	}
-	events := make([]SpanEvent, len(s.Events))
-	copy(events, s.Events)
-	s.mu.Unlock()
+	snap := s.snapshot()
 
 	var durationMs int64
-	if endTime.IsZero() && !ended {
-		durationMs = time.Since(startTime).Milliseconds()
+	if snap.endTime.IsZero() && !snap.ended {
+		durationMs = time.Since(snap.startTime).Milliseconds()
 	} else {
-		durationMs = endTime.Sub(startTime).Milliseconds()
+		durationMs = snap.endTime.Sub(snap.startTime).Milliseconds()
 	}
 
-	data := struct {
+	spanData := struct {
 		TraceID      TraceID           `json:"trace_id"`
 		SpanID       SpanID            `json:"span_id"`
 		ParentSpanID SpanID            `json:"parent_span_id,omitempty"`
@@ -146,17 +131,57 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 		Ended        bool              `json:"ended"`
 		DurationMs   int64             `json:"duration_ms"`
 	}{
-		TraceID:      traceID,
-		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
-		Name:         name,
-		StartTime:    startTime,
-		EndTime:      endTime,
-		Status:       status,
-		Tags:         tags,
-		Events:       events,
-		Ended:        ended,
+		TraceID:      snap.traceID,
+		SpanID:       snap.spanID,
+		ParentSpanID: snap.parentSpanID,
+		Name:         snap.name,
+		StartTime:    snap.startTime,
+		EndTime:      snap.endTime,
+		Status:       snap.status,
+		Tags:         snap.tags,
+		Events:       snap.events,
+		Ended:        snap.ended,
 		DurationMs:   durationMs,
 	}
-	return json.Marshal(&data)
+	return json.Marshal(&spanData)
+}
+
+type spanSnapshot struct {
+	traceID      TraceID
+	spanID       SpanID
+	parentSpanID SpanID
+	name         string
+	status       SpanStatus
+	tags         map[string]string
+	events       []SpanEvent
+	startTime    time.Time
+	endTime      time.Time
+	ended        bool
+}
+
+// snapshot 在锁内复制 Span 全部可变字段，避免数据竞争。
+func (s *Span) snapshot() spanSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return spanSnapshot{
+		traceID:      s.TraceID,
+		spanID:       s.SpanID,
+		parentSpanID: s.ParentSpanID,
+		name:         s.Name,
+		status:       s.Status,
+		tags:         s.snapshotTags(),
+		events:       append([]SpanEvent(nil), s.Events...),
+		startTime:    s.StartTime,
+		endTime:      s.EndTime,
+		ended:        s.Ended,
+	}
+}
+
+// snapshotTags 复制标签 map。
+func (s *Span) snapshotTags() map[string]string {
+	tags := make(map[string]string, len(s.Tags))
+	for k, v := range s.Tags {
+		tags[k] = v
+	}
+	return tags
 }

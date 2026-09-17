@@ -10,15 +10,15 @@ import (
 
 func TestSingletonScope_Get_Cached(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 	var count atomic.Int32
 	factory := func(c ...any) (any, error) {
 		count.Add(1)
 		return "bean", nil
 	}
 
-	v1, _ := s.Get("b1", factory)
-	v2, _ := s.Get("b1", factory)
+	v1, _ := scope.Get("b1", factory)
+	v2, _ := scope.Get("b1", factory)
 	if v1 != v2 {
 		t.Error("expected same cached instance")
 	}
@@ -43,16 +43,16 @@ func TestSingletonScope_Get_Error(t *testing.T) {
 
 func TestSingletonScope_Remove(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 	var seq atomic.Int32
 	factory := func(c ...any) (any, error) {
 		n := seq.Add(1)
 		return fmt.Sprintf("v%d", n), nil
 	}
 
-	v1, _ := s.Get("b1", factory)
-	s.Remove("b1")
-	v2, _ := s.Get("b1", factory)
+	v1, _ := scope.Get("b1", factory)
+	scope.Remove("b1")
+	v2, _ := scope.Get("b1", factory)
 	if v1 == v2 {
 		t.Errorf("expected different instance after remove, got both %v", v1)
 	}
@@ -60,20 +60,20 @@ func TestSingletonScope_Remove(t *testing.T) {
 
 func TestSingletonScope_Clear(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 	factory := func(c ...any) (any, error) { return "v", nil }
 
-	_, _ = s.Get("b1", factory)
-	_, _ = s.Get("b2", factory)
-	s.Clear()
+	_, _ = scope.Get("b1", factory)
+	_, _ = scope.Get("b2", factory)
+	scope.Clear()
 
 	var count atomic.Int32
 	factory2 := func(c ...any) (any, error) {
 		count.Add(1)
 		return "new", nil
 	}
-	_, _ = s.Get("b1", factory2)
-	_, _ = s.Get("b2", factory2)
+	_, _ = scope.Get("b1", factory2)
+	_, _ = scope.Get("b2", factory2)
 	if count.Load() != 2 {
 		t.Errorf("expected 2 factory calls after clear, got %d", count.Load())
 	}
@@ -93,12 +93,12 @@ func TestSingletonScope_ConcurrentGet(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v, err := s.Get("b1", factory)
+			got, err := s.Get("b1", factory)
 			if err != nil {
 				t.Errorf("Get error: %v", err)
 			}
-			if v != "bean" {
-				t.Errorf("expected 'bean', got %v", v)
+			if got != "bean" {
+				t.Errorf("expected 'bean', got %v", got)
 			}
 		}()
 	}
@@ -110,15 +110,15 @@ func TestSingletonScope_ConcurrentGet(t *testing.T) {
 
 func TestPrototypeScope_Get(t *testing.T) {
 	t.Parallel()
-	s := NewPrototypeScope()
+	scope := NewPrototypeScope()
 	var count atomic.Int32
 	factory := func(c ...any) (any, error) {
 		count.Add(1)
 		return struct{ ID int32 }{ID: count.Load()}, nil
 	}
 
-	v1, _ := s.Get("b1", factory)
-	v2, _ := s.Get("b1", factory)
+	v1, _ := scope.Get("b1", factory)
+	v2, _ := scope.Get("b1", factory)
 	if v1 == v2 {
 		t.Error("expected different instances for prototype")
 	}
@@ -141,19 +141,19 @@ func TestPrototypeScope_Clear_NoOp(t *testing.T) {
 
 func TestScopeRegistry_GetBuiltin(t *testing.T) {
 	t.Parallel()
-	r := NewScopeRegistry()
+	registry := NewScopeRegistry()
 
-	s := r.Get(SingletonScope)
+	s := registry.Get(SingletonScope)
 	if s == nil {
 		t.Error("expected singleton scope")
 	}
 
-	p := r.Get(PrototypeScope)
+	p := registry.Get(PrototypeScope)
 	if p == nil {
 		t.Error("expected prototype scope")
 	}
 
-	n := r.Get("nonexistent")
+	n := registry.Get("nonexistent")
 	if n != nil {
 		t.Error("expected nil for nonexistent scope")
 	}
@@ -161,30 +161,30 @@ func TestScopeRegistry_GetBuiltin(t *testing.T) {
 
 func TestScopeRegistry_Has(t *testing.T) {
 	t.Parallel()
-	r := NewScopeRegistry()
+	registry := NewScopeRegistry()
 
-	if !r.Has(SingletonScope) {
+	if !registry.Has(SingletonScope) {
 		t.Error("expected Has true for singleton")
 	}
-	if !r.Has(PrototypeScope) {
+	if !registry.Has(PrototypeScope) {
 		t.Error("expected Has true for prototype")
 	}
-	if r.Has("custom") {
+	if registry.Has("custom") {
 		t.Error("expected Has false for custom")
 	}
 }
 
 func TestScopeRegistry_RegisterCustom(t *testing.T) {
 	t.Parallel()
-	r := NewScopeRegistry()
+	registry := NewScopeRegistry()
 
 	custom := NewSingletonScope()
-	r.Register("custom", custom)
+	registry.Register("custom", custom)
 
-	if !r.Has("custom") {
+	if !registry.Has("custom") {
 		t.Error("expected Has true for custom scope")
 	}
-	got := r.Get("custom")
+	got := registry.Get("custom")
 	if got != custom {
 		t.Error("expected custom scope to match")
 	}
@@ -192,15 +192,15 @@ func TestScopeRegistry_RegisterCustom(t *testing.T) {
 
 func TestScopeRegistry_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
-	r := NewScopeRegistry()
+	registry := NewScopeRegistry()
 
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.Get(SingletonScope)
-			r.Has(PrototypeScope)
+			registry.Get(SingletonScope)
+			registry.Has(PrototypeScope)
 		}()
 	}
 	wg.Wait()

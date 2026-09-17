@@ -88,34 +88,7 @@ func TestNewJWTExtractor_Coverage(t *testing.T) {
 // TestJWTExtractor_Handle_Coverage 测试 JWTExtractor.Handle
 func TestJWTExtractor_Handle_Coverage(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name       string
-		authHeader string
-		parse      func(string) (map[string]any, error)
-		wantStatus int
-		wantTID    string
-	}{
-		{
-			name:       "missing authorization header returns 401",
-			parse:      func(string) (map[string]any, error) { return nil, nil },
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name:       "parse failure returns 401",
-			authHeader: "Bearer invalid",
-			parse:      func(string) (map[string]any, error) { return nil, errors.New("invalid token") },
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name:       "valid token passes claims downstream",
-			authHeader: "Bearer valid",
-			parse: func(string) (map[string]any, error) {
-				return map[string]any{"tid": "tenant-9"}, nil
-			},
-			wantStatus: http.StatusOK,
-			wantTID:    "tenant-9",
-		},
-	}
+	tests := testJWTExtractorHandleCases()
 
 	for _, tt := range tests {
 		tt := tt
@@ -148,17 +121,80 @@ func TestJWTExtractor_Handle_Coverage(t *testing.T) {
 	}
 }
 
+type jwtExtractorHandleCase struct {
+	name       string
+	authHeader string
+	parse      func(string) (map[string]any, error)
+	wantStatus int
+	wantTID    string
+}
+
+func testJWTExtractorHandleCases() []jwtExtractorHandleCase {
+	return []jwtExtractorHandleCase{
+		{
+			name:       "missing authorization header returns 401",
+			parse:      func(string) (map[string]any, error) { return nil, nil },
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "parse failure returns 401",
+			authHeader: "Bearer invalid",
+			parse:      func(string) (map[string]any, error) { return nil, errors.New("invalid token") },
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "valid token passes claims downstream",
+			authHeader: "Bearer valid",
+			parse: func(string) (map[string]any, error) {
+				return map[string]any{"tid": "tenant-9"}, nil
+			},
+			wantStatus: http.StatusOK,
+			wantTID:    "tenant-9",
+		},
+	}
+}
+
 // TestJWTResolver_Resolve_Coverage 测试 JWTResolver.Resolve
 func TestJWTResolver_Resolve_Coverage(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name      string
-		hasClaims bool
-		claims    map[string]any
-		claimName string
-		wantID    string
-		wantErr   bool
-	}{
+	tests := testJWTResolverResolveCases()
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resolver := NewJWTResolver(tt.claimName)
+			if resolver == nil {
+				t.Fatal("expected non-nil resolver")
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.hasClaims {
+				req = req.WithContext(SetJWTClaims(req.Context(), tt.claims))
+			}
+
+			got, err := resolver.Resolve(req)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("expected err presence = %v, got %v", tt.wantErr, err)
+			}
+			if !tt.wantErr && got != tt.wantID {
+				t.Errorf("expected tenant ID %q, got %q", tt.wantID, got)
+			}
+		})
+	}
+}
+
+type jwtResolverResolveCase struct {
+	name      string
+	hasClaims bool
+	claims    map[string]any
+	claimName string
+	wantID    string
+	wantErr   bool
+}
+
+func testJWTResolverResolveCases() []jwtResolverResolveCase {
+	return []jwtResolverResolveCase{
 		{
 			name:      "no claims in request context",
 			claimName: "tid",
@@ -185,30 +221,6 @@ func TestJWTResolver_Resolve_Coverage(t *testing.T) {
 			claimName: "tid",
 			wantID:    "tenant-1",
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			resolver := NewJWTResolver(tt.claimName)
-			if resolver == nil {
-				t.Fatal("expected non-nil resolver")
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			if tt.hasClaims {
-				req = req.WithContext(SetJWTClaims(req.Context(), tt.claims))
-			}
-
-			got, err := resolver.Resolve(req)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("expected err presence = %v, got %v", tt.wantErr, err)
-			}
-			if !tt.wantErr && got != tt.wantID {
-				t.Errorf("expected tenant ID %q, got %q", tt.wantID, got)
-			}
-		})
 	}
 }
 
@@ -277,30 +289,7 @@ func TestTenantIsolation_UnknownTenantErrors_Coverage(t *testing.T) {
 // TestTenantProvider_GetCurrentTenantDatabase_Errors_Coverage 测试 GetCurrentTenantDatabase 错误处理
 func TestTenantProvider_GetCurrentTenantDatabase_Errors_Coverage(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name         string
-		registerDB   bool
-		setCurrent   bool
-		wantErr      bool
-		wantDatabase string
-	}{
-		{
-			name:    "no current tenant",
-			wantErr: true,
-		},
-		{
-			name:       "current tenant without database",
-			registerDB: false,
-			setCurrent: true,
-			wantErr:    true,
-		},
-		{
-			name:         "current tenant with database",
-			registerDB:   true,
-			setCurrent:   true,
-			wantDatabase: "db_tenant1",
-		},
-	}
+	tests := testTenantProviderGetCurrentTenantDatabaseErrorCases()
 
 	for _, tt := range tests {
 		tt := tt
@@ -328,5 +317,34 @@ func TestTenantProvider_GetCurrentTenantDatabase_Errors_Coverage(t *testing.T) {
 				t.Errorf("expected database %q, got %q", tt.wantDatabase, db)
 			}
 		})
+	}
+}
+
+type tenantProviderGetCurrentTenantDatabaseCase struct {
+	name         string
+	registerDB   bool
+	setCurrent   bool
+	wantErr      bool
+	wantDatabase string
+}
+
+func testTenantProviderGetCurrentTenantDatabaseErrorCases() []tenantProviderGetCurrentTenantDatabaseCase {
+	return []tenantProviderGetCurrentTenantDatabaseCase{
+		{
+			name:    "no current tenant",
+			wantErr: true,
+		},
+		{
+			name:       "current tenant without database",
+			registerDB: false,
+			setCurrent: true,
+			wantErr:    true,
+		},
+		{
+			name:         "current tenant with database",
+			registerDB:   true,
+			setCurrent:   true,
+			wantDatabase: "db_tenant1",
+		},
 	}
 }

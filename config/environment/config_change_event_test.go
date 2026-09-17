@@ -10,10 +10,9 @@ func TestConfigChangeEvent_BasicFields(t *testing.T) {
 
 	event := NewConfigChangeEvent(
 		"modify",
-		[]string{"server.port", "server.host"},
-		map[string]any{"server.port": "8080"},
-		map[string]any{"server.port": "9090"},
-		"nacos",
+		WithEventKeys([]string{"server.port", "server.host"}),
+		WithEventValues(map[string]any{"server.port": "8080"}, map[string]any{"server.port": "9090"}),
+		WithEventSource("nacos"),
 	)
 
 	if event.EventType != "modify" {
@@ -33,7 +32,7 @@ func TestConfigChangeEvent_BasicFields(t *testing.T) {
 func TestConfigChangeEvent_Type(t *testing.T) {
 	t.Parallel()
 
-	event := NewConfigChangeEvent("modify", nil, nil, nil, "test")
+	event := NewConfigChangeEvent("modify", WithEventSource("test"))
 
 	if event.Type() != "ConfigChange" {
 		t.Errorf("Type() = %v, want ConfigChange", event.Type())
@@ -44,7 +43,7 @@ func TestConfigChangeEvent_Timestamp(t *testing.T) {
 	t.Parallel()
 
 	before := time.Now()
-	event := NewConfigChangeEvent("modify", nil, nil, nil, "test")
+	event := NewConfigChangeEvent("modify", WithEventSource("test"))
 	after := time.Now()
 
 	ts := event.Timestamp()
@@ -58,7 +57,12 @@ func TestConfigChangeEvent_Values(t *testing.T) {
 
 	oldVals := map[string]any{"a": 1}
 	newVals := map[string]any{"a": 2}
-	event := NewConfigChangeEvent("modify", []string{"a"}, oldVals, newVals, "test")
+	event := NewConfigChangeEvent(
+		"modify",
+		WithEventKeys([]string{"a"}),
+		WithEventValues(oldVals, newVals),
+		WithEventSource("test"),
+	)
 
 	if event.OldValues["a"] != 1 {
 		t.Errorf("OldValues[a] = %v, want 1", event.OldValues["a"])
@@ -71,7 +75,7 @@ func TestConfigChangeEvent_Values(t *testing.T) {
 func TestConfigChangeEvent_Metadata(t *testing.T) {
 	t.Parallel()
 
-	event := NewConfigChangeEvent("modify", nil, nil, nil, "test")
+	event := NewConfigChangeEvent("modify", WithEventSource("test"))
 
 	if event.Metadata == nil {
 		t.Fatal("Metadata should not be nil")

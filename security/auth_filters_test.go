@@ -33,13 +33,13 @@ func TestNewUsernamePasswordAuthenticationFilterWithDefaults(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/"), WithFailureURL("/login?error"))
 
-	if f == nil {
+	if authFilter == nil {
 		t.Fatal("expected non-nil filter")
 	}
-	if f.Order() != 0 {
-		t.Errorf("expected order 0, got %d", f.Order())
+	if authFilter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", authFilter.Order())
 	}
 }
 
@@ -48,19 +48,19 @@ func TestUsernamePasswordAuthenticationFilter_DoFilter_TypeErrors(t *testing.T) 
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/"), WithFailureURL("/login?error"))
 
-	err := f.DoFilter("notContext", nil, nil, &mockFilterChain{})
+	err := authFilter.DoFilter("notContext", nil, nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-context")
 	}
 
-	err = f.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
+	err = authFilter.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-request")
 	}
 
-	err = f.DoFilter(context.Background(), &mockSecurityRequest{method: "GET", uri: "/"}, "notResp", &mockFilterChain{})
+	err = authFilter.DoFilter(context.Background(), &mockSecurityRequest{method: "GET", uri: "/"}, "notResp", &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-response")
 	}
@@ -71,13 +71,13 @@ func TestUsernamePasswordAuthenticationFilter_NonPostPassesThrough(t *testing.T)
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/"), WithFailureURL("/login?error"))
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/login"}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -91,13 +91,13 @@ func TestUsernamePasswordAuthenticationFilter_WrongURI_PassesThrough(t *testing.
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/"), WithFailureURL("/login?error"))
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "POST", uri: "/other"}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,13 +111,13 @@ func TestUsernamePasswordAuthenticationFilter_MissingCredentials(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/"), WithFailureURL("/login?error"))
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "POST", uri: "/login", headers: map[string]string{"username": "user"}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestUsernamePasswordAuthenticationFilter_AuthSuccess(t *testing.T) {
 	authResult := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
 	mgr := &mockAuthManager{authenticateResult: authResult}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/dashboard", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/dashboard"), WithFailureURL("/login?error"))
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "POST", uri: "/login", headers: map[string]string{
@@ -144,7 +144,7 @@ func TestUsernamePasswordAuthenticationFilter_AuthSuccess(t *testing.T) {
 	}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestUsernamePasswordAuthenticationFilter_AuthFailure(t *testing.T) {
 
 	mgr := &mockAuthManager{authenticateErr: ErrBadCredentials}
 	logger := log.Build()
-	f := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/dashboard", "/login?error", mgr, logger)
+	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", mgr, logger, WithDefaultSuccessURL("/dashboard"), WithFailureURL("/login?error"))
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "POST", uri: "/login", headers: map[string]string{
@@ -170,7 +170,7 @@ func TestUsernamePasswordAuthenticationFilter_AuthFailure(t *testing.T) {
 	}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -221,19 +221,19 @@ func TestBasicAuthenticationFilterWithRealm_DoFilter_TypeErrors(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 
-	err := f.DoFilter("notContext", nil, nil, &mockFilterChain{})
+	err := authFilter.DoFilter("notContext", nil, nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-context")
 	}
 
-	err = f.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
+	err = authFilter.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-request")
 	}
 
-	err = f.DoFilter(context.Background(), &mockSecurityRequest{method: "GET", uri: "/"}, "notResp", &mockFilterChain{})
+	err = authFilter.DoFilter(context.Background(), &mockSecurityRequest{method: "GET", uri: "/"}, "notResp", &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-response")
 	}
@@ -244,13 +244,13 @@ func TestBasicAuthenticationFilterWithRealm_NoAuthHeader(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/"}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err == nil {
 		t.Error("expected error for missing Authorization header")
 	}
@@ -264,13 +264,13 @@ func TestBasicAuthenticationFilterWithRealm_InvalidPrefix(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/", headers: map[string]string{"Authorization": "Bearer token"}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err == nil {
 		t.Error("expected error for invalid prefix")
 	}
@@ -284,13 +284,13 @@ func TestBasicAuthenticationFilterWithRealm_InvalidBase64(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/", headers: map[string]string{"Authorization": "Basic !!!invalid!!!"}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err == nil {
 		t.Error("expected error for invalid base64")
 	}
@@ -304,13 +304,13 @@ func TestBasicAuthenticationFilterWithRealm_MissingSeparator(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/", headers: map[string]string{"Authorization": "Basic bm9jb2xvbg=="}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err == nil {
 		t.Error("expected error for missing separator")
 	}
@@ -325,7 +325,7 @@ func TestBasicAuthenticationFilterWithRealm_Success(t *testing.T) {
 	authResult := NewAuthenticatedUsernamePasswordAuthenticationToken("user", []string{"ROLE_USER"})
 	mgr := &mockAuthManager{authenticateResult: authResult}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/", headers: map[string]string{
@@ -333,7 +333,7 @@ func TestBasicAuthenticationFilterWithRealm_Success(t *testing.T) {
 	}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestBasicAuthenticationFilterWithRealm_AuthFailure(t *testing.T) {
 
 	mgr := &mockAuthManager{authenticateErr: ErrBadCredentials}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 	chain := &mockFilterChain{}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/", headers: map[string]string{
@@ -355,7 +355,7 @@ func TestBasicAuthenticationFilterWithRealm_AuthFailure(t *testing.T) {
 	}}
 	resp := &mockSecurityResponse{}
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := authFilter.DoFilter(context.Background(), req, resp, chain)
 	if err == nil {
 		t.Error("expected error for auth failure")
 	}
@@ -372,9 +372,9 @@ func TestBasicAuthenticationFilterWithRealm_Order(t *testing.T) {
 
 	mgr := &mockAuthManager{}
 	logger := log.Build()
-	f := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
+	authFilter := NewBasicAuthenticationFilterWithRealm(mgr, "TestRealm", logger)
 
-	if f.Order() != 0 {
-		t.Errorf("expected order 0, got %d", f.Order())
+	if authFilter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", authFilter.Order())
 	}
 }

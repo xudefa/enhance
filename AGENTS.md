@@ -2,7 +2,9 @@
 
 > **重要**：本文档是 AI 智能体参与 enhance 项目开发时必须遵循的全局上下文和规范。所有代码生成、修改、审查都必须严格遵守本文档中的规则。
 >
-> **相关文档**：[代码风格指南](CODING_STYLE.md) | [架构设计](ARCHITECTURE.md) | [贡献指南](CONTRIBUTING.md)
+> **相关文档**：[代码风格指南](CODING_STYLE.md) | [架构设计](ARCHITECTURE.md) | [贡献指南](CONTRIBUTING.md) | [AI 维护导航](docs/AI_INDEX.md)
+>
+> **AI 首次接入必读**：在动手改代码前，先阅读 [docs/AI_INDEX.md](docs/AI_INDEX.md) 完成代码库导航，并参考 [docs/AI_TASK_HANDBOOK.md](docs/AI_TASK_HANDBOOK.md) 中的任务 SOP。
 
 ---
 

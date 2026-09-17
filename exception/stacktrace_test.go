@@ -38,8 +38,8 @@ func invokeMiddleware(t *testing.T, handler ExceptionHandler) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
-	middleware(nextHandler).ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	middleware(nextHandler).ServeHTTP(rec, req)
 }
 
 // TestExceptionHandlingMiddleware_Panic_NoStackTrace 默认配置不应泄露堆栈跟踪（回归测试）。

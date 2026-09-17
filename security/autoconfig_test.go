@@ -59,11 +59,11 @@ func TestParseStringSlice(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := parseStringSlice(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Fatalf("expected %d items, got %d: %v", len(tt.expected), len(result), result)
+			parsedParts := parseStringSlice(tt.input)
+			if len(parsedParts) != len(tt.expected) {
+				t.Fatalf("expected %d items, got %d: %v", len(tt.expected), len(parsedParts), parsedParts)
 			}
-			for i, v := range result {
+			for i, v := range parsedParts {
 				if v != tt.expected[i] {
 					t.Errorf("expected[%d] = %q, got %q", i, tt.expected[i], v)
 				}

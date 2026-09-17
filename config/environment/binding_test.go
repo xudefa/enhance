@@ -100,8 +100,8 @@ func TestEnvironment_ResolvePlaceholders(t *testing.T) {
 		"app.url":  "http://${app.name}.example.com",
 	})
 
-	result := env.ResolvePlaceholders("${app.url}")
-	if result == "" {
+	got := env.ResolvePlaceholders("${app.url}")
+	if got == "" {
 		t.Error("expected resolved placeholder")
 	}
 }
@@ -110,9 +110,9 @@ func TestEnvironment_ResolvePlaceholders_WithDefault(t *testing.T) {
 	t.Parallel()
 	env := NewMapEnvironment(map[string]string{})
 
-	result := env.ResolvePlaceholders("${missing:default-value}")
-	if result != "default-value" {
-		t.Errorf("expected 'default-value', got %s", result)
+	got := env.ResolvePlaceholders("${missing:default-value}")
+	if got != "default-value" {
+		t.Errorf("expected 'default-value', got %s", got)
 	}
 }
 
@@ -123,8 +123,8 @@ func TestEnvironment_ResolvePlaceholders_Nested(t *testing.T) {
 		"msg":  "${base} world",
 	})
 
-	result := env.ResolvePlaceholders("${msg}")
-	if result != "hello world" {
-		t.Errorf("expected 'hello world', got %s", result)
+	got := env.ResolvePlaceholders("${msg}")
+	if got != "hello world" {
+		t.Errorf("expected 'hello world', got %s", got)
 	}
 }

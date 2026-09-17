@@ -69,6 +69,15 @@ func (v *GroupedTagValidator) ValidateWithGroups(obj any, groups ...string) erro
 		return errors.New("validation: only struct types are supported")
 	}
 
+	errs := v.validateGroupedFields(rv, rt, groups, obj)
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
+// validateGroupedFields 遍历结构体字段并执行分组规则验证。
+func (v *GroupedTagValidator) validateGroupedFields(rv reflect.Value, rt reflect.Type, groups []string, obj any) ValidationErrors {
 	var errs ValidationErrors
 
 	for i := range rv.NumField() {
@@ -80,15 +89,6 @@ func (v *GroupedTagValidator) ValidateWithGroups(obj any, groups ...string) erro
 			continue
 		}
 
-		fieldName := fieldType.Name
-		jsonTag := fieldType.Tag.Get("json")
-		if jsonTag != "" {
-			parts := strings.Split(jsonTag, ",")
-			if parts[0] != "" {
-				fieldName = parts[0]
-			}
-		}
-
 		groupRules := v.parseGroupRules(tag)
 		resolvedRules := v.resolveInheritedRules(groupRules, groups)
 
@@ -97,15 +97,12 @@ func (v *GroupedTagValidator) ValidateWithGroups(obj any, groups ...string) erro
 		}
 
 		if len(resolvedRules) > 0 {
-			fieldErrors := v.validateFieldWithRules(field, resolvedRules, fieldName, obj)
+			fieldErrors := v.validateFieldWithRules(field, resolvedRules, resolveFieldName(fieldType), obj)
 			errs = append(errs, fieldErrors...)
 		}
 	}
 
-	if len(errs) > 0 {
-		return errs
-	}
-	return nil
+	return errs
 }
 
 // Validate 使用默认组验证对象。

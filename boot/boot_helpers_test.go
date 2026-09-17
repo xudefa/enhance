@@ -13,26 +13,26 @@ func TestDeduplicateStarters(t *testing.T) {
 	s2 := newMockStarter("s2")
 	s3 := newMockStarter("s1") // 重复名称
 
-	result := deduplicateStarters([]Starter{s1, s2, s3})
+	deduped := deduplicateStarters([]Starter{s1, s2, s3})
 
-	if len(result) != 2 {
-		t.Errorf("expected 2 starters after dedup, got %d", len(result))
+	if len(deduped) != 2 {
+		t.Errorf("expected 2 starters after dedup, got %d", len(deduped))
 	}
 	// 应保留第一个 s1，而不是 s3
-	if result[0].Name() != "s1" {
-		t.Errorf("expected first starter name 's1', got %v", result[0].Name())
+	if deduped[0].Name() != "s1" {
+		t.Errorf("expected first starter name 's1', got %v", deduped[0].Name())
 	}
-	if result[1].Name() != "s2" {
-		t.Errorf("expected second starter name 's2', got %v", result[1].Name())
+	if deduped[1].Name() != "s2" {
+		t.Errorf("expected second starter name 's2', got %v", deduped[1].Name())
 	}
 }
 
 func TestDeduplicateStarters_Empty(t *testing.T) {
 	t.Parallel()
 
-	result := deduplicateStarters([]Starter{})
-	if len(result) != 0 {
-		t.Errorf("expected 0 starters, got %d", len(result))
+	deduped := deduplicateStarters([]Starter{})
+	if len(deduped) != 0 {
+		t.Errorf("expected 0 starters, got %d", len(deduped))
 	}
 }
 
@@ -42,9 +42,9 @@ func TestDeduplicateStarters_AllSame(t *testing.T) {
 	s1 := newMockStarter("same")
 	s2 := newMockStarter("same")
 
-	result := deduplicateStarters([]Starter{s1, s2})
-	if len(result) != 1 {
-		t.Errorf("expected 1 starter, got %d", len(result))
+	deduped := deduplicateStarters([]Starter{s1, s2})
+	if len(deduped) != 1 {
+		t.Errorf("expected 1 starter, got %d", len(deduped))
 	}
 }
 

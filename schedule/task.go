@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+const (
+	secondsPerMinute = 60 // 每分钟的秒数
+	minutesPerHour   = 60 // 每小时的分钟数
+	hoursPerDay      = 24 // 每天的小时数
+	daysPerMonth     = 31 // 每月的最大天数
+	monthsPerYear    = 12 // 每年的月数
+)
+
 // functionTask 基于函数的任务实现。
 type functionTask struct {
 	name      string
@@ -25,14 +33,17 @@ func NewTask(name, cron string, fn func(ctx context.Context) error) Task {
 	}
 }
 
+// Name 返回函数任务的名称。
 func (t *functionTask) Name() string {
 	return t.name
 }
 
+// Cron 返回函数任务的 Cron 表达式。
 func (t *functionTask) Cron() string {
 	return t.cron
 }
 
+// Execute 执行函数任务的逻辑。
 func (t *functionTask) Execute(ctx context.Context) error {
 	return t.executeFn(ctx)
 }
@@ -55,14 +66,17 @@ func NewFixedDelayTask(name string, delay time.Duration, fn func(ctx context.Con
 	}
 }
 
+// Name 返回固定延迟任务的名称。
 func (t *fixedDelayTask) Name() string {
 	return t.name
 }
 
+// Cron 返回固定延迟任务的 Cron 表示。
 func (t *fixedDelayTask) Cron() string {
 	return fmt.Sprintf("@fixed-delay(%s)", t.delay)
 }
 
+// Execute 执行固定延迟任务的逻辑。
 func (t *fixedDelayTask) Execute(ctx context.Context) error {
 	return t.executeFn(ctx)
 }
@@ -90,14 +104,17 @@ func NewFixedRateTask(name string, interval time.Duration, fn func(ctx context.C
 	}
 }
 
+// Name 返回固定频率任务的名称。
 func (t *fixedRateTask) Name() string {
 	return t.name
 }
 
+// Cron 返回固定频率任务的 Cron 表示。
 func (t *fixedRateTask) Cron() string {
 	return fmt.Sprintf("@fixed-rate(%s)", t.interval)
 }
 
+// Execute 执行固定频率任务的逻辑。
 func (t *fixedRateTask) Execute(ctx context.Context) error {
 	return t.executeFn(ctx)
 }
@@ -182,10 +199,10 @@ func (ce *CronExpression) Next(from time.Time) time.Time {
 	minute := from.Minute()
 	second := from.Second() + 1
 
-	for range 4 * 366 * 24 * 60 {
+	for range 4 * 366 * hoursPerDay * minutesPerHour {
 		if !hasBit(ce.second, second) {
 			second++
-			if second >= 60 {
+			if second >= secondsPerMinute {
 				second = 0
 				minute++
 			}
@@ -195,7 +212,7 @@ func (ce *CronExpression) Next(from time.Time) time.Time {
 		if !hasBit(ce.minute, minute) {
 			minute++
 			second = 0
-			if minute >= 60 {
+			if minute >= minutesPerHour {
 				minute = 0
 				hour++
 			}
@@ -206,50 +223,47 @@ func (ce *CronExpression) Next(from time.Time) time.Time {
 			hour++
 			minute = 0
 			second = 0
-			if hour >= 24 {
+			if hour >= hoursPerDay {
 				hour = 0
-				day++
+				incrementDay(&year, &month, &day)
 			}
 			continue
 		}
 
-		if !hasBit(ce.dayOfMonth, day) || !hasBit(ce.month, month) {
-			day++
+		if !ce.dayMatches(day, month, year, from.Location()) {
+			incrementDay(&year, &month, &day)
 			hour = 0
 			minute = 0
 			second = 0
-			if day > 31 {
-				day = 1
-				month++
-				if month > 12 {
-					month = 1
-					year++
-				}
-			}
 			continue
 		}
 
-		t := time.Date(year, time.Month(month), day, hour, minute, second, 0, from.Location())
-		if !hasBit(ce.dayOfWeek, int(t.Weekday())) {
-			day++
-			hour = 0
-			minute = 0
-			second = 0
-			if day > 31 {
-				day = 1
-				month++
-				if month > 12 {
-					month = 1
-					year++
-				}
-			}
-			continue
-		}
-
-		return t
+		return time.Date(year, time.Month(month), day, hour, minute, second, 0, from.Location())
 	}
 
 	return time.Time{}
+}
+
+// dayMatches 检查给定日期是否同时匹配日、月与星期约束。
+func (ce *CronExpression) dayMatches(day, month, year int, loc *time.Location) bool {
+	if !hasBit(ce.dayOfMonth, day) || !hasBit(ce.month, month) {
+		return false
+	}
+	weekday := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc).Weekday()
+	return hasBit(ce.dayOfWeek, int(weekday))
+}
+
+// incrementDay 推进日期：处理月末与年末进位。
+func incrementDay(year, month, day *int) {
+	*day++
+	if *day > daysPerMonth {
+		*day = 1
+		*month++
+		if *month > monthsPerYear {
+			*month = 1
+			*year++
+		}
+	}
 }
 
 var (
@@ -275,7 +289,7 @@ func parseField(field string, min, max int, names map[string]int) (uint64, error
 
 	for _, part := range parts {
 		if err := parsePart(part, min, max, names, &bitmap); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("解析字段项 %s 失败: %w", part, err)
 		}
 	}
 
@@ -291,16 +305,16 @@ func parsePart(part string, min, max int, names map[string]int, bitmap *uint64) 
 		return parseRange(part, min, max, names, bitmap)
 	}
 
-	val, err := parseValue(part, names)
+	value, err := parseValue(part, names)
 	if err != nil {
-		return err
+		return fmt.Errorf("解析值 %s 失败: %w", part, err)
 	}
 
-	if val < min || val > max {
-		return fmt.Errorf("value %d out of range [%d, %d]", val, min, max)
+	if value < min || value > max {
+		return fmt.Errorf("value %d out of range [%d, %d]", value, min, max)
 	}
 
-	*bitmap = setBit(*bitmap, val)
+	*bitmap = setBit(*bitmap, value)
 	return nil
 }
 
@@ -310,46 +324,18 @@ func parseStep(part string, min, max int, names map[string]int, bitmap *uint64) 
 		return fmt.Errorf("invalid step format: %s", part)
 	}
 
+	// 支持范围+步长格式，如 "0-30/5"
+	if strings.Contains(parts[0], "-") {
+		return parseStepRange(parts[0], parts[1], names, bitmap)
+	}
+
 	start := min
 	if parts[0] != "*" {
-		// 支持范围+步长格式，如 "0-30/5"
-		if strings.Contains(parts[0], "-") {
-			rangeParts := strings.Split(parts[0], "-")
-			if len(rangeParts) != 2 {
-				return fmt.Errorf("invalid range format: %s", parts[0])
-			}
-
-			rangeStart, err := parseValue(rangeParts[0], names)
-			if err != nil {
-				return err
-			}
-
-			rangeEnd, err := parseValue(rangeParts[1], names)
-			if err != nil {
-				return err
-			}
-
-			step, err := strconv.Atoi(parts[1])
-			if err != nil {
-				return fmt.Errorf("invalid step value: %w", err)
-			}
-
-			if step <= 0 {
-				return fmt.Errorf("step value must be positive")
-			}
-
-			for i := rangeStart; i <= rangeEnd; i += step {
-				*bitmap = setBit(*bitmap, i)
-			}
-
-			return nil
-		}
-
-		val, err := parseValue(parts[0], names)
+		value, err := parseValue(parts[0], names)
 		if err != nil {
-			return err
+			return fmt.Errorf("解析起始值 %s 失败: %w", parts[0], err)
 		}
-		start = val
+		start = value
 	}
 
 	step, err := strconv.Atoi(parts[1])
@@ -368,6 +354,39 @@ func parseStep(part string, min, max int, names map[string]int, bitmap *uint64) 
 	return nil
 }
 
+// parseStepRange 解析范围+步长格式（如 "0-30/5"），并设置对应位。
+func parseStepRange(rangePart, stepPart string, names map[string]int, bitmap *uint64) error {
+	rangeParts := strings.Split(rangePart, "-")
+	if len(rangeParts) != 2 {
+		return fmt.Errorf("invalid range format: %s", rangePart)
+	}
+
+	rangeStart, err := parseValue(rangeParts[0], names)
+	if err != nil {
+		return fmt.Errorf("解析范围起点 %s 失败: %w", rangeParts[0], err)
+	}
+
+	rangeEnd, err := parseValue(rangeParts[1], names)
+	if err != nil {
+		return fmt.Errorf("解析范围终点 %s 失败: %w", rangeParts[1], err)
+	}
+
+	step, err := strconv.Atoi(stepPart)
+	if err != nil {
+		return fmt.Errorf("invalid step value: %w", err)
+	}
+
+	if step <= 0 {
+		return fmt.Errorf("step value must be positive")
+	}
+
+	for i := rangeStart; i <= rangeEnd; i += step {
+		*bitmap = setBit(*bitmap, i)
+	}
+
+	return nil
+}
+
 func parseRange(part string, min, max int, names map[string]int, bitmap *uint64) error {
 	parts := strings.Split(part, "-")
 	if len(parts) != 2 {
@@ -376,12 +395,12 @@ func parseRange(part string, min, max int, names map[string]int, bitmap *uint64)
 
 	start, err := parseValue(parts[0], names)
 	if err != nil {
-		return err
+		return fmt.Errorf("解析范围起点 %s 失败: %w", parts[0], err)
 	}
 
 	end, err := parseValue(parts[1], names)
 	if err != nil {
-		return err
+		return fmt.Errorf("解析范围终点 %s 失败: %w", parts[1], err)
 	}
 
 	if start < min || end > max {
@@ -401,17 +420,17 @@ func parseRange(part string, min, max int, names map[string]int, bitmap *uint64)
 
 func parseValue(s string, names map[string]int) (int, error) {
 	if names != nil {
-		if val, ok := names[strings.ToUpper(s)]; ok {
-			return val, nil
+		if value, ok := names[strings.ToUpper(s)]; ok {
+			return value, nil
 		}
 	}
 
-	val, err := strconv.Atoi(s)
+	value, err := strconv.Atoi(s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid value: %s", s)
 	}
 
-	return val, nil
+	return value, nil
 }
 
 func setBit(bitmap uint64, pos int) uint64 {

@@ -4,11 +4,11 @@ package environment
 //
 // 使用单个 MapPropertySource 作为配置源，优先级为 PriorityNormal。
 func NewMapEnvironment(properties map[string]string) *Environment {
-	data := make(map[string]any, len(properties))
+	props := make(map[string]any, len(properties))
 	for k, v := range properties {
-		data[k] = v
+		props[k] = v
 	}
-	source := NewMapPropertySource("map", PriorityNormal, data)
+	source := NewMapPropertySource("map", PriorityNormal, props)
 
 	env := &Environment{
 		sources: []PropertySource{source},
@@ -39,8 +39,8 @@ func (e *Environment) AcceptsProfiles(profiles ...string) bool {
 
 // GetPropertyWithDefault 获取属性值，不存在时返回默认值
 func (e *Environment) GetPropertyWithDefault(key, defaultValue string) string {
-	if val, ok := e.GetProperty(key); ok {
-		if s, ok := val.(string); ok {
+	if propertyVal, ok := e.GetProperty(key); ok {
+		if s, ok := propertyVal.(string); ok {
 			return s
 		}
 	}

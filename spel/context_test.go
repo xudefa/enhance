@@ -30,12 +30,12 @@ func TestStandardEvaluationContext_GetVariable_Found(t *testing.T) {
 	ctx := NewStandardEvaluationContext(nil)
 	ctx.SetVariable("key", "value")
 
-	val, ok := ctx.GetVariable("key")
+	got, ok := ctx.GetVariable("key")
 	if !ok {
 		t.Fatal("GetVariable should find existing variable")
 	}
-	if val != "value" {
-		t.Errorf("GetVariable() = %v, want 'value'", val)
+	if got != "value" {
+		t.Errorf("GetVariable() = %v, want 'value'", got)
 	}
 }
 
@@ -56,9 +56,9 @@ func TestStandardEvaluationContext_SetVariable_Overwrite(t *testing.T) {
 	ctx.SetVariable("x", 1)
 	ctx.SetVariable("x", 2)
 
-	val, ok := ctx.GetVariable("x")
-	if !ok || val != 2 {
-		t.Errorf("SetVariable should overwrite: got %v, want 2", val)
+	got, ok := ctx.GetVariable("x")
+	if !ok || got != 2 {
+		t.Errorf("SetVariable should overwrite: got %v, want 2", got)
 	}
 }
 
@@ -130,12 +130,12 @@ func TestReflectPropertyAccessor_GetProperty_JSONTag(t *testing.T) {
 	accessor := NewReflectPropertyAccessor()
 	tagged := Tagged{FullName: "Bob"}
 
-	val, err := accessor.GetProperty(tagged, "full_name")
+	got, err := accessor.GetProperty(tagged, "full_name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Bob" {
-		t.Errorf("FullName via json tag = %v, want 'Bob'", val)
+	if got != "Bob" {
+		t.Errorf("FullName via json tag = %v, want 'Bob'", got)
 	}
 }
 
@@ -149,12 +149,12 @@ func TestReflectPropertyAccessor_GetProperty_SpelTag(t *testing.T) {
 	accessor := NewReflectPropertyAccessor()
 	tagged := Tagged{DisplayName: "Charlie"}
 
-	val, err := accessor.GetProperty(tagged, "display_name")
+	got, err := accessor.GetProperty(tagged, "display_name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Charlie" {
-		t.Errorf("DisplayName via spel tag = %v, want 'Charlie'", val)
+	if got != "Charlie" {
+		t.Errorf("DisplayName via spel tag = %v, want 'Charlie'", got)
 	}
 }
 

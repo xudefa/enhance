@@ -27,12 +27,12 @@ func TestConfigLoader_LoadWithCustomLocation(t *testing.T) {
 		t.Errorf("Expected name 'custom-config', got %s", sources[0].Name())
 	}
 
-	val, ok := sources[0].GetProperty("app.name")
+	prop, ok := sources[0].GetProperty("app.name")
 	if !ok {
 		t.Error("Expected property 'app.name' to exist")
 	}
-	if val != "custom-app" {
-		t.Errorf("Expected value 'custom-app', got %v", val)
+	if prop != "custom-app" {
+		t.Errorf("Expected value 'custom-app', got %v", prop)
 	}
 }
 
@@ -53,7 +53,12 @@ func TestConfigLoader_LoadWithProfile(t *testing.T) {
 	}
 
 	// 使用自定义搜索路径，避免依赖全局的 os.Chdir
-	loader := NewConfigLoaderWithPaths("application", ConfigTypeJSON, "", []string{"dev"}, []string{tmpDir})
+	loader := NewConfigLoaderWithPaths(
+		"application",
+		ConfigTypeJSON,
+		WithLoaderProfiles([]string{"dev"}),
+		WithLoaderSearchPaths([]string{tmpDir}),
+	)
 	sources, err := loader.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -65,23 +70,23 @@ func TestConfigLoader_LoadWithProfile(t *testing.T) {
 	if sources[0].Name() != "base-config" {
 		t.Errorf("Expected first source name 'base-config', got %s", sources[0].Name())
 	}
-	val, ok := sources[0].GetProperty("app.name")
+	prop, ok := sources[0].GetProperty("app.name")
 	if !ok {
 		t.Error("Expected property 'app.name' to exist")
 	}
-	if val != "base-app" {
-		t.Errorf("Expected value 'base-app', got %v", val)
+	if prop != "base-app" {
+		t.Errorf("Expected value 'base-app', got %v", prop)
 	}
 
 	if sources[1].Name() != "profile-config-dev" {
 		t.Errorf("Expected second source name 'profile-config-dev', got %s", sources[1].Name())
 	}
-	val, ok = sources[1].GetProperty("app.port")
+	prop, ok = sources[1].GetProperty("app.port")
 	if !ok {
 		t.Error("Expected property 'app.port' to exist")
 	}
-	if val != 9090.0 { // JSON numbers are float64
-		t.Errorf("Expected value 9090.0, got %v", val)
+	if prop != 9090.0 { // JSON numbers are float64
+		t.Errorf("Expected value 9090.0, got %v", prop)
 	}
 }
 
@@ -95,7 +100,11 @@ func TestConfigLoader_FindConfigFile(t *testing.T) {
 	}
 
 	// 使用自定义搜索路径，避免依赖全局的 os.Chdir
-	loader := NewConfigLoaderWithPaths("application", ConfigTypeJSON, "", []string{}, []string{tmpDir})
+	loader := NewConfigLoaderWithPaths(
+		"application",
+		ConfigTypeJSON,
+		WithLoaderSearchPaths([]string{tmpDir}),
+	)
 	foundPath, err := loader.findConfigFile("application")
 	if err != nil {
 		t.Fatalf("findConfigFile() error = %v", err)

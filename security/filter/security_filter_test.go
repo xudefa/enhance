@@ -31,9 +31,9 @@ func TestNewSecurityFilterWithOrder(t *testing.T) {
 func TestSecurityFilter_DoFilter_WithMatchedChain(t *testing.T) {
 	t.Parallel()
 
-	f := newMockFilter(1)
+	mockFilter := newMockFilter(1)
 	chain := newMockSecurityFilterChain(true)
-	chain.filters = []Filter{f}
+	chain.filters = []Filter{mockFilter}
 
 	manager := NewSecurityFilterChainManager()
 	manager.AddSecurityFilterChain(chain)
@@ -43,7 +43,7 @@ func TestSecurityFilter_DoFilter_WithMatchedChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !f.executed {
+	if !mockFilter.executed {
 		t.Error("expected filter from matched chain to be executed")
 	}
 }
@@ -51,9 +51,9 @@ func TestSecurityFilter_DoFilter_WithMatchedChain(t *testing.T) {
 func TestSecurityFilter_DoFilter_NoMatchingChain(t *testing.T) {
 	t.Parallel()
 
-	f := newMockFilter(1)
+	mockFilter := newMockFilter(1)
 	chain := newMockSecurityFilterChain(false)
-	chain.filters = []Filter{f}
+	chain.filters = []Filter{mockFilter}
 
 	manager := NewSecurityFilterChainManager()
 	manager.AddSecurityFilterChain(chain)
@@ -66,7 +66,7 @@ func TestSecurityFilter_DoFilter_NoMatchingChain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if f.executed {
+	if mockFilter.executed {
 		t.Error("expected matched chain filter not to be executed")
 	}
 	if !nextFilter.executed {
@@ -130,9 +130,9 @@ func TestSecurityFilter_DoFilter_ContextPropagation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "testKey", "testVal")
-	f := newMockFilter(1)
+	mockFilter := newMockFilter(1)
 	chain := newMockSecurityFilterChain(true)
-	chain.filters = []Filter{f}
+	chain.filters = []Filter{mockFilter}
 
 	manager := NewSecurityFilterChainManager()
 	manager.AddSecurityFilterChain(chain)
@@ -140,7 +140,7 @@ func TestSecurityFilter_DoFilter_ContextPropagation(t *testing.T) {
 	sf := NewSecurityFilter(manager)
 	sf.DoFilter(ctx, "test", nil, NewDefaultFilterChain())
 
-	if f.ctx == nil || f.ctx.Value("testKey") != "testVal" {
+	if mockFilter.ctx == nil || mockFilter.ctx.Value("testKey") != "testVal" {
 		t.Error("expected context to be propagated to matched chain filter")
 	}
 }

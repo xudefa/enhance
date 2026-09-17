@@ -143,7 +143,7 @@ func (r *ErrorCodeExceptionResolver) Resolve(ctx context.Context, err error) *Er
 	}
 
 	// 使用 NewErrorResponse 统一构建响应，确保 Timestamp 被正确填充
-	return NewErrorResponse(codeErr.Code, codeErr.Message, "", "", codeErr.Detail)
+	return NewErrorResponse(codeErr.Code, codeErr.Message, WithDetails(codeErr.Detail))
 }
 
 // Supports 判断是否能处理该错误
@@ -197,11 +197,11 @@ func (e *BusinessError) Error() string {
 func (e *BusinessError) GetDetails() map[string]any {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	result := make(map[string]any, len(e.details))
+	details := make(map[string]any, len(e.details))
 	for k, v := range e.details {
-		result[k] = v
+		details[k] = v
 	}
-	return result
+	return details
 }
 
 // ErrorCode 返回错误码

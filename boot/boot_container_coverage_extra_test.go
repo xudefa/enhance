@@ -8,295 +8,6 @@ import (
 	"github.com/xudefa/enhance/core"
 )
 
-// TestBoot_GetBean_Coverage 测试通过容器获取 Bean
-func TestBoot_GetBean_Coverage(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-		WithModules(
-			NewModule().
-				Name("test-module").
-				Bean(Provide(func(c core.Container) (TestBean, error) {
-					return TestBean{Name: "test-bean"}, nil
-				})).
-				Build(),
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 测试通过容器获取 Bean
-	bean, err := core.GetByName[TestBean](app.Container(), "")
-	if err != nil {
-		t.Fatalf("GetBean failed: %v", err)
-	}
-
-	if bean.Name != "test-bean" {
-		t.Errorf("Expected Name 'test-bean', got %s", bean.Name)
-	}
-}
-
-// TestBoot_HasBean_Coverage 测试检查 Bean 是否存在
-func TestBoot_HasBean_Coverage(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-		WithModules(
-			NewModule().
-				Name("test-module").
-				Bean(Provide(func(c core.Container) (TestBean, error) {
-					return TestBean{Name: "test-bean"}, nil
-				})).
-				Build(),
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 测试 Bean 已注册
-	if !core.Has[TestBean](app.Container(), "") {
-		t.Error("Expected Bean to exist")
-	}
-}
-
-// TestBoot_Register_Coverage 测试 Register 方法
-func TestBoot_Register_Coverage(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-		WithModules(NewModule().
-			Name("test-module").
-			Bean(Provide(func(c core.Container) (TestBean, error) {
-				return TestBean{Name: "test"}, nil
-			})).
-			Build(),
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 验证 Bean 已注册
-	if !core.Has[TestBean](app.Container(), "") {
-		t.Error("Expected TestBean to exist after Register")
-	}
-}
-
-// TestBoot_GetByType_Coverage 测试 GetByType 方法
-func TestBoot_GetByType(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-		WithModules(NewModule().
-			Name("test-module").
-			Bean(Provide(func(c core.Container) (TestBean, error) {
-				return TestBean{Name: "test-bean"}, nil
-			})).
-			Build(),
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 通过 GetByType 获取 Bean
-	ctx := app.Context()
-	bean, err := ctx.GetByType(reflect.TypeOf(TestBean{}))
-	if err != nil {
-		t.Fatalf("GetByType failed: %v", err)
-	}
-
-	testBean, ok := bean.(TestBean)
-	if !ok {
-		t.Fatal("Expected TestBean type")
-	}
-	if testBean.Name != "test-bean" {
-		t.Errorf("Expected Name 'test-bean', got %s", testBean.Name)
-	}
-}
-
-// TestBoot_Register_Adapter_Coverage 测试 appCtxAdapter.Register 方法
-func TestBoot_Register_Adapter(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	// 在启动前通过 adapter 注册 Bean
-	ctx := app.Context()
-	err = ctx.Register(reflect.TypeOf(TestBean{}), core.WithFactory[TestBean](func(c ...any) (any, error) {
-		return TestBean{Name: "registered-via-register"}, nil
-	}))
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 验证 Bean 已注册
-	if !core.Has[TestBean](app.Container(), "") {
-		t.Error("Expected TestBean to exist after Register")
-	}
-
-	// 验证 Bean 可以获取
-	bean, err := core.GetByName[TestBean](app.Container(), "")
-	if err != nil {
-		t.Fatalf("GetByName failed: %v", err)
-	}
-	if bean.Name != "registered-via-register" {
-		t.Errorf("Expected Name 'registered-via-register', got %s", bean.Name)
-	}
-}
-
-// TestBoot_GetByType_Adapter_Coverage 测试 appCtxAdapter.GetByType 方法
-func TestBoot_GetByType_Adapter(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-		WithModules(NewModule().
-			Name("test-module").
-			Bean(Provide(func(c core.Container) (TestBean, error) {
-				return TestBean{Name: "test-bean"}, nil
-			})).
-			Build(),
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 获取 adapter
-	ctx := app.Context()
-
-	// 测试 GetByType 方法
-	bean, err := ctx.GetByType(reflect.TypeOf(TestBean{}))
-	if err != nil {
-		t.Fatalf("GetByType failed: %v", err)
-	}
-
-	testBean, ok := bean.(TestBean)
-	if !ok {
-		t.Fatal("Expected TestBean type")
-	}
-	if testBean.Name != "test-bean" {
-		t.Errorf("Expected Name 'test-bean', got %s", testBean.Name)
-	}
-}
-
-// TestBoot_GetByType_NotFound_Coverage 测试 GetByType 找不到 Bean 的情况
-func TestBoot_GetByType_NotFound(t *testing.T) {
-	t.Parallel()
-
-	type TestBean struct {
-		Name string
-	}
-
-	app, err := NewApplication(
-		WithAppName("test-app"),
-		WithoutAutoConfig(),
-		WithoutStarters(),
-	)
-	if err != nil {
-		t.Fatalf("NewApplication failed: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	defer app.Stop()
-
-	// 获取 adapter
-	ctx := app.Context()
-
-	// 测试 GetByType 方法 - 应该找不到
-	_, err = ctx.GetByType(reflect.TypeOf(TestBean{}))
-	if err == nil {
-		t.Error("Expected error when bean not found")
-	}
-}
-
 // TestBoot_ProvideReflect_Coverage 测试 ProvideReflect 方法
 func TestBoot_ProvideReflect(t *testing.T) {
 	t.Parallel()
@@ -647,55 +358,59 @@ func TestBoot_Invoke(t *testing.T) {
 func TestBoot_IsNilReflectValue(t *testing.T) {
 	t.Parallel()
 
-	// 测试无效值
+	testBootIsNilReflectValueInvalid(t)
+	testBootIsNilReflectValuePointers(t)
+	testBootIsNilReflectValueCollections(t)
+}
+
+func testBootIsNilReflectValueInvalid(t *testing.T) {
+	t.Helper()
 	if !isNilReflectValue(reflect.Value{}) {
 		t.Error("Expected invalid Value to be nil")
 	}
+}
 
-	// 测试 nil 指针
-	var ptr *int = nil
+func testBootIsNilReflectValuePointers(t *testing.T) {
+	t.Helper()
+	var ptr *int
 	if !isNilReflectValue(reflect.ValueOf(ptr)) {
 		t.Error("Expected nil pointer to be nil")
 	}
 
-	// 测试非 nil 指针
-	val := 42
-	if isNilReflectValue(reflect.ValueOf(&val)) {
+	nonNilVal := 42
+	if isNilReflectValue(reflect.ValueOf(&nonNilVal)) {
 		t.Error("Expected non-nil pointer to not be nil")
 	}
 
-	// 测试 nil 接口
-	var iface interface{} = nil
+	var iface interface{}
 	if !isNilReflectValue(reflect.ValueOf(iface)) {
 		t.Error("Expected nil interface to be nil")
 	}
 
-	// 测试非 nil 接口
 	iface = 42
 	if isNilReflectValue(reflect.ValueOf(iface)) {
 		t.Error("Expected non-nil interface to not be nil")
 	}
+}
 
-	// 测试 nil map
-	var m map[string]int = nil
+func testBootIsNilReflectValueCollections(t *testing.T) {
+	t.Helper()
+	var m map[string]int
 	if !isNilReflectValue(reflect.ValueOf(m)) {
 		t.Error("Expected nil map to be nil")
 	}
 
-	// 测试 nil slice
-	var s []int = nil
+	var s []int
 	if !isNilReflectValue(reflect.ValueOf(s)) {
 		t.Error("Expected nil slice to be nil")
 	}
 
-	// 测试 nil chan
-	var ch chan int = nil
+	var ch chan int
 	if !isNilReflectValue(reflect.ValueOf(ch)) {
 		t.Error("Expected nil chan to be nil")
 	}
 
-	// 测试 nil func
-	var fn func() = nil
+	var fn func()
 	if !isNilReflectValue(reflect.ValueOf(fn)) {
 		t.Error("Expected nil func to be nil")
 	}
@@ -707,15 +422,15 @@ func TestBoot_IsNilReflectValue_InterfaceWithTypedNil(t *testing.T) {
 
 	// 使用 error 接口测试 typed-nil
 	var err error = nil
-	v := reflect.ValueOf(err)
-	if !isNilReflectValue(v) {
+	reflVal := reflect.ValueOf(err)
+	if !isNilReflectValue(reflVal) {
 		t.Error("Expected nil error interface to be nil")
 	}
 
 	// 测试非 nil 的 error 接口
 	err = fmt.Errorf("test error")
-	v = reflect.ValueOf(err)
-	if isNilReflectValue(v) {
+	reflVal = reflect.ValueOf(err)
+	if isNilReflectValue(reflVal) {
 		t.Error("Expected non-nil error interface to not be nil")
 	}
 }

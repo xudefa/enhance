@@ -25,10 +25,12 @@ func When(description string, fn func(ctx ConditionContext) bool) Condition {
 	}
 }
 
+// Matches 执行条件的判断函数并返回其结果。
 func (d *describedCondition) Matches(ctx ConditionContext) bool {
 	return d.fn(ctx)
 }
 
+// String 返回带描述条件的可读描述。
 func (d *describedCondition) String() string {
 	return fmt.Sprintf("When(%s)", d.description)
 }

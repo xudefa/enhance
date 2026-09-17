@@ -62,21 +62,21 @@ func TestCorsFilter_IsOriginAllowed(t *testing.T) {
 func TestCorsFilter_InvalidTypes(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{})
+	corsFilter := NewCorsFilter(CorsConfig{})
 	t.Run("invalid context", func(t *testing.T) {
-		err := f.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := corsFilter.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid context")
 		}
 	})
 	t.Run("invalid request", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
+		err := corsFilter.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid request")
 		}
 	})
 	t.Run("invalid response", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
+		err := corsFilter.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", &mockSecurityFilterChain{})
 		if err == nil {
 			t.Error("expected error for invalid response")
 		}

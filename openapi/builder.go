@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,25 +13,25 @@ import (
 
 // RegisterController 注册控制器
 func (b *DocumentBuilder) RegisterController(controller any) *DocumentBuilder {
-	t := reflect.TypeOf(controller)
-	if t == nil {
+	typ := reflect.TypeOf(controller)
+	if typ == nil {
 		return b
 	}
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
 	}
 
-	if t.Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Struct {
 		return b
 	}
 
 	// 提取基础路径
-	basePath := b.extractBasePath(t)
-	tagName := b.extractTagName(t)
+	basePath := b.extractBasePath(typ)
+	tagName := b.extractTagName(typ)
 
 	// 遍历方法
-	for i := 0; i < t.NumMethod(); i++ {
-		method := t.Method(i)
+	for i := 0; i < typ.NumMethod(); i++ {
+		method := typ.Method(i)
 		b.registerMethod(method, basePath, tagName)
 	}
 
@@ -86,11 +87,11 @@ func (b *DocumentBuilder) Build() *OpenAPIDocument {
 // ToJSON 转换为 JSON
 func (b *DocumentBuilder) ToJSON() (string, error) {
 	doc := b.Build()
-	data, err := json.MarshalIndent(doc, "", "  ")
+	jsonBytes, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("序列化 OpenAPI 文档为 JSON 失败: %w", err)
 	}
-	return string(data), nil
+	return string(jsonBytes), nil
 }
 
 // ToJSONBytes 转换为 JSON 字节
@@ -101,28 +102,31 @@ func (b *DocumentBuilder) ToJSONBytes() ([]byte, error) {
 
 // SaveToFile 保存到文件
 func (b *DocumentBuilder) SaveToFile(path string) error {
-	data, err := b.ToJSONBytes()
+	fileBytes, err := b.ToJSONBytes()
 	if err != nil {
-		return err
+		return fmt.Errorf("生成 OpenAPI JSON 失败: %w", err)
 	}
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return fmt.Errorf("创建目录 %s 失败: %w", dir, err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, fileBytes, 0o644); err != nil {
+		return fmt.Errorf("写入 OpenAPI 文件失败: %w", err)
+	}
+	return nil
 }
 
 // ServeHTTP 实现 http.Handler，提供 OpenAPI JSON 端点
 func (b *DocumentBuilder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	data, err := b.ToJSONBytes()
+	jsonBytes, err := b.ToJSONBytes()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_, _ = w.Write(data)
+	_, _ = w.Write(jsonBytes)
 }
 
 // extractBasePath 提取基础路径

@@ -206,10 +206,12 @@ func (c *ValidatorChain) Validate() error {
 	return nil
 }
 
+// Validate 校验结构体对象并返回聚合的校验错误。
 func (v *structValidator) Validate(obj any) error {
 	return ValidateStruct(v.obj)
 }
 
+// Validate 校验单个值并按规则列表返回校验结果。
 func (v *valueValidator) Validate(obj any) error {
 	return Validate(v.value, v.rules)
 }
@@ -225,7 +227,7 @@ func (c *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
 
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to compile regexp: %w", err)
 	}
 
 	c.mu.Lock()

@@ -35,55 +35,81 @@ func (r *defaultBeanRegistry) Register(def BeanDef, beanID string) error {
 
 // registerInternal 注册 Bean 定义（内部方法，调用方必须已持有锁）。
 func (r *defaultBeanRegistry) registerInternal(def BeanDef, beanID string) error {
-	// 重复注册检测：相同 ID 已存在
-	if existing, exists := r.definitions.Load(beanID); exists {
-		if def.Primary {
-			r.primaryIndex.Store(def.Type, beanID)
-		}
-		// 等价定义重复注册保持幂等，真正不同的定义返回错误
-		if sameBeanDefinition(existing.(*BeanDef), &def) {
-			return nil
-		}
-		return fmt.Errorf("%w: bean id %q already registered", ErrBeanAlreadyExists, beanID)
+	// 重复注册检测：相同 ID 已存在时直接返回（等价定义保持幂等）
+	if handled, err := r.checkDuplicateRegistration(def, beanID); handled {
+		return err
 	}
 
 	// 先验证自定义名称冲突，避免注册失败后留下半污染状态
-	if def.Name != "" {
-		if _, loaded := r.customNameIndex.Load(def.Name); loaded {
-			return fmt.Errorf("custom name %q already registered", def.Name)
-		}
-		if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
-			suffix := def.Name[idx+1:]
-			if _, loaded := r.customNameIndex.Load(suffix); loaded {
-				return fmt.Errorf("custom name %q already registered", suffix)
-			}
-		}
+	if err := r.checkAndStoreCustomName(def, beanID); err != nil {
+		return err
 	}
 
 	r.definitions.Store(beanID, &def)
 	r.insertOrder = append(r.insertOrder, beanID)
 
-	if def.Name != "" {
-		r.customNameIndex.Store(def.Name, beanID)
-		if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
-			r.customNameIndex.Store(def.Name[idx+1:], beanID)
+	r.appendToTypeIndex(def, beanID)
+	r.updatePrimaryIndex(def, beanID)
+
+	return nil
+}
+
+// checkDuplicateRegistration 检测相同 ID 重复注册，等价定义保持幂等。
+// 返回是否已处理该 ID 的注册以及处理结果错误。
+func (r *defaultBeanRegistry) checkDuplicateRegistration(def BeanDef, beanID string) (bool, error) {
+	existing, exists := r.definitions.Load(beanID)
+	if !exists {
+		return false, nil
+	}
+	if def.Primary {
+		r.primaryIndex.Store(def.Type, beanID)
+	}
+	// 等价定义重复注册保持幂等，真正不同的定义返回错误
+	if sameBeanDefinition(existing.(*BeanDef), &def) {
+		return true, nil
+	}
+	return true, fmt.Errorf("%w: bean id %q already registered", ErrBeanAlreadyExists, beanID)
+}
+
+// checkAndStoreCustomName 校验并写入自定义名称索引。
+func (r *defaultBeanRegistry) checkAndStoreCustomName(def BeanDef, beanID string) error {
+	if def.Name == "" {
+		return nil
+	}
+	if _, loaded := r.customNameIndex.Load(def.Name); loaded {
+		return fmt.Errorf("custom name %q already registered", def.Name)
+	}
+	if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
+		suffix := def.Name[idx+1:]
+		if _, loaded := r.customNameIndex.Load(suffix); loaded {
+			return fmt.Errorf("custom name %q already registered", suffix)
 		}
 	}
 
+	r.customNameIndex.Store(def.Name, beanID)
+	if idx := strings.LastIndex(def.Name, "#"); idx != -1 {
+		r.customNameIndex.Store(def.Name[idx+1:], beanID)
+	}
+	return nil
+}
+
+// appendToTypeIndex 将 Bean 追加到类型索引中。
+func (r *defaultBeanRegistry) appendToTypeIndex(def BeanDef, beanID string) {
 	var ids []string
 	if existing, ok := r.typeIndex.Load(def.Type); ok {
 		ids = existing.([]string)
 	}
 	ids = append(ids, beanID)
 	r.typeIndex.Store(def.Type, ids)
+}
 
+// updatePrimaryIndex 更新 primary 类型索引。
+func (r *defaultBeanRegistry) updatePrimaryIndex(def BeanDef, beanID string) {
 	if def.Primary {
 		r.primaryIndex.Store(def.Type, beanID)
 	} else if _, exists := r.primaryIndex.Load(def.Type); !exists {
 		r.primaryIndex.Store(def.Type, beanID)
 	}
-
-	return nil
 }
 
 // funcPtr 返回函数指针，nil 函数返回 0。
@@ -91,11 +117,11 @@ func funcPtr(fn any) uintptr {
 	if fn == nil {
 		return 0
 	}
-	v := reflect.ValueOf(fn)
-	if v.Kind() != reflect.Func || v.IsNil() {
+	value := reflect.ValueOf(fn)
+	if value.Kind() != reflect.Func || value.IsNil() {
 		return 0
 	}
-	return v.Pointer()
+	return value.Pointer()
 }
 
 // sameBeanDefinition 判断两个 Bean 定义是否等价（用于幂等重复注册检测）。

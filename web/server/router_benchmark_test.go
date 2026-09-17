@@ -16,12 +16,12 @@ func BenchmarkRouter_ServeHTTP_StaticRoute(b *testing.B) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		w.Body.Reset()
-		router.ServeHTTP(w, req)
+		rec.Body.Reset()
+		router.ServeHTTP(rec, req)
 	}
 }
 
@@ -35,12 +35,12 @@ func BenchmarkRouter_ServeHTTP_PathParams(b *testing.B) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users/123/posts/456", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		w.Body.Reset()
-		router.ServeHTTP(w, req)
+		rec.Body.Reset()
+		router.ServeHTTP(rec, req)
 	}
 }
 
@@ -63,12 +63,12 @@ func BenchmarkRouter_ServeHTTP_MultipleRoutes(b *testing.B) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/users/999", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		w.Body.Reset()
-		router.ServeHTTP(w, req)
+		rec.Body.Reset()
+		router.ServeHTTP(rec, req)
 	}
 }
 
@@ -106,12 +106,12 @@ func BenchmarkRouter_MiddlewareChain(b *testing.B) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		w.Body.Reset()
-		router.ServeHTTP(w, req)
+		rec.Body.Reset()
+		router.ServeHTTP(rec, req)
 	}
 }
 
@@ -126,11 +126,11 @@ func BenchmarkRouter_ConcurrentRequests(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		req := httptest.NewRequest(http.MethodGet, "/api/users/123", nil)
-		w := httptest.NewRecorder()
+		rec := httptest.NewRecorder()
 
 		for pb.Next() {
-			w.Body.Reset()
-			router.ServeHTTP(w, req)
+			rec.Body.Reset()
+			router.ServeHTTP(rec, req)
 		}
 	})
 }

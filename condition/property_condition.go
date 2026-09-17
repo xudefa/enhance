@@ -22,14 +22,14 @@ func OnProperty(key string, expectedValue ...string) Condition {
 // Matches 实现 Condition 接口
 func (p *propertyCondition) Matches(ctx ConditionContext) bool {
 	env := ctx.Environment()
-	val, ok := env.GetProperty(p.key)
+	propValue, ok := env.GetProperty(p.key)
 	if !ok {
 		return false
 	}
 	if len(p.expectedValue) == 0 {
-		return val != nil && val != ""
+		return propValue != nil && propValue != ""
 	}
-	return valAsString(val) == p.expectedValue[0]
+	return valAsString(propValue) == p.expectedValue[0]
 }
 
 // String 返回条件的字符串表示

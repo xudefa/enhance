@@ -233,9 +233,12 @@ func TestBoot_StartMultipleTimes(t *testing.T) {
 }
 
 // TestBoot_WaitForSignal_Coverage 测试 WaitForSignal 方法
+//
+// 注意：不得使用 t.Parallel()。WaitForSignal 依赖进程级 signal.Notify，
+// 且 syscall.Kill 直接向本进程发送 SIGTERM，多个此类测试并行会互抢
+// 进程信号（进程默认处理器终止 → "signal: terminated" 或等待者永久阻塞）。
+// 信号类测试必须全局串行（与 AGENTS §2.3 "禁止并发：操作共享资源/全局状态" 一致）。
 func TestBoot_WaitForSignal(t *testing.T) {
-	t.Parallel()
-
 	app, err := NewApplication(
 		WithAppName("test-app"),
 		WithoutAutoConfig(),
@@ -267,9 +270,9 @@ func TestBoot_WaitForSignal(t *testing.T) {
 }
 
 // TestBoot_WaitForSignal_StopError_Coverage 测试 WaitForSignal 中 Stop 返回错误的情况
+//
+// 注意：不得使用 t.Parallel()。进程级信号全局互斥，原因见 TestBoot_WaitForSignal。
 func TestBoot_WaitForSignal_StopError(t *testing.T) {
-	t.Parallel()
-
 	app, err := NewApplication(
 		WithAppName("test-app"),
 		WithoutAutoConfig(),

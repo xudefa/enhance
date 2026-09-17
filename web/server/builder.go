@@ -165,19 +165,19 @@ func (b *RequestBuilder) Build() []RequestOption {
 
 	for key, values := range b.headers {
 		for _, value := range values {
-			k, v := key, value
+			headerKey, headerValue := key, value
 			opts = append(opts, func(req *HTTPRequest) {
 				if req.Header == nil {
 					req.Header = make(http.Header)
 				}
-				req.Header.Add(k, v)
+				req.Header.Add(headerKey, headerValue)
 			})
 		}
 	}
 
 	for key, value := range b.query {
-		k, v := key, value
-		opts = append(opts, WithQuery(k, v))
+		queryKey, queryValue := key, value
+		opts = append(opts, WithQuery(queryKey, queryValue))
 	}
 
 	return opts

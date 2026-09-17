@@ -149,9 +149,9 @@ func (r *HookRegistry) Count() int {
 func (r *HookRegistry) GetAll() []Hook {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]Hook, len(r.hooks))
-	copy(result, r.hooks)
-	return result
+	hooks := make([]Hook, len(r.hooks))
+	copy(hooks, r.hooks)
+	return hooks
 }
 
 // ==================== 全局钩子注册表 ====================

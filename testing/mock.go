@@ -49,17 +49,26 @@ func (m *mockImpl) Expect(method string, args []any, result any, err error) Mock
 	return m
 }
 
+// ExpectationRequest 描述方法调用期望的参数集合。
+type ExpectationRequest struct {
+	Method string
+	Args   []any
+	Result any
+	Error  error
+	Times  int
+}
+
 // ExpectTimes 设置方法调用期望，指定期望调用次数。
-func (m *mockImpl) ExpectTimes(method string, args []any, result any, err error, times int) Mock {
+func (m *mockImpl) ExpectTimes(spec ExpectationRequest) Mock {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.expectations = append(m.expectations, Expectation{
-		Method: method,
-		Args:   args,
-		Result: result,
-		Error:  err,
-		Times:  times,
+		Method: spec.Method,
+		Args:   spec.Args,
+		Result: spec.Result,
+		Error:  spec.Error,
+		Times:  spec.Times,
 	})
 
 	return m

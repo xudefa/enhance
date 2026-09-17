@@ -96,10 +96,10 @@ func TestRequestScope_Get_DoubleCheckRace(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			start.Wait()
-			result := scope.Get("key", func() any {
+			fetched := scope.Get("key", func() any {
 				return id
 			})
-			if result == nil {
+			if fetched == nil {
 				t.Errorf("result should not be nil")
 			}
 		}(i)

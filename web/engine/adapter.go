@@ -62,26 +62,29 @@ type RouterAdapter struct {
 	useFunc    func(middleware core.MiddlewareFunc)
 }
 
+// RouterAdapterConfig 路由器适配器的配置项。
+type RouterAdapterConfig struct {
+	Get    func(path string, handler core.HandlerFunc)
+	Post   func(path string, handler core.HandlerFunc)
+	Put    func(path string, handler core.HandlerFunc)
+	Delete func(path string, handler core.HandlerFunc)
+	Patch  func(path string, handler core.HandlerFunc)
+	Handle func(method, path string, handler core.HandlerFunc)
+	Group  func(prefix string) core.Router
+	Use    func(middleware core.MiddlewareFunc)
+}
+
 // NewRouterAdapter 创建路由器适配器。
-func NewRouterAdapter(
-	get func(path string, handler core.HandlerFunc),
-	post func(path string, handler core.HandlerFunc),
-	put func(path string, handler core.HandlerFunc),
-	delete func(path string, handler core.HandlerFunc),
-	patch func(path string, handler core.HandlerFunc),
-	handle func(method, path string, handler core.HandlerFunc),
-	group func(prefix string) core.Router,
-	use func(middleware core.MiddlewareFunc),
-) *RouterAdapter {
+func NewRouterAdapter(config RouterAdapterConfig) *RouterAdapter {
 	return &RouterAdapter{
-		getFunc:    get,
-		postFunc:   post,
-		putFunc:    put,
-		deleteFunc: delete,
-		patchFunc:  patch,
-		handleFunc: handle,
-		groupFunc:  group,
-		useFunc:    use,
+		getFunc:    config.Get,
+		postFunc:   config.Post,
+		putFunc:    config.Put,
+		deleteFunc: config.Delete,
+		patchFunc:  config.Patch,
+		handleFunc: config.Handle,
+		groupFunc:  config.Group,
+		useFunc:    config.Use,
 	}
 }
 

@@ -16,6 +16,7 @@ func Any(conditions ...Condition) Condition {
 	return &anyCondition{conditions: conditions}
 }
 
+// Matches 依次判断所有子条件，任一匹配即短路返回 true。
 func (a *anyCondition) Matches(ctx ConditionContext) bool {
 	for _, c := range a.conditions {
 		if c.Matches(ctx) {
@@ -25,6 +26,7 @@ func (a *anyCondition) Matches(ctx ConditionContext) bool {
 	return false
 }
 
+// String 返回逻辑或复合条件的可读描述。
 func (a *anyCondition) String() string {
 	if a.description != "" {
 		return "Any(" + a.description + ")"

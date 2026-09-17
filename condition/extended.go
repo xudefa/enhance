@@ -32,6 +32,7 @@ type expressionCondition struct {
 	expression string // SpEL 表达式
 }
 
+// Matches 解析占位符并求值 SpEL 表达式，非布尔结果按存在性判断。
 func (e *expressionCondition) Matches(ctx ConditionContext) bool {
 	expr := e.resolvePlaceholders(e.expression, ctx)
 
@@ -42,22 +43,23 @@ func (e *expressionCondition) Matches(ctx ConditionContext) bool {
 	}
 
 	evalCtx := newConditionEvaluationContext(ctx)
-	result, err := parsed.GetValue(evalCtx)
+	parsedValue, err := parsed.GetValue(evalCtx)
 	if err != nil {
 		return false
 	}
 
-	if boolResult, ok := result.(bool); ok {
+	if boolResult, ok := parsedValue.(bool); ok {
 		return boolResult
 	}
 
-	if result == nil {
+	if parsedValue == nil {
 		return false
 	}
 
 	return true
 }
 
+// String 返回表达式条件的可读描述。
 func (e *expressionCondition) String() string {
 	return fmt.Sprintf("OnExpression(%s)", e.expression)
 }
@@ -77,15 +79,15 @@ func (e *expressionCondition) resolvePlaceholders(expr string, ctx ConditionCont
 		end += start
 
 		placeholder := expr[start+2 : end]
-		val, ok := ctx.GetProperty(placeholder)
+		propValue, ok := ctx.GetProperty(placeholder)
 		if !ok {
 			return expr
 		}
 
 		// 将值转换为字符串并添加引号（如果是字符串）
-		strVal := valAsString(val)
+		strVal := valAsString(propValue)
 		// 如果是字符串类型，添加引号以便 SpEL 正确解析
-		if _, isString := val.(string); isString {
+		if _, isString := propValue.(string); isString {
 			strVal = "'" + strVal + "'"
 		}
 		expr = expr[:start] + strVal + expr[end+1:]
@@ -102,20 +104,25 @@ func newConditionEvaluationContext(ctx ConditionContext) *conditionEvaluationCon
 	return &conditionEvaluationContext{ctx: ctx}
 }
 
+// GetRootObject 返回表达式求值的根对象。
 func (c *conditionEvaluationContext) GetRootObject() any {
 	return nil
 }
 
+// SetRootObject 设置表达式求值的根对象。
 func (c *conditionEvaluationContext) SetRootObject(root any) {
 }
 
+// GetVariable 按键读取求值变量，读取失败返回 false。
 func (c *conditionEvaluationContext) GetVariable(name string) (any, bool) {
 	return c.ctx.GetProperty(name)
 }
 
+// SetVariable 设置求值变量。
 func (c *conditionEvaluationContext) SetVariable(name string, value any) {
 }
 
+// GetPropertyAccessor 返回属性访问器，用于解析表达式中的属性引用。
 func (c *conditionEvaluationContext) GetPropertyAccessor() spel.PropertyAccessor {
 	return spel.NewReflectPropertyAccessor()
 }
@@ -155,6 +162,7 @@ type resourceCondition struct {
 	missing  bool   // true 表示检查不存在
 }
 
+// Matches 检查指定资源是否存在（或不存在，取决于配置），相对路径基于当前工作目录解析。
 func (r *resourceCondition) Matches(ctx ConditionContext) bool {
 	path := r.resolvePath(r.location)
 
@@ -175,6 +183,7 @@ func (r *resourceCondition) Matches(ctx ConditionContext) bool {
 	return exists
 }
 
+// String 返回资源条件的可读描述。
 func (r *resourceCondition) String() string {
 	if r.missing {
 		return fmt.Sprintf("OnResourceMissing(%s)", r.location)
@@ -226,6 +235,7 @@ type envVarCondition struct {
 	missing bool   // true 表示检查不存在
 }
 
+// Matches 检查指定环境变量是否存在（或不存在，取决于配置）。
 func (e *envVarCondition) Matches(ctx ConditionContext) bool {
 	_, exists := os.LookupEnv(e.envVar)
 
@@ -235,6 +245,7 @@ func (e *envVarCondition) Matches(ctx ConditionContext) bool {
 	return exists
 }
 
+// String 返回环境变量条件的可读描述。
 func (e *envVarCondition) String() string {
 	if e.missing {
 		return fmt.Sprintf("OnEnvVarMissing(%s)", e.envVar)

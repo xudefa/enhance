@@ -85,7 +85,8 @@ type SanitizeStrategy interface {
 
 const (
 	// 应用配置
-	AppName    = "app.name"
+	AppName = "app.name"
+	// AppVersion 应用版本配置键。
 	AppVersion = "app.version"
 
 	// Actuator 配置
@@ -96,7 +97,8 @@ const (
 
 const (
 	// 应用默认值
-	DefaultAppName    = "enhance-app"
+	DefaultAppName = "enhance-app"
+	// DefaultAppVersion 默认应用版本号。
 	DefaultAppVersion = "1.0.0"
 
 	// 条件值常量

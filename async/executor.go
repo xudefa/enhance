@@ -156,15 +156,15 @@ func (e *AsyncExecutor) worker() {
 // executeTask 执行单个任务，包含 panic 恢复逻辑
 func (e *AsyncExecutor) executeTask(task asyncTask) {
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
 			if task.future != nil {
-				task.future.setResult(nil, fmt.Errorf("task panic: %v", r))
+				task.future.setResult(nil, fmt.Errorf("task panic: %v", rec))
 			}
 		}
 	}()
-	result, err := task.fn()
+	output, err := task.fn()
 	if task.future != nil {
-		task.future.setResult(result, err)
+		task.future.setResult(output, err)
 	}
 }
 

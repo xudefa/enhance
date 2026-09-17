@@ -80,7 +80,7 @@ func TestInvokeInitError(t *testing.T) {
 		t.Fatal("Expected InvokeInit to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected init error, got: %v", err)
 	}
 }
@@ -100,7 +100,7 @@ func TestInvokeInitFuncError(t *testing.T) {
 		t.Fatal("Expected InvokeInit to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected func init error, got: %v", err)
 	}
 }
@@ -160,7 +160,7 @@ func TestInvokeDestroyError(t *testing.T) {
 		t.Fatal("Expected InvokeDestroy to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected destroy error, got: %v", err)
 	}
 }
@@ -202,7 +202,11 @@ func TestDestroyAll(t *testing.T) {
 		t.Fatalf("DestroyAll failed: %v", err)
 	}
 
-	// Verify reverse order destruction
+	testLifecycleDestroyAllVerify(t, destroyOrder, bean1, bean2, bean3)
+}
+
+func testLifecycleDestroyAllVerify(t *testing.T, destroyOrder []string, bean1, bean2, bean3 *TestLifecycleBean) {
+	t.Helper()
 	if len(destroyOrder) != 3 {
 		t.Fatalf("Expected 3 destroy calls, got %d", len(destroyOrder))
 	}
@@ -211,7 +215,6 @@ func TestDestroyAll(t *testing.T) {
 		t.Errorf("Expected reverse order destroy [bean3, bean2, bean1], got %v", destroyOrder)
 	}
 
-	// Verify all beans were destroyed
 	if !bean1.DestroyCalled || !bean2.DestroyCalled || !bean3.DestroyCalled {
 		t.Error("Expected all beans to be destroyed")
 	}

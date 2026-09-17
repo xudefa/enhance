@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -66,13 +67,13 @@ func (m *defaultLifecycleManager) InvokeInit(beanName string, bean any, initFunc
 func (m *defaultLifecycleManager) InvokeDestroy(beanName string, bean any, destroyFunc func(any) error) error {
 	if destroyFunc != nil {
 		if err := destroyFunc(bean); err != nil {
-			return err
+			return fmt.Errorf("销毁 Bean %s 失败: %w", beanName, err)
 		}
 	}
 
 	if lifecycleBean, ok := bean.(LifecycleBean); ok {
 		if err := lifecycleBean.Destroy(); err != nil {
-			return err
+			return fmt.Errorf("销毁 Bean %s 失败: %w", beanName, err)
 		}
 	}
 

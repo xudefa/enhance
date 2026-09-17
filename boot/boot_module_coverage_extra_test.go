@@ -291,14 +291,21 @@ func TestBoot_WithModule_Coverage(t *testing.T) {
 func TestBoot_ModuleHooks(t *testing.T) {
 	t.Parallel()
 
+	hookCalled := false
+	module := testBootModuleHooksBuild(t, &hookCalled)
+	testBootModuleHooksStart(t, module, &hookCalled)
+}
+
+func testBootModuleHooksBuild(t *testing.T, hookCalled *bool) Module {
+	t.Helper()
+
 	type TestBean struct {
 		Name string
 	}
 
-	hookCalled := false
 	hook := lifecycle.NewHookFunc(
 		func(ctx context.Context) error {
-			hookCalled = true
+			*hookCalled = true
 			return nil
 		},
 		nil,
@@ -313,11 +320,15 @@ func TestBoot_ModuleHooks(t *testing.T) {
 		Hook(hook).
 		Build()
 
-	// 验证钩子已设置
 	hooks := module.ModuleHooks()
 	if len(hooks) != 1 {
 		t.Errorf("Expected 1 hook, got %d", len(hooks))
 	}
+	return module
+}
+
+func testBootModuleHooksStart(t *testing.T, module Module, hookCalled *bool) {
+	t.Helper()
 
 	app, err := NewApplication(
 		WithAppName("test-app"),
@@ -335,7 +346,7 @@ func TestBoot_ModuleHooks(t *testing.T) {
 
 	defer app.Stop()
 
-	if !hookCalled {
+	if !*hookCalled {
 		t.Error("Expected hook to be called")
 	}
 }

@@ -14,72 +14,101 @@ func TestPluginManagerTests(t *testing.T) {
 
 	t.Run("create and register", func(t *testing.T) {
 		t.Parallel()
-		manager := NewPluginManager()
-		if manager == nil {
-			t.Fatal("Expected non-nil PluginManager")
-		}
-
-		plugin := &mockPlugin{name: "test-plugin", version: "1.0.0"}
-		manager.Register(plugin)
-
-		if p, ok := manager.Get("test-plugin"); !ok || p == nil {
-			t.Error("Expected to find test-plugin")
-		}
-		if plugins := manager.List(); len(plugins) != 1 {
-			t.Errorf("Expected 1 plugin, got %d", len(plugins))
-		}
+		testPluginManagerCreateRegister(t)
 	})
 
 	t.Run("init all", func(t *testing.T) {
 		t.Parallel()
-		manager := NewPluginManager()
-		plugin := &mockPlugin{name: "plugin-a", version: "1.0.0"}
-		manager.Register(plugin)
-		manager.SetContext(&mockPluginContext{
-			container:   core.NewContainer(),
-			environment: environment.NewEnvironment(),
-		})
-
-		if err := manager.InitAll(); err != nil {
-			t.Fatalf("InitAll failed: %v", err)
-		}
+		testPluginManagerInitAll(t)
 	})
 
 	t.Run("start and stop all", func(t *testing.T) {
 		t.Parallel()
-		manager := NewPluginManager()
-		plugin1 := &mockPlugin{name: "plugin-a", version: "1.0.0"}
-		plugin2 := &mockPlugin{name: "plugin-b", version: "1.0.0"}
-		manager.Register(plugin1)
-		manager.Register(plugin2)
-		manager.SetContext(&mockPluginContext{
-			container:   core.NewContainer(),
-			environment: environment.NewEnvironment(),
-		})
-
-		if err := manager.InitAll(); err != nil {
-			t.Fatalf("InitAll failed: %v", err)
-		}
-		if err := manager.StartAll(); err != nil {
-			t.Fatalf("StartAll failed: %v", err)
-		}
-		if !plugin1.startCalled || !plugin2.startCalled {
-			t.Error("Expected all plugins Start to be called")
-		}
-		if err := manager.StopAll(); err != nil {
-			t.Fatalf("StopAll failed: %v", err)
-		}
-		if !plugin1.stopCalled || !plugin2.stopCalled {
-			t.Error("Expected all plugins Stop to be called")
-		}
+		testPluginManagerStartStopAll(t)
 	})
+}
+
+func testPluginManagerCreateRegister(t *testing.T) {
+	t.Helper()
+	manager := NewPluginManager()
+	if manager == nil {
+		t.Fatal("Expected non-nil PluginManager")
+	}
+
+	plugin := &mockPlugin{name: "test-plugin", version: "1.0.0"}
+	manager.Register(plugin)
+
+	if p, ok := manager.Get("test-plugin"); !ok || p == nil {
+		t.Error("Expected to find test-plugin")
+	}
+	if plugins := manager.List(); len(plugins) != 1 {
+		t.Errorf("Expected 1 plugin, got %d", len(plugins))
+	}
+}
+
+func testPluginManagerInitAll(t *testing.T) {
+	t.Helper()
+	manager := NewPluginManager()
+	plugin := &mockPlugin{name: "plugin-a", version: "1.0.0"}
+	manager.Register(plugin)
+	manager.SetContext(&mockPluginContext{
+		container:   core.NewContainer(),
+		environment: environment.NewEnvironment(),
+	})
+
+	if err := manager.InitAll(); err != nil {
+		t.Fatalf("InitAll failed: %v", err)
+	}
+}
+
+func testPluginManagerStartStopAll(t *testing.T) {
+	t.Helper()
+	manager := NewPluginManager()
+	plugin1 := &mockPlugin{name: "plugin-a", version: "1.0.0"}
+	plugin2 := &mockPlugin{name: "plugin-b", version: "1.0.0"}
+	manager.Register(plugin1)
+	manager.Register(plugin2)
+	manager.SetContext(&mockPluginContext{
+		container:   core.NewContainer(),
+		environment: environment.NewEnvironment(),
+	})
+
+	if err := manager.InitAll(); err != nil {
+		t.Fatalf("InitAll failed: %v", err)
+	}
+	if err := manager.StartAll(); err != nil {
+		t.Fatalf("StartAll failed: %v", err)
+	}
+	if !plugin1.startCalled || !plugin2.startCalled {
+		t.Error("Expected all plugins Start to be called")
+	}
+	if err := manager.StopAll(); err != nil {
+		t.Fatalf("StopAll failed: %v", err)
+	}
+	if !plugin1.stopCalled || !plugin2.stopCalled {
+		t.Error("Expected all plugins Stop to be called")
+	}
 }
 
 // TestPluginManagerErrors tests PluginManager error scenarios.
 func TestPluginManagerErrors(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	for _, tt := range testPluginManagerErrorCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			testPluginManagerErrorCase(t, tt.plugin, tt.action)
+		})
+	}
+}
+
+func testPluginManagerErrorCases() []struct {
+	name   string
+	plugin *mockPlugin
+	action func(manager *PluginManager) error
+} {
+	return []struct {
 		name   string
 		plugin *mockPlugin
 		action func(manager *PluginManager) error
@@ -113,20 +142,17 @@ func TestPluginManagerErrors(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			manager := NewPluginManager()
-			manager.Register(tt.plugin)
-			manager.SetContext(&mockPluginContext{
-				container:   core.NewContainer(),
-				environment: environment.NewEnvironment(),
-			})
-			if err := tt.action(manager); err == nil {
-				t.Fatal("Expected error, got nil")
-			}
-		})
+func testPluginManagerErrorCase(t *testing.T, plugin *mockPlugin, action func(manager *PluginManager) error) {
+	t.Helper()
+	manager := NewPluginManager()
+	manager.Register(plugin)
+	manager.SetContext(&mockPluginContext{
+		container:   core.NewContainer(),
+		environment: environment.NewEnvironment(),
+	})
+	if err := action(manager); err == nil {
+		t.Fatal("Expected error, got nil")
 	}
 }

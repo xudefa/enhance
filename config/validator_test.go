@@ -19,12 +19,12 @@ func TestValidationErrors_Error_Coverage(t *testing.T) {
 		{Field: "name", Message: "required"},
 		{Field: "port", Message: "invalid"},
 	}
-	result := errs.Error()
-	if result == "" {
+	errorStr := errs.Error()
+	if errorStr == "" {
 		t.Error("expected non-empty error string")
 	}
-	if len(result) < 20 {
-		t.Errorf("expected substantial error string, got '%s'", result)
+	if len(errorStr) < 20 {
+		t.Errorf("expected substantial error string, got '%s'", errorStr)
 	}
 }
 
@@ -38,190 +38,190 @@ func TestValidationErrors_Error_Empty(t *testing.T) {
 
 func TestDefaultValidator_AddMin_Int(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMin("port", 10)
+	validator := NewValidator()
+	validator.AddMin("port", 10)
 
-	data := map[string]any{"port": 5}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"port": 5}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for int below minimum")
 	}
 
-	data["port"] = 10
-	if err := v.Validate(data); err != nil {
+	payload["port"] = 10
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["port"] = 20
-	if err := v.Validate(data); err != nil {
+	payload["port"] = 20
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMin_Float64(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMin("rate", 5)
+	validator := NewValidator()
+	validator.AddMin("rate", 5)
 
-	data := map[string]any{"rate": 3.5}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"rate": 3.5}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for float64 below minimum")
 	}
 
-	data["rate"] = 5.0
-	if err := v.Validate(data); err != nil {
+	payload["rate"] = 5.0
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMin_String(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMin("name", 3)
+	validator := NewValidator()
+	validator.AddMin("name", 3)
 
-	data := map[string]any{"name": "ab"}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"name": "ab"}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for string length below minimum")
 	}
 
-	data["name"] = "abc"
-	if err := v.Validate(data); err != nil {
+	payload["name"] = "abc"
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMin_UnsupportedType(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMin("val", 10)
+	validator := NewValidator()
+	validator.AddMin("val", 10)
 
-	data := map[string]any{"val": true}
-	if err := v.Validate(data); err != nil {
+	payload := map[string]any{"val": true}
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error for unsupported type: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMax_Int(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMax("port", 100)
+	validator := NewValidator()
+	validator.AddMax("port", 100)
 
-	data := map[string]any{"port": 200}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"port": 200}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for int above maximum")
 	}
 
-	data["port"] = 100
-	if err := v.Validate(data); err != nil {
+	payload["port"] = 100
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["port"] = 50
-	if err := v.Validate(data); err != nil {
+	payload["port"] = 50
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMax_Float64(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMax("rate", 10)
+	validator := NewValidator()
+	validator.AddMax("rate", 10)
 
-	data := map[string]any{"rate": 15.0}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"rate": 15.0}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for float64 above maximum")
 	}
 
-	data["rate"] = 10.0
-	if err := v.Validate(data); err != nil {
+	payload["rate"] = 10.0
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMax_String(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMax("name", 5)
+	validator := NewValidator()
+	validator.AddMax("name", 5)
 
-	data := map[string]any{"name": "toolongname"}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"name": "toolongname"}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for string length above maximum")
 	}
 
-	data["name"] = "ok"
-	if err := v.Validate(data); err != nil {
+	payload["name"] = "ok"
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddMax_UnsupportedType(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddMax("val", 10)
+	validator := NewValidator()
+	validator.AddMax("val", 10)
 
-	data := map[string]any{"val": []int{1, 2, 3}}
-	if err := v.Validate(data); err != nil {
+	payload := map[string]any{"val": []int{1, 2, 3}}
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error for unsupported type: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddRegex(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRegex("email", `^[a-z]+@[a-z]+\.[a-z]+$`)
+	validator := NewValidator()
+	validator.AddRegex("email", `^[a-z]+@[a-z]+\.[a-z]+$`)
 
-	data := map[string]any{"email": "Test@Example.com"}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"email": "Test@Example.com"}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for non-matching email (uppercase)")
 	}
 
-	data["email"] = "user@domain.com"
-	if err := v.Validate(data); err != nil {
+	payload["email"] = "user@domain.com"
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestDefaultValidator_AddRegex_NonString(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRegex("email", `^[a-z]+$`)
+	validator := NewValidator()
+	validator.AddRegex("email", `^[a-z]+$`)
 
-	data := map[string]any{"email": 123}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"email": 123}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for non-string value")
 	}
 }
 
 func TestDefaultValidator_AddRegex_InvalidPattern(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRegex("email", `[invalid`)
+	validator := NewValidator()
+	validator.AddRegex("email", `[invalid`)
 
-	data := map[string]any{"email": "test"}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{"email": "test"}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for invalid regex pattern")
 	}
 }
 
 func TestDefaultValidator_AddEnum(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddEnum("status", "active", "inactive")
+	validator := NewValidator()
+	validator.AddEnum("status", "active", "inactive")
 
-	data := map[string]any{"status": "active"}
-	if err := v.Validate(data); err != nil {
+	payload := map[string]any{"status": "active"}
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["status"] = "deleted"
-	if err := v.Validate(data); err == nil {
+	payload["status"] = "deleted"
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for non-matching enum value")
 	}
 }
 
 func TestDefaultValidator_AddCustomRule(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddCustomRule("age", func(value any) error {
+	validator := NewValidator()
+	validator.AddCustomRule("age", func(value any) error {
 		age, ok := value.(int)
 		if !ok {
 			return &testValErr{msg: "not an int"}
@@ -232,39 +232,39 @@ func TestDefaultValidator_AddCustomRule(t *testing.T) {
 		return nil
 	})
 
-	data := map[string]any{"age": 25}
-	if err := v.Validate(data); err != nil {
+	payload := map[string]any{"age": 25}
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	data["age"] = 200
-	if err := v.Validate(data); err == nil {
+	payload["age"] = 200
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for age out of range")
 	}
 }
 
 func TestDefaultValidator_Validate_FieldNotFound(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRequired("missing")
+	validator := NewValidator()
+	validator.AddRequired("missing")
 
-	data := map[string]any{}
-	if err := v.Validate(data); err == nil {
+	payload := map[string]any{}
+	if err := validator.Validate(payload); err == nil {
 		t.Error("expected error for missing field")
 	}
 }
 
 func TestDefaultValidator_Validate_MultipleErrors(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRequired("name", "email")
-	v.AddMin("age", 0)
+	validator := NewValidator()
+	validator.AddRequired("name", "email")
+	validator.AddMin("age", 0)
 
-	data := map[string]any{
+	payload := map[string]any{
 		"age": -1,
 	}
 
-	err := v.Validate(data)
+	err := validator.Validate(payload)
 	if err == nil {
 		t.Fatal("expected validation errors")
 	}
@@ -280,17 +280,17 @@ func TestDefaultValidator_Validate_MultipleErrors(t *testing.T) {
 
 func TestDefaultValidator_Validate_NoErrors(t *testing.T) {
 	t.Parallel()
-	v := NewValidator()
-	v.AddRequired("name")
-	v.AddMin("age", 0)
-	v.AddMax("age", 150)
+	validator := NewValidator()
+	validator.AddRequired("name")
+	validator.AddMin("age", 0)
+	validator.AddMax("age", 150)
 
-	data := map[string]any{
+	payload := map[string]any{
 		"name": "John",
 		"age":  25,
 	}
 
-	if err := v.Validate(data); err != nil {
+	if err := validator.Validate(payload); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

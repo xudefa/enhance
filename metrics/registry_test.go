@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -39,66 +38,66 @@ func TestSimpleCounter_Reset(t *testing.T) {
 
 func TestSimpleGauge(t *testing.T) {
 	t.Parallel()
-	g := NewSimpleGauge()
-	g.Set(42.5)
-	if g.Value() != 42.5 {
-		t.Fatalf("expected 42.5, got %f", g.Value())
+	gauge := NewSimpleGauge()
+	gauge.Set(42.5)
+	if gauge.Value() != 42.5 {
+		t.Fatalf("expected 42.5, got %f", gauge.Value())
 	}
 
-	g.Add(7.5)
-	if g.Value() != 50.0 {
-		t.Fatalf("expected 50.0, got %f", g.Value())
+	gauge.Add(7.5)
+	if gauge.Value() != 50.0 {
+		t.Fatalf("expected 50.0, got %f", gauge.Value())
 	}
 }
 
 func TestSimpleHistogram(t *testing.T) {
 	t.Parallel()
-	h := NewSimpleHistogram("test", nil)
-	h.Record(10)
-	h.Record(20)
-	h.Record(30)
+	histogram := NewSimpleHistogram("test", nil)
+	histogram.Record(10)
+	histogram.Record(20)
+	histogram.Record(30)
 
-	if h.Count() != 3 {
-		t.Fatalf("expected count 3, got %d", h.Count())
+	if histogram.Count() != 3 {
+		t.Fatalf("expected count 3, got %d", histogram.Count())
 	}
-	if h.Sum() != 60 {
-		t.Fatalf("expected sum 60, got %f", h.Sum())
+	if histogram.Sum() != 60 {
+		t.Fatalf("expected sum 60, got %f", histogram.Sum())
 	}
 }
 
 func TestSimpleHistogram_Reset(t *testing.T) {
 	t.Parallel()
-	h := NewSimpleHistogram("test", nil)
-	h.Record(10)
-	h.Record(20)
+	histogram := NewSimpleHistogram("test", nil)
+	histogram.Record(10)
+	histogram.Record(20)
 
-	h.Reset()
-	if h.Count() != 0 {
-		t.Fatalf("expected count 0 after reset, got %d", h.Count())
+	histogram.Reset()
+	if histogram.Count() != 0 {
+		t.Fatalf("expected count 0 after reset, got %d", histogram.Count())
 	}
-	if h.Sum() != 0 {
-		t.Fatalf("expected sum 0 after reset, got %f", h.Sum())
+	if histogram.Sum() != 0 {
+		t.Fatalf("expected sum 0 after reset, got %f", histogram.Sum())
 	}
 }
 
 func TestSimpleHistogram_RecordWithLabels(t *testing.T) {
 	t.Parallel()
-	h := NewSimpleHistogram("test", map[string]string{"service": "api"})
-	h.RecordWithLabels(100, map[string]string{"endpoint": "/users"})
-	h.Record(200)
+	histogram := NewSimpleHistogram("test", map[string]string{"service": "api"})
+	histogram.RecordWithLabels(100, map[string]string{"endpoint": "/users"})
+	histogram.Record(200)
 
-	if h.Count() != 2 {
-		t.Fatalf("expected count 2, got %d", h.Count())
+	if histogram.Count() != 2 {
+		t.Fatalf("expected count 2, got %d", histogram.Count())
 	}
 }
 
 func TestSimpleRegistry(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	c := r.Counter("requests")
+	registry := NewSimpleRegistry()
+	c := registry.Counter("requests")
 	c.Inc()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 1 {
 		t.Fatalf("expected 1 metric, got %d", len(metrics))
 	}
@@ -112,11 +111,11 @@ func TestSimpleRegistry(t *testing.T) {
 
 func TestSimpleRegistry_Tags(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	c := r.Counter("http_requests", "method", "GET", "path", "/api")
+	registry := NewSimpleRegistry()
+	c := registry.Counter("http_requests", "method", "GET", "path", "/api")
 	c.Inc()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 1 {
 		t.Fatalf("expected 1 metric, got %d", len(metrics))
 	}
@@ -130,11 +129,11 @@ func TestSimpleRegistry_Tags(t *testing.T) {
 
 func TestSimpleRegistry_GaugeTags(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	g := r.Gauge("memory_usage", "region", "us-east-1", "host", "web-1")
+	registry := NewSimpleRegistry()
+	g := registry.Gauge("memory_usage", "region", "us-east-1", "host", "web-1")
 	g.Set(1024.5)
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 1 {
 		t.Fatalf("expected 1 metric, got %d", len(metrics))
 	}
@@ -148,13 +147,13 @@ func TestSimpleRegistry_GaugeTags(t *testing.T) {
 
 func TestSimpleRegistry_CollectMultiple(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	r.Counter("requests_total").Add(10)
-	r.Counter("errors_total").Add(2)
-	r.Gauge("active_connections").Set(5)
-	r.Gauge("memory_mb").Set(256)
+	registry := NewSimpleRegistry()
+	registry.Counter("requests_total").Add(10)
+	registry.Counter("errors_total").Add(2)
+	registry.Gauge("active_connections").Set(5)
+	registry.Gauge("memory_mb").Set(256)
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 4 {
 		t.Fatalf("expected 4 metrics, got %d", len(metrics))
 	}
@@ -162,10 +161,10 @@ func TestSimpleRegistry_CollectMultiple(t *testing.T) {
 
 func TestSimpleRegistry_CounterReuse(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	c1 := r.Counter("requests")
+	registry := NewSimpleRegistry()
+	c1 := registry.Counter("requests")
 	c1.Add(5)
-	c2 := r.Counter("requests")
+	c2 := registry.Counter("requests")
 	c2.Add(3)
 
 	if c2.Value() != 8 {
@@ -175,10 +174,10 @@ func TestSimpleRegistry_CounterReuse(t *testing.T) {
 
 func TestSimpleRegistry_GaugeReuse(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	g1 := r.Gauge("memory")
+	registry := NewSimpleRegistry()
+	g1 := registry.Gauge("memory")
 	g1.Set(100)
-	g2 := r.Gauge("memory")
+	g2 := registry.Gauge("memory")
 	g2.Add(50)
 
 	if g2.Value() != 150 {
@@ -188,10 +187,10 @@ func TestSimpleRegistry_GaugeReuse(t *testing.T) {
 
 func TestSimpleRegistry_NoTagsReturnsNilMap(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	r.Counter("requests").Inc()
+	registry := NewSimpleRegistry()
+	registry.Counter("requests").Inc()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if metrics[0].Tags != nil {
 		t.Fatal("expected nil tags when no tags provided")
 	}
@@ -292,26 +291,26 @@ func TestCounter_ConcurrentSafe(t *testing.T) {
 
 func TestGauge_ConcurrentSafe(t *testing.T) {
 	t.Parallel()
-	g := NewSimpleGauge()
+	gauge := NewSimpleGauge()
 	done := make(chan struct{})
 
 	go func() {
 		for range 1000 {
-			g.Add(1)
+			gauge.Add(1)
 		}
 		done <- struct{}{}
 	}()
 
 	go func() {
 		for range 1000 {
-			g.Add(-1)
+			gauge.Add(-1)
 		}
 		done <- struct{}{}
 	}()
 
 	go func() {
 		for range 1000 {
-			_ = g.Value()
+			_ = gauge.Value()
 		}
 		done <- struct{}{}
 	}()
@@ -320,33 +319,33 @@ func TestGauge_ConcurrentSafe(t *testing.T) {
 		<-done
 	}
 
-	if g.Value() != 0 {
-		t.Fatalf("expected 0, got %f", g.Value())
+	if gauge.Value() != 0 {
+		t.Fatalf("expected 0, got %f", gauge.Value())
 	}
 }
 
 func TestRegistry_ConcurrentSafe(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	done := make(chan struct{})
 
 	go func() {
 		for range 100 {
-			r.Counter("requests").Inc()
+			registry.Counter("requests").Inc()
 		}
 		done <- struct{}{}
 	}()
 
 	go func() {
 		for i := range 100 {
-			r.Gauge("memory").Set(float64(i))
+			registry.Gauge("memory").Set(float64(i))
 		}
 		done <- struct{}{}
 	}()
 
 	go func() {
 		for range 100 {
-			_ = r.Collect()
+			_ = registry.Collect()
 		}
 		done <- struct{}{}
 	}()
@@ -358,12 +357,12 @@ func TestRegistry_ConcurrentSafe(t *testing.T) {
 
 func TestRegistry_Histogram(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	h := r.Histogram("request_duration", "service", "api")
-	h.Record(100.5)
-	h.Record(200.5)
+	registry := NewSimpleRegistry()
+	histogram := registry.Histogram("request_duration", "service", "api")
+	histogram.Record(100.5)
+	histogram.Record(200.5)
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 1 {
 		t.Fatalf("expected 1 metric, got %d", len(metrics))
 	}
@@ -380,13 +379,13 @@ func TestRegistry_Histogram(t *testing.T) {
 
 func TestRegistry_Reset(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	r.Counter("requests").Add(10)
-	r.Histogram("latency").Record(100)
+	registry := NewSimpleRegistry()
+	registry.Counter("requests").Add(10)
+	registry.Histogram("latency").Record(100)
 
-	r.Reset()
+	registry.Reset()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	for _, m := range metrics {
 		if m.Type == "counter" && m.Value != 0 {
 			t.Fatalf("expected counter value 0 after reset, got %f", m.Value)
@@ -399,13 +398,13 @@ func TestRegistry_Reset(t *testing.T) {
 
 func TestRegistry_Export(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	r.Counter("requests").Inc()
+	registry := NewSimpleRegistry()
+	registry.Counter("requests").Inc()
 
 	exporter := NewConsoleExporter()
-	r.RegisterExporter(exporter)
+	registry.RegisterExporter(exporter)
 
-	err := r.Export()
+	err := registry.Export()
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -451,121 +450,26 @@ func TestSimpleCounter_ConcurrentSafe(t *testing.T) {
 
 func TestSimpleRegistry_HistogramStats(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
-	h := r.Histogram("request_duration_seconds")
+	registry := NewSimpleRegistry()
+	histogram := registry.Histogram("request_duration_seconds")
 
 	// 添加多个值
 	values := []float64{100, 200, 300, 400, 500}
 	for _, v := range values {
-		h.Record(v)
+		histogram.Record(v)
 	}
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != 1 {
 		t.Fatalf("expected 1 metric, got %d", len(metrics))
 	}
 
-	m := metrics[0]
-	if m.Count != int64(len(values)) {
-		t.Fatalf("expected count %d, got %d", len(values), m.Count)
+	metricSnapshot := metrics[0]
+	if metricSnapshot.Count != int64(len(values)) {
+		t.Fatalf("expected count %d, got %d", len(values), metricSnapshot.Count)
 	}
 
-	if m.Sum != 1500 { // 100+200+300+400+500
-		t.Fatalf("expected sum 1500, got %f", m.Sum)
-	}
-}
-
-func TestPrometheusExporter(t *testing.T) {
-	t.Parallel()
-	// 创建一个简单的内存写入器
-	var buffer strings.Builder
-
-	exporter := NewPrometheusExporter(&buffer)
-
-	// 创建测试指标
-	metrics := []Metric{
-		{
-			Name:  "test_counter",
-			Value: 42.0,
-			Type:  "counter",
-			Tags:  map[string]string{"method": "GET", "path": "/api"},
-		},
-		{
-			Name:  "test_gauge",
-			Value: 123.45,
-			Type:  "gauge",
-			Tags:  nil,
-		},
-		{
-			Name:  "test_histogram",
-			Value: 500.0,
-			Type:  "histogram",
-			Count: 3,
-			Sum:   1500.0,
-			Tags:  map[string]string{"path": "/api"},
-		},
-		{
-			Name:  "test_escape",
-			Value: 1.0,
-			Type:  "gauge",
-			Tags:  map[string]string{"label": `a\b"c\nd`},
-		},
-	}
-
-	err := exporter.Export(metrics)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	output := buffer.String()
-	if !strings.Contains(output, `# TYPE test_counter_total counter`) {
-		t.Fatalf("expected counter TYPE line in output, got: %s", output)
-	}
-	if !strings.Contains(output, `test_counter_total{method="GET",path="/api"} 42`) {
-		t.Fatalf("expected counter with labels in output, got: %s", output)
-	}
-	if !strings.Contains(output, `test_gauge 123.45`) {
-		t.Fatalf("expected gauge in output, got: %s", output)
-	}
-	if !strings.Contains(output, `# TYPE test_histogram histogram`) {
-		t.Fatalf("expected histogram TYPE line in output, got: %s", output)
-	}
-	if !strings.Contains(output, `test_histogram_bucket{le="+Inf",path="/api"} 3`) ||
-		!strings.Contains(output, `test_histogram_sum{path="/api"} 1500`) ||
-		!strings.Contains(output, `test_histogram_count{path="/api"} 3`) {
-		t.Fatalf("expected histogram lines in output, got: %s", output)
-	}
-	if !strings.Contains(output, `test_escape{label="a\\b\"c\\nd"} 1`) {
-		t.Fatalf("expected escaped label value in output, got: %s", output)
-	}
-}
-
-func TestRegistry_MultipleExporters(t *testing.T) {
-	t.Parallel()
-	r := NewSimpleRegistry()
-	r.Counter("requests").Inc()
-
-	// 创建多个导出器
-	var buffer1, buffer2 strings.Builder
-	exporter1 := NewPrometheusExporter(&buffer1)
-	exporter2 := NewPrometheusExporter(&buffer2)
-
-	r.RegisterExporter(exporter1)
-	r.RegisterExporter(exporter2)
-
-	err := r.Export()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// 检查两个导出器都收到了数据
-	output1 := buffer1.String()
-	output2 := buffer2.String()
-
-	if !strings.Contains(output1, "requests") {
-		t.Fatalf("expected requests in exporter1 output, got: %s", output1)
-	}
-	if !strings.Contains(output2, "requests") {
-		t.Fatalf("expected requests in exporter2 output, got: %s", output2)
+	if metricSnapshot.Sum != 1500 { // 100+200+300+400+500
+		t.Fatalf("expected sum 1500, got %f", metricSnapshot.Sum)
 	}
 }

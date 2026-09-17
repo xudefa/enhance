@@ -48,6 +48,7 @@ func NewWeightedRandomSelector() Selector {
 	return &weightedRandomSelectorImpl{rng: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))}
 }
 
+// Select 轮询选择一个实例，无实例时返回 ErrNoInstances。
 func (s *roundRobinSelectorImpl) Select(instances []InstanceInfo) (InstanceInfo, error) {
 	if len(instances) == 0 {
 		return InstanceInfo{}, ErrNoInstances
@@ -56,6 +57,7 @@ func (s *roundRobinSelectorImpl) Select(instances []InstanceInfo) (InstanceInfo,
 	return instances[idx%uint64(len(instances))], nil
 }
 
+// Select 随机选择一个实例，无实例时返回 ErrNoInstances。
 func (s *randomSelectorImpl) Select(instances []InstanceInfo) (InstanceInfo, error) {
 	if len(instances) == 0 {
 		return InstanceInfo{}, ErrNoInstances
@@ -66,9 +68,10 @@ func (s *randomSelectorImpl) Select(instances []InstanceInfo) (InstanceInfo, err
 	return instances[idx], nil
 }
 
+// Select 按权重随机选择一个实例，权重非正数按 1 计。
 func (s *weightedRandomSelectorImpl) Select(instances []InstanceInfo) (InstanceInfo, error) {
-	n := len(instances)
-	if n == 0 {
+	instanceCount := len(instances)
+	if instanceCount == 0 {
 		return InstanceInfo{}, ErrNoInstances
 	}
 	// 第一步：计算总权重，权重 <= 0 的按 1 计算
@@ -86,15 +89,15 @@ func (s *weightedRandomSelectorImpl) Select(instances []InstanceInfo) (InstanceI
 	s.mu.Unlock()
 	// 第三步：遍历实例，累减权重直到找到目标实例
 	for _, inst := range instances {
-		w := inst.Weight
-		if w <= 0 {
-			w = 1
+		weight := inst.Weight
+		if weight <= 0 {
+			weight = 1
 		}
-		target -= w
+		target -= weight
 		if target < 0 {
 			return inst, nil
 		}
 	}
 	// 兜底返回最后一个实例（正常情况下不会执行到此）
-	return instances[n-1], nil
+	return instances[instanceCount-1], nil
 }

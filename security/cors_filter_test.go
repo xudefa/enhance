@@ -8,22 +8,22 @@ import (
 func TestNewCorsFilter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{})
+	corsFilter := NewCorsFilter(CorsConfig{})
 
-	if f == nil {
+	if corsFilter == nil {
 		t.Fatal("expected non-nil CorsFilter")
 	}
-	if f.Order() != -100 {
-		t.Errorf("expected order -100, got %d", f.Order())
+	if corsFilter.Order() != -100 {
+		t.Errorf("expected order -100, got %d", corsFilter.Order())
 	}
-	if len(f.config.AllowedMethods) == 0 {
+	if len(corsFilter.config.AllowedMethods) == 0 {
 		t.Error("expected default AllowedMethods")
 	}
-	if len(f.config.AllowedHeaders) == 0 {
+	if len(corsFilter.config.AllowedHeaders) == 0 {
 		t.Error("expected default AllowedHeaders")
 	}
-	if f.config.MaxAge != 3600 {
-		t.Errorf("expected default MaxAge 3600, got %d", f.config.MaxAge)
+	if corsFilter.config.MaxAge != 3600 {
+		t.Errorf("expected default MaxAge 3600, got %d", corsFilter.config.MaxAge)
 	}
 }
 
@@ -38,36 +38,36 @@ func TestNewCorsFilter_CustomConfig(t *testing.T) {
 		AllowCredentials: true,
 		MaxAge:           7200,
 	}
-	f := NewCorsFilter(cfg)
+	corsFilter := NewCorsFilter(cfg)
 
-	if len(f.config.AllowedOrigins) != 1 || f.config.AllowedOrigins[0] != "http://example.com" {
-		t.Errorf("expected AllowedOrigins [http://example.com], got %v", f.config.AllowedOrigins)
+	if len(corsFilter.config.AllowedOrigins) != 1 || corsFilter.config.AllowedOrigins[0] != "http://example.com" {
+		t.Errorf("expected AllowedOrigins [http://example.com], got %v", corsFilter.config.AllowedOrigins)
 	}
-	if f.config.AllowCredentials != true {
+	if corsFilter.config.AllowCredentials != true {
 		t.Error("expected AllowCredentials to be true")
 	}
-	if f.config.MaxAge != 7200 {
-		t.Errorf("expected MaxAge 7200, got %d", f.config.MaxAge)
+	if corsFilter.config.MaxAge != 7200 {
+		t.Errorf("expected MaxAge 7200, got %d", corsFilter.config.MaxAge)
 	}
 }
 
 func TestCorsFilter_DoFilter_TypeErrors(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
+	corsFilter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
 	chain := &mockFilterChain{}
 
-	err := f.DoFilter("notContext", nil, nil, chain)
+	err := corsFilter.DoFilter("notContext", nil, nil, chain)
 	if err == nil {
 		t.Error("expected error for non-context")
 	}
 
-	err = f.DoFilter(context.Background(), "notReq", nil, chain)
+	err = corsFilter.DoFilter(context.Background(), "notReq", nil, chain)
 	if err == nil {
 		t.Error("expected error for non-request")
 	}
 
-	err = f.DoFilter(context.Background(), newMockSecurityRequest("GET", "/", nil), "notResp", chain)
+	err = corsFilter.DoFilter(context.Background(), newMockSecurityRequest("GET", "/", nil), "notResp", chain)
 	if err == nil {
 		t.Error("expected error for non-response")
 	}
@@ -76,13 +76,13 @@ func TestCorsFilter_DoFilter_TypeErrors(t *testing.T) {
 func TestCorsFilter_NoOrigin_PassesThrough(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
+	corsFilter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("GET", "/", nil)
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCorsFilter_NoOrigin_PassesThrough(t *testing.T) {
 func TestCorsFilter_AllowedOrigin(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{
+	corsFilter := NewCorsFilter(CorsConfig{
 		AllowedOrigins: []string{"http://example.com"},
 	})
 	chain := &mockFilterChain{}
@@ -102,7 +102,7 @@ func TestCorsFilter_AllowedOrigin(t *testing.T) {
 	req := newMockSecurityRequest("GET", "/", map[string]string{"Origin": "http://example.com"})
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestCorsFilter_AllowedOrigin(t *testing.T) {
 func TestCorsFilter_AllowedOriginWithCredentials(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{
+	corsFilter := NewCorsFilter(CorsConfig{
 		AllowedOrigins:   []string{"http://example.com"},
 		AllowCredentials: true,
 	})
@@ -126,7 +126,7 @@ func TestCorsFilter_AllowedOriginWithCredentials(t *testing.T) {
 	req := newMockSecurityRequest("GET", "/", map[string]string{"Origin": "http://example.com"})
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestCorsFilter_AllowedOriginWithCredentials(t *testing.T) {
 func TestCorsFilter_PreflightRequest(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{
+	corsFilter := NewCorsFilter(CorsConfig{
 		AllowedOrigins:   []string{"http://example.com"},
 		AllowedMethods:   []string{"GET", "POST"},
 		AllowedHeaders:   []string{"Content-Type"},
@@ -151,7 +151,7 @@ func TestCorsFilter_PreflightRequest(t *testing.T) {
 	req := newMockSecurityRequest("OPTIONS", "/", map[string]string{"Origin": "http://example.com"})
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestCorsFilter_PreflightRequest(t *testing.T) {
 func TestCorsFilter_DisallowedOrigin(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{
+	corsFilter := NewCorsFilter(CorsConfig{
 		AllowedOrigins: []string{"http://example.com"},
 	})
 	chain := &mockFilterChain{}
@@ -186,7 +186,7 @@ func TestCorsFilter_DisallowedOrigin(t *testing.T) {
 	req := newMockSecurityRequest("GET", "/", map[string]string{"Origin": "http://evil.com"})
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,13 +231,13 @@ func TestMatchOriginPattern(t *testing.T) {
 func TestCorsFilter_EmptyAllowedOrigins(t *testing.T) {
 	t.Parallel()
 
-	f := NewCorsFilter(CorsConfig{AllowedOrigins: []string{}})
+	corsFilter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{}})
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("GET", "/", map[string]string{"Origin": "http://example.com"})
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := corsFilter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

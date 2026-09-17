@@ -153,7 +153,7 @@ func TestLifecycleInitError(t *testing.T) {
 		t.Fatal("Expected Initialize to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected init error, got: %v", err)
 	}
 }
@@ -175,7 +175,7 @@ func TestLifecycleFactoryError(t *testing.T) {
 		t.Fatal("Expected Initialize to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected factory error, got: %v", err)
 	}
 }

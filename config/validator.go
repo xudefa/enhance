@@ -87,18 +87,18 @@ func (v *DefaultValidator) AddMin(field string, min int) {
 	v.rules = append(v.rules, ValidationRule{
 		Field: field,
 		Check: func(value any) error {
-			switch val := value.(type) {
+			switch raw := value.(type) {
 			case int:
-				if val < min {
-					return fmt.Errorf("value %d below minimum %d", val, min)
+				if raw < min {
+					return fmt.Errorf("value %d below minimum %d", raw, min)
 				}
 			case float64:
-				if val < float64(min) {
-					return fmt.Errorf("value %f below minimum %d", val, min)
+				if raw < float64(min) {
+					return fmt.Errorf("value %f below minimum %d", raw, min)
 				}
 			case string:
-				if len(val) < min {
-					return fmt.Errorf("length %d below minimum %d", len(val), min)
+				if len(raw) < min {
+					return fmt.Errorf("length %d below minimum %d", len(raw), min)
 				}
 			}
 			return nil
@@ -111,18 +111,18 @@ func (v *DefaultValidator) AddMax(field string, max int) {
 	v.rules = append(v.rules, ValidationRule{
 		Field: field,
 		Check: func(value any) error {
-			switch val := value.(type) {
+			switch raw := value.(type) {
 			case int:
-				if val > max {
-					return fmt.Errorf("value %d above maximum %d", val, max)
+				if raw > max {
+					return fmt.Errorf("value %d above maximum %d", raw, max)
 				}
 			case float64:
-				if val > float64(max) {
-					return fmt.Errorf("value %f above maximum %d", val, max)
+				if raw > float64(max) {
+					return fmt.Errorf("value %f above maximum %d", raw, max)
 				}
 			case string:
-				if len(val) > max {
-					return fmt.Errorf("length %d above maximum %d", len(val), max)
+				if len(raw) > max {
+					return fmt.Errorf("length %d above maximum %d", len(raw), max)
 				}
 			}
 			return nil

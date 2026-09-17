@@ -117,55 +117,66 @@ func DetectConflicts(starters []StarterModule) []Conflict {
 
 // detectCycles 检测循环依赖
 func detectCycles(starters []StarterModule) [][]string {
-	cycles := make([][]string, 0)
-	adj := make(map[string][]string)
-	nameSet := make(map[string]bool)
+	detector := &cycleDetector{
+		adj:      buildDependencyAdjacency(starters),
+		visited:  make(map[string]bool),
+		recStack: make(map[string]bool),
+	}
 
 	for _, s := range starters {
-		nameSet[s.Name] = true
+		if !detector.visited[s.Name] {
+			detector.dfs(s.Name, []string{})
+		}
+	}
+
+	return detector.cycles
+}
+
+// cycleDetector 循环依赖检测器，封装 DFS 遍历状态。
+type cycleDetector struct {
+	adj      map[string][]string
+	visited  map[string]bool
+	recStack map[string]bool
+	cycles   [][]string
+}
+
+// buildDependencyAdjacency 构建启动器名称到依赖列表的邻接表。
+func buildDependencyAdjacency(starters []StarterModule) map[string][]string {
+	adj := make(map[string][]string)
+	for _, s := range starters {
 		adj[s.Name] = s.Dependencies
 	}
+	return adj
+}
 
-	visited := make(map[string]bool)
-	recStack := make(map[string]bool)
+// dfs 深度优先遍历依赖图，检测并收集循环依赖。
+func (d *cycleDetector) dfs(node string, path []string) {
+	d.visited[node] = true
+	d.recStack[node] = true
+	path = append(path, node)
 
-	var dfs func(node string, path []string)
-	dfs = func(node string, path []string) {
-		visited[node] = true
-		recStack[node] = true
-		path = append(path, node)
-
-		for _, neighbor := range adj[node] {
-			if !nameSet[neighbor] {
-				continue
-			}
-			if !visited[neighbor] {
-				dfs(neighbor, path)
-			} else if recStack[neighbor] {
-				cycleStart := -1
-				for i, n := range path {
-					if n == neighbor {
-						cycleStart = i
-						break
-					}
-				}
-				if cycleStart >= 0 {
-					cycle := append(append([]string{}, path[cycleStart:]...), neighbor)
-					cycles = append(cycles, cycle)
-				}
-			}
+	for _, neighbor := range d.adj[node] {
+		if _, exists := d.adj[neighbor]; !exists {
+			continue
 		}
-
-		recStack[node] = false
-	}
-
-	for _, s := range starters {
-		if !visited[s.Name] {
-			dfs(s.Name, []string{})
+		if !d.visited[neighbor] {
+			d.dfs(neighbor, path)
+		} else if d.recStack[neighbor] {
+			cycleStart := -1
+			for i, n := range path {
+				if n == neighbor {
+					cycleStart = i
+					break
+				}
+			}
+			if cycleStart >= 0 {
+				cycle := append(append([]string{}, path[cycleStart:]...), neighbor)
+				d.cycles = append(d.cycles, cycle)
+			}
 		}
 	}
 
-	return cycles
+	d.recStack[node] = false
 }
 
 // ValidateStarters 验证 Starter 列表的有效性
@@ -193,11 +204,31 @@ func ResolveDependencies(starters []StarterModule) ([]StarterModule, error) {
 		return nil, err
 	}
 
+	nameMap := buildModuleNameMap(starters)
+
+	inDegree, adj := buildModuleDependencyGraph(starters, nameMap)
+
+	// 拓扑排序（Kahn 算法），入度为 0 的节点依次出队
+	resolved := topoSortModules(nameMap, inDegree, adj)
+
+	if len(resolved) != len(starters) {
+		return nil, fmt.Errorf("存在循环依赖")
+	}
+
+	return resolved, nil
+}
+
+// buildModuleNameMap 构建 Starter 模块名称到实例的映射。
+func buildModuleNameMap(starters []StarterModule) map[string]StarterModule {
 	nameMap := make(map[string]StarterModule)
 	for _, s := range starters {
 		nameMap[s.Name] = s
 	}
+	return nameMap
+}
 
+// buildModuleDependencyGraph 构建 Starter 模块依赖图的入度表和邻接表。
+func buildModuleDependencyGraph(starters []StarterModule, nameMap map[string]StarterModule) (map[string]int, map[string][]string) {
 	inDegree := make(map[string]int)
 	adj := make(map[string][]string)
 
@@ -212,7 +243,11 @@ func ResolveDependencies(starters []StarterModule) ([]StarterModule, error) {
 			}
 		}
 	}
+	return inDegree, adj
+}
 
+// topoSortModules 使用 Kahn 算法对 Starter 模块进行拓扑排序。
+func topoSortModules(nameMap map[string]StarterModule, inDegree map[string]int, adj map[string][]string) []StarterModule {
 	queue := make([]string, 0)
 	for name, deg := range inDegree {
 		if deg == 0 {
@@ -222,11 +257,11 @@ func ResolveDependencies(starters []StarterModule) ([]StarterModule, error) {
 
 	sort.Strings(queue)
 
-	result := make([]StarterModule, 0)
+	resolved := make([]StarterModule, 0)
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
-		result = append(result, nameMap[name])
+		resolved = append(resolved, nameMap[name])
 
 		nextDeps := adj[name]
 		sort.Strings(nextDeps)
@@ -238,9 +273,5 @@ func ResolveDependencies(starters []StarterModule) ([]StarterModule, error) {
 		}
 	}
 
-	if len(result) != len(starters) {
-		return nil, fmt.Errorf("存在循环依赖")
-	}
-
-	return result, nil
+	return resolved
 }

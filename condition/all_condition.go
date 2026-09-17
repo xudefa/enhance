@@ -32,6 +32,7 @@ func AllWithOptions(opts ...CompositeOption) func(conditions ...Condition) Condi
 	}
 }
 
+// Matches 依次判断所有子条件，任一不匹配即短路返回 false。
 func (a *allCondition) Matches(ctx ConditionContext) bool {
 	for _, c := range a.conditions {
 		if !c.Matches(ctx) {
@@ -41,6 +42,7 @@ func (a *allCondition) Matches(ctx ConditionContext) bool {
 	return true
 }
 
+// String 返回逻辑与复合条件的可读描述。
 func (a *allCondition) String() string {
 	if a.description != "" {
 		return "All(" + a.description + ")"
@@ -50,12 +52,12 @@ func (a *allCondition) String() string {
 
 // joinConditions 将条件列表格式化为可读字符串，用指定的分隔符连接每个条件的 String() 输出。
 func joinConditions(conditions []Condition, sep string) string {
-	var result strings.Builder
+	var builder strings.Builder
 	for i, c := range conditions {
 		if i > 0 {
-			result.WriteString(sep)
+			builder.WriteString(sep)
 		}
-		result.WriteString(c.String())
+		builder.WriteString(c.String())
 	}
-	return result.String()
+	return builder.String()
 }

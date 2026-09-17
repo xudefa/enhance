@@ -26,9 +26,9 @@ func TestEnvironment_GetProperty_Plan(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := env.GetPropertyWithDefault(tt.key, tt.expected)
-			if result != tt.expected {
-				t.Errorf("GetPropertyWithDefault() = %v, want %v", result, tt.expected)
+			got := env.GetPropertyWithDefault(tt.key, tt.expected)
+			if got != tt.expected {
+				t.Errorf("GetPropertyWithDefault() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -71,9 +71,9 @@ func TestEnvironment_AcceptsProfiles_Plan(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := env.AcceptsProfiles(tt.profiles...)
-			if result != tt.expected {
-				t.Errorf("AcceptsProfiles() = %v, want %v", result, tt.expected)
+			got := env.AcceptsProfiles(tt.profiles...)
+			if got != tt.expected {
+				t.Errorf("AcceptsProfiles() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

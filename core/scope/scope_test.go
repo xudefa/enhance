@@ -8,7 +8,7 @@ import (
 
 func TestSingletonScopeGet(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 
 	callCount := int32(0)
 	factory := func(c ...any) (any, error) {
@@ -17,13 +17,13 @@ func TestSingletonScopeGet(t *testing.T) {
 	}
 
 	// First call should create instance
-	instance1, err := s.Get("bean1", factory)
+	instance1, err := scope.Get("bean1", factory)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
 
 	// Second call should return cached instance
-	instance2, err := s.Get("bean1", factory)
+	instance2, err := scope.Get("bean1", factory)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -40,13 +40,13 @@ func TestSingletonScopeGet(t *testing.T) {
 
 func TestSingletonScopeDifferentBeans(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 
 	factory1 := func(c ...any) (any, error) { return "bean1", nil }
 	factory2 := func(c ...any) (any, error) { return "bean2", nil }
 
-	instance1, _ := s.Get("bean1", factory1)
-	instance2, _ := s.Get("bean2", factory2)
+	instance1, _ := scope.Get("bean1", factory1)
+	instance2, _ := scope.Get("bean2", factory2)
 
 	if instance1 == instance2 {
 		t.Error("Expected different instances for different bean IDs")
@@ -55,15 +55,15 @@ func TestSingletonScopeDifferentBeans(t *testing.T) {
 
 func TestSingletonScopeRemove(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 
 	factory := func(c ...any) (any, error) { return "instance", nil }
 
-	_, _ = s.Get("bean1", factory)
-	s.Remove("bean1")
+	_, _ = scope.Get("bean1", factory)
+	scope.Remove("bean1")
 
 	// After remove, should create new instance
-	newInstance, _ := s.Get("bean1", factory)
+	newInstance, _ := scope.Get("bean1", factory)
 	if newInstance == nil {
 		t.Error("Expected new instance after remove")
 	}
@@ -71,17 +71,17 @@ func TestSingletonScopeRemove(t *testing.T) {
 
 func TestSingletonScopeClear(t *testing.T) {
 	t.Parallel()
-	s := NewSingletonScope()
+	scope := NewSingletonScope()
 
 	factory := func(c ...any) (any, error) { return "instance", nil }
 
-	_, _ = s.Get("bean1", factory)
-	_, _ = s.Get("bean2", factory)
-	s.Clear()
+	_, _ = scope.Get("bean1", factory)
+	_, _ = scope.Get("bean2", factory)
+	scope.Clear()
 
 	// After clear, should create new instances
-	newInstance1, _ := s.Get("bean1", factory)
-	newInstance2, _ := s.Get("bean2", factory)
+	newInstance1, _ := scope.Get("bean1", factory)
+	newInstance2, _ := scope.Get("bean2", factory)
 
 	if newInstance1 == nil || newInstance2 == nil {
 		t.Error("Expected new instances after clear")
@@ -122,7 +122,7 @@ func TestSingletonScopeConcurrent(t *testing.T) {
 
 func TestPrototypeScopeGet(t *testing.T) {
 	t.Parallel()
-	s := NewPrototypeScope()
+	scope := NewPrototypeScope()
 
 	callCount := int32(0)
 	factory := func(c ...any) (any, error) {
@@ -132,12 +132,12 @@ func TestPrototypeScopeGet(t *testing.T) {
 	}
 
 	// Each call should create new instance
-	instance1, err := s.Get("bean1", factory)
+	instance1, err := scope.Get("bean1", factory)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
 
-	instance2, err := s.Get("bean1", factory)
+	instance2, err := scope.Get("bean1", factory)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}

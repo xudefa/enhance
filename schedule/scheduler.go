@@ -54,33 +54,38 @@ type scheduledTask struct {
 // taskHeap 基于最小堆的任务调度队列。
 type taskHeap []*scheduledTask
 
+// Len 返回堆中任务的数量。
 func (h taskHeap) Len() int { return len(h) }
 
+// Less 按下次运行时间比较两个任务，用于最小堆排序。
 func (h taskHeap) Less(i, j int) bool {
 	return h[i].nextRun.Before(h[j].nextRun)
 }
 
+// Swap 交换堆中两个任务的位置并更新索引。
 func (h taskHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 	h[i].index = i
 	h[j].index = j
 }
 
+// Push 将任务追加到堆尾并记录其索引。
 func (h *taskHeap) Push(x any) {
-	n := len(*h)
-	item, _ := x.(*scheduledTask)
-	item.index = n
-	*h = append(*h, item)
+	size := len(*h)
+	task, _ := x.(*scheduledTask)
+	task.index = size
+	*h = append(*h, task)
 }
 
+// Pop 移除并返回堆顶任务，将其索引标记为无效。
 func (h *taskHeap) Pop() any {
 	old := *h
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil
-	item.index = -1
-	*h = old[:n-1]
-	return item
+	size := len(old)
+	task := old[size-1]
+	old[size-1] = nil
+	task.index = -1
+	*h = old[:size-1]
+	return task
 }
 
 // DefaultScheduler 默认调度器实现。
@@ -118,7 +123,7 @@ func NewScheduler(ctx context.Context, opts ...SchedulerOption) *DefaultSchedule
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	s := &DefaultScheduler{
+	scheduler := &DefaultScheduler{
 		tasks:        make(map[string]*scheduledTask),
 		semaphore:    make(chan struct{}, cfg.poolSize),
 		errorHandler: cfg.errorHandler,
@@ -128,9 +133,9 @@ func NewScheduler(ctx context.Context, opts ...SchedulerOption) *DefaultSchedule
 		done:         make(chan struct{}),
 	}
 
-	heap.Init(&s.heap)
+	heap.Init(&scheduler.heap)
 
-	return s
+	return scheduler
 }
 
 // Start 启动调度器，开始触发定时任务。
@@ -163,59 +168,69 @@ func (s *DefaultScheduler) run() {
 			s.logger.Info(s.ctx, "scheduler stopping")
 			return
 		default:
-			s.mu.Lock()
-			if s.heap.Len() == 0 {
-				s.mu.Unlock()
-				time.Sleep(100 * time.Millisecond)
-				continue
+		}
+
+		s.mu.Lock()
+		if s.heap.Len() == 0 {
+			s.mu.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		next := s.heap[0]
+		now := time.Now()
+
+		if next.nextRun.After(now) {
+			s.mu.Unlock()
+			if !s.waitForNextRun(next.nextRun.Sub(now)) {
+				return
 			}
+			continue
+		}
 
-			next := s.heap[0]
-			now := time.Now()
+		heap.Pop(&s.heap)
+		s.mu.Unlock()
 
-			if next.nextRun.After(now) {
-				waitTime := next.nextRun.Sub(now)
-				s.mu.Unlock()
+		if !s.taskExists(next.task.Name()) {
+			// 任务已注销，不再执行
+			continue
+		}
 
-				timer := time.NewTimer(waitTime)
-				select {
-				case <-timer.C:
-					// 等待完成，继续执行
-				case <-s.ctx.Done():
-					timer.Stop()
-					return
-				}
-				timer.Stop()
-			} else {
-				heap.Pop(&s.heap)
-				s.mu.Unlock()
+		s.executeTask(next)
 
-				// 检查任务是否已被注销
-				s.mu.RLock()
-				_, exists := s.tasks[next.task.Name()]
-				s.mu.RUnlock()
-
-				if !exists {
-					// 任务已注销，不再执行
-					continue
-				}
-
-				s.executeTask(next)
-
-				// 再次检查任务是否仍然存在
-				s.mu.RLock()
-				_, stillExists := s.tasks[next.task.Name()]
-				s.mu.RUnlock()
-
-				if stillExists {
-					s.mu.Lock()
-					next.nextRun = s.calculateNextRun(next.task, next.nextRun)
-					heap.Push(&s.heap, next)
-					s.mu.Unlock()
-				}
-			}
+		// 再次检查任务是否仍然存在
+		if s.taskExists(next.task.Name()) {
+			s.requeueTask(next)
 		}
 	}
+}
+
+// taskExists 检查任务是否仍然注册。
+func (s *DefaultScheduler) taskExists(name string) bool {
+	s.mu.RLock()
+	_, exists := s.tasks[name]
+	s.mu.RUnlock()
+	return exists
+}
+
+// waitForNextRun 等待到下个任务执行时间，返回 false 表示调度器已停止。
+func (s *DefaultScheduler) waitForNextRun(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-s.ctx.Done():
+		return false
+	}
+}
+
+// requeueTask 计算下次执行时间并重新入堆。
+func (s *DefaultScheduler) requeueTask(next *scheduledTask) {
+	s.mu.Lock()
+	next.nextRun = s.calculateNextRun(next.task, next.nextRun)
+	heap.Push(&s.heap, next)
+	s.mu.Unlock()
 }
 
 // executeTask 执行单个任务。
@@ -227,10 +242,10 @@ func (s *DefaultScheduler) executeTask(st *scheduledTask) {
 			defer s.wg.Done()
 			defer func() { <-s.semaphore }()
 			defer func() {
-				if r := recover(); r != nil {
+				if rec := recover(); rec != nil {
 					s.logger.Error(s.ctx, "task panic recovered",
 						log.KeyValue{Key: "task", Value: st.task.Name()},
-						log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+						log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", rec)},
 					)
 				}
 			}()

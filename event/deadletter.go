@@ -15,10 +15,14 @@ var dlqKeyCounter atomic.Uint64
 type BackoffStrategy = retry.BackoffStrategy
 
 const (
-	BackoffNone        = retry.BackoffNone
-	BackoffFixed       = retry.BackoffFixed
+	// BackoffNone 无退避，立即重试。
+	BackoffNone = retry.BackoffNone
+	// BackoffFixed 固定间隔退避。
+	BackoffFixed = retry.BackoffFixed
+	// BackoffExponential 指数增长退避。
 	BackoffExponential = retry.BackoffExponential
-	BackoffLinear      = retry.BackoffLinear
+	// BackoffLinear 线性增长退避。
+	BackoffLinear = retry.BackoffLinear
 )
 
 // RetryPolicy 重试策略配置（保留向后兼容，委托给 retry 包）
@@ -173,14 +177,14 @@ func (dlq *DeadLetterQueue) Size() int {
 
 // Events 返回所有死信事件（快照）
 func (dlq *DeadLetterQueue) Events() []FailedEvent {
-	result := make([]FailedEvent, 0)
+	events := make([]FailedEvent, 0)
 	dlq.events.Range(func(key, value any) bool {
 		if fe, ok := value.(FailedEvent); ok {
-			result = append(result, fe)
+			events = append(events, fe)
 		}
 		return true
 	})
-	return result
+	return events
 }
 
 // Clear 清空死信队列
@@ -196,18 +200,18 @@ func (dlq *DeadLetterQueue) Clear() {
 
 // GetByType 获取指定类型的所有失败事件（快照）
 func (dlq *DeadLetterQueue) GetByType(eventType string) []FailedEvent {
-	result := make([]FailedEvent, 0)
+	events := make([]FailedEvent, 0)
 	dlq.events.Range(func(key, value any) bool {
 		fe, ok := value.(FailedEvent)
 		if !ok {
 			return true
 		}
 		if fe.Event.Type() == eventType {
-			result = append(result, fe)
+			events = append(events, fe)
 		}
 		return true
 	})
-	return result
+	return events
 }
 
 // RemoveByType 移除指定类型的所有事件

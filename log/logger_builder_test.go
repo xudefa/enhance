@@ -77,9 +77,9 @@ func TestLoggerBuilder_Sampler(t *testing.T) {
 	t.Parallel()
 
 	b := NewLoggerBuilder()
-	s := NewRandomSampler(0.5)
-	b.Sampler(s)
-	if b.sampler != s {
+	sampler := NewRandomSampler(0.5)
+	b.Sampler(sampler)
+	if b.sampler != sampler {
 		t.Error("expected sampler to be set")
 	}
 }

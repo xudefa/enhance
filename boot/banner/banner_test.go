@@ -17,22 +17,22 @@ func captureStdout(t *testing.T, fn func()) string {
 	defer stdoutMu.Unlock()
 
 	old := os.Stdout
-	r, w, err := os.Pipe()
+	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	os.Stdout = w
+	os.Stdout = writer
 
 	fn()
 
-	_ = w.Close()
+	_ = writer.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
+	if _, err := io.Copy(&buf, reader); err != nil {
 		t.Fatalf("failed to read pipe: %v", err)
 	}
-	_ = r.Close()
+	_ = reader.Close()
 	return buf.String()
 }
 
@@ -193,7 +193,41 @@ func TestASCIIArtBanner_OffMode(t *testing.T) {
 
 func TestLegacyBanner_Print(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
+
+	for _, tt := range testLegacyBannerPrintCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := NewLegacyBanner(
+				WithLines(tt.lines),
+				WithAppName(tt.appName),
+				WithProfiles(tt.profiles),
+			)
+
+			output := captureStdout(t, func() {
+				if err := b.Print(tt.version); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+
+			for _, want := range tt.want {
+				if !strings.Contains(output, want) {
+					t.Errorf("output %q does not contain %q", output, want)
+				}
+			}
+		})
+	}
+}
+
+func testLegacyBannerPrintCases() []struct {
+	name     string
+	lines    []string
+	appName  string
+	profiles []string
+	version  string
+	want     []string
+} {
+	return []struct {
 		name     string
 		lines    []string
 		appName  string
@@ -233,30 +267,6 @@ func TestLegacyBanner_Print(t *testing.T) {
 			version:  "4.0.0",
 			want:     []string{"Application", "4.0.0"},
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			b := NewLegacyBanner(
-				WithLines(tt.lines),
-				WithAppName(tt.appName),
-				WithProfiles(tt.profiles),
-			)
-
-			output := captureStdout(t, func() {
-				if err := b.Print(tt.version); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			})
-
-			for _, want := range tt.want {
-				if !strings.Contains(output, want) {
-					t.Errorf("output %q does not contain %q", output, want)
-				}
-			}
-		})
 	}
 }
 

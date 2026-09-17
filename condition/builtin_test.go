@@ -28,9 +28,16 @@ func TestOnPropertyOrDefault_String(t *testing.T) {
 	}
 }
 
-func TestOnPropertyOrDefault_Matches(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
+func testOnPropertyOrDefaultCases() []struct {
+	name         string
+	key          string
+	defaultValue string
+	expectedVal  string
+	propValue    any
+	propExists   bool
+	want         bool
+} {
+	return []struct {
 		name         string
 		key          string
 		defaultValue string
@@ -76,7 +83,11 @@ func TestOnPropertyOrDefault_Matches(t *testing.T) {
 			want:         false,
 		},
 	}
-	for _, tt := range tests {
+}
+
+func TestOnPropertyOrDefault_Matches(t *testing.T) {
+	t.Parallel()
+	for _, tt := range testOnPropertyOrDefaultCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

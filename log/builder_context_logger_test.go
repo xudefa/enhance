@@ -137,8 +137,8 @@ func TestContextLogger_WithNilContext(t *testing.T) {
 
 	// 不应该 panic
 	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("unexpected panic: %v", r)
+		if rec := recover(); rec != nil {
+			t.Errorf("unexpected panic: %v", rec)
 		}
 	}()
 

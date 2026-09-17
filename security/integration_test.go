@@ -85,33 +85,33 @@ func TestAccessDecisionVoters(t *testing.T) {
 
 	voter := NewWebExpressionVoter()
 
-	result := voter.Vote(ctx, auth, "", []string{"permitAll"})
-	if result != ACCESS_GRANTED {
+	voteResult := voter.Vote(ctx, auth, "", []string{"permitAll"})
+	if voteResult != ACCESS_GRANTED {
 		t.Errorf("permitAll should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, "", []string{"denyAll"})
-	if result != ACCESS_DENIED {
+	voteResult = voter.Vote(ctx, auth, "", []string{"denyAll"})
+	if voteResult != ACCESS_DENIED {
 		t.Errorf("denyAll should be denied")
 	}
 
-	result = voter.Vote(ctx, auth, "", []string{"authenticated"})
-	if result != ACCESS_GRANTED {
+	voteResult = voter.Vote(ctx, auth, "", []string{"authenticated"})
+	if voteResult != ACCESS_GRANTED {
 		t.Errorf("authenticated should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, "", []string{"hasRole('USER')"})
-	if result != ACCESS_GRANTED {
+	voteResult = voter.Vote(ctx, auth, "", []string{"hasRole('USER')"})
+	if voteResult != ACCESS_GRANTED {
 		t.Errorf("hasRole('USER') should be granted")
 	}
 
-	result = voter.Vote(ctx, auth, "", []string{"hasRole('SUPERUSER')"})
-	if result != ACCESS_DENIED {
+	voteResult = voter.Vote(ctx, auth, "", []string{"hasRole('SUPERUSER')"})
+	if voteResult != ACCESS_DENIED {
 		t.Errorf("hasRole('SUPERUSER') should be denied")
 	}
 
-	result = voter.Vote(ctx, auth, "", []string{"hasAnyRole('ADMIN','SUPERUSER')"})
-	if result != ACCESS_GRANTED {
+	voteResult = voter.Vote(ctx, auth, "", []string{"hasAnyRole('ADMIN','SUPERUSER')"})
+	if voteResult != ACCESS_GRANTED {
 		t.Errorf("hasAnyRole('ADMIN','SUPERUSER') should be granted")
 	}
 }

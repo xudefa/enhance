@@ -29,13 +29,13 @@ type ConsistentHash struct {
 
 // NewConsistentHash 创建一致性哈希负载均衡器。
 func NewConsistentHash(replicas ...int) *ConsistentHash {
-	r := 150
+	replicaCount := 150
 	if len(replicas) > 0 {
-		r = replicas[0]
+		replicaCount = replicas[0]
 	}
 
 	ch := &ConsistentHash{
-		replicas: r,
+		replicas: replicaCount,
 	}
 	ch.ringPtr.Store(&hashRing{
 		ring:    make([]uint32, 0),

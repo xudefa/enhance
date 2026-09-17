@@ -116,15 +116,7 @@ func (w *fileWatcherImpl) pollFiles(stopChan chan struct{}) {
 
 	fileHashes := make(map[string]string)
 
-	// 获取目录和扩展名的快照
-	w.mu.RLock()
-	dirs := make([]string, len(w.watchDirs))
-	copy(dirs, w.watchDirs)
-	extensions := make(map[string]bool)
-	for k, v := range w.extensions {
-		extensions[k] = v
-	}
-	w.mu.RUnlock()
+	dirs, extensions := w.getWatchSnapshot()
 
 	for _, dir := range dirs {
 		w.scanDirForWatcher(dir, extensions, fileHashes)
@@ -135,77 +127,86 @@ func (w *fileWatcherImpl) pollFiles(stopChan chan struct{}) {
 		case <-stopChan:
 			return
 		case <-ticker.C:
-			currentFiles := make(map[string]string)
-			for _, dir := range dirs {
-				w.scanDirForWatcher(dir, extensions, currentFiles)
-			}
-
-			for file, newHash := range currentFiles {
-				if oldHash, exists := fileHashes[file]; !exists || oldHash != newHash {
-					eventType := ReloadTypeModified
-					if !exists {
-						eventType = ReloadTypeCreated
-					}
-
-					event := ReloadEvent{
-						File:      file,
-						Type:      eventType,
-						Timestamp: time.Now(),
-						OldHash:   oldHash,
-						NewHash:   newHash,
-					}
-
-					w.mu.RLock()
-					cbs := make([]ReloadCallback, len(w.callbacks))
-					copy(cbs, w.callbacks)
-					w.mu.RUnlock()
-
-					for _, callback := range cbs {
-						w.callbackWg.Add(1)
-						go func(cb ReloadCallback) {
-							defer w.callbackWg.Done()
-							defer func() {
-								if r := recover(); r != nil {
-									fmt.Printf("[devtools] file watcher callback panic: %v\n", r)
-								}
-							}()
-							cb(event)
-						}(callback)
-					}
-				}
-			}
-
-			for file, oldHash := range fileHashes {
-				if _, exists := currentFiles[file]; !exists {
-					event := ReloadEvent{
-						File:      file,
-						Type:      ReloadTypeDeleted,
-						Timestamp: time.Now(),
-						OldHash:   oldHash,
-					}
-
-					w.mu.RLock()
-					cbs := make([]ReloadCallback, len(w.callbacks))
-					copy(cbs, w.callbacks)
-					w.mu.RUnlock()
-
-					for _, callback := range cbs {
-						w.callbackWg.Add(1)
-						go func(cb ReloadCallback) {
-							defer w.callbackWg.Done()
-							defer func() {
-								if r := recover(); r != nil {
-									fmt.Printf("[devtools] file watcher callback panic: %v\n", r)
-								}
-							}()
-							cb(event)
-						}(callback)
-					}
-				}
-			}
-
+			currentFiles := w.scanAllDirs(dirs, extensions)
+			w.handlePollTick(fileHashes, currentFiles)
 			fileHashes = currentFiles
 		}
+	}
+}
+
+// getWatchSnapshot 获取目录和扩展名的快照。
+func (w *fileWatcherImpl) getWatchSnapshot() ([]string, map[string]bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	dirs := make([]string, len(w.watchDirs))
+	copy(dirs, w.watchDirs)
+	extensions := make(map[string]bool)
+	for k, v := range w.extensions {
+		extensions[k] = v
+	}
+	return dirs, extensions
+}
+
+// scanAllDirs 扫描所有目录并返回文件哈希。
+func (w *fileWatcherImpl) scanAllDirs(dirs []string, extensions map[string]bool) map[string]string {
+	currentFiles := make(map[string]string)
+	for _, dir := range dirs {
+		w.scanDirForWatcher(dir, extensions, currentFiles)
+	}
+	return currentFiles
+}
+
+// handlePollTick 处理一轮文件轮询：对比哈希并触发变更回调。
+func (w *fileWatcherImpl) handlePollTick(oldHashes, currentFiles map[string]string) {
+	// 新增或修改的文件
+	for file, newHash := range currentFiles {
+		if oldHash, exists := oldHashes[file]; !exists || oldHash != newHash {
+			eventType := ReloadTypeModified
+			if !exists {
+				eventType = ReloadTypeCreated
+			}
+			w.fireCallbacks(ReloadEvent{
+				File:      file,
+				Type:      eventType,
+				Timestamp: time.Now(),
+				OldHash:   oldHash,
+				NewHash:   newHash,
+			})
+		}
+	}
+
+	// 删除的文件
+	for file, oldHash := range oldHashes {
+		if _, exists := currentFiles[file]; !exists {
+			w.fireCallbacks(ReloadEvent{
+				File:      file,
+				Type:      ReloadTypeDeleted,
+				Timestamp: time.Now(),
+				OldHash:   oldHash,
+			})
+		}
+	}
+}
+
+// fireCallbacks 安全地复制回调列表并并发触发，单个回调 panic 不影响其他回调。
+func (w *fileWatcherImpl) fireCallbacks(event ReloadEvent) {
+	w.mu.RLock()
+	cbs := make([]ReloadCallback, len(w.callbacks))
+	copy(cbs, w.callbacks)
+	w.mu.RUnlock()
+
+	for _, callback := range cbs {
+		w.callbackWg.Add(1)
+		go func(cb ReloadCallback) {
+			defer w.callbackWg.Done()
+			defer func() {
+				if rec := recover(); rec != nil {
+					fmt.Printf("[devtools] file watcher callback panic: %v\n", rec)
+				}
+			}()
+			cb(event)
+		}(callback)
 	}
 }
 

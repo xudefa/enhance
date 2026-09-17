@@ -158,7 +158,7 @@ func (b *ConfigBuilder) BuildAndLoad() (*ConfigModel, error) {
 func (b *ConfigBuilder) findConfigFile() string {
 	for _, dir := range b.configPaths {
 		candidate := filepath.Join(dir, b.configName+"."+b.configType)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		if fileInfo, err := os.Stat(candidate); err == nil && !fileInfo.IsDir() {
 			return candidate
 		}
 	}
@@ -180,14 +180,14 @@ func mergeMaps(dst, src map[string]any) {
 
 // detectEnv 检测环境变量
 func detectEnv() string {
-	if v := getEnv("APP_ENV"); v != "" {
-		return v
+	if envValue := getEnv("APP_ENV"); envValue != "" {
+		return envValue
 	}
-	if v := getEnv("GO_ENV"); v != "" {
-		return v
+	if envValue := getEnv("GO_ENV"); envValue != "" {
+		return envValue
 	}
-	if v := getEnv("ENV"); v != "" {
-		return v
+	if envValue := getEnv("ENV"); envValue != "" {
+		return envValue
 	}
 	return "dev"
 }

@@ -32,7 +32,7 @@
 //
 // 创建错误响应：
 //
-//	resp := exception.NewErrorResponse(404, "用户不存在", "", "", nil)
+//	resp := exception.NewErrorResponse(404, "用户不存在")
 //
 // 注册异常处理器：
 //

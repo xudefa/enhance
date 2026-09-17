@@ -303,16 +303,16 @@ func TestApplicationContext_Invoke_WithReturn(t *testing.T) {
 	env := environment.NewEnvironment()
 	ctx := NewApplicationContext(container, env)
 
-	result := 0
+	captured := 0
 	err := ctx.Invoke(func() int {
-		result = 42
+		captured = 42
 		return 0
 	})
 	if err != nil {
 		t.Fatalf("Invoke failed: %v", err)
 	}
-	if result != 42 {
-		t.Errorf("expected 42, got %d", result)
+	if captured != 42 {
+		t.Errorf("expected 42, got %d", captured)
 	}
 }
 

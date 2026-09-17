@@ -84,11 +84,11 @@ func (r *EventRouter) findAffectedBeans(keys []string) []string {
 		}
 	}
 
-	result := make([]string, 0, len(affected))
+	affectedList := make([]string, 0, len(affected))
 	for beanID := range affected {
-		result = append(result, beanID)
+		affectedList = append(affectedList, beanID)
 	}
-	return result
+	return affectedList
 }
 
 // BeanRefreshEvent Bean 刷新事件

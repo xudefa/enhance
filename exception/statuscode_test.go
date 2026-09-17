@@ -47,7 +47,7 @@ func TestDefaultExceptionHandler_OutOfRangeStatusCode(t *testing.T) {
 	handler := NewDefaultExceptionHandler()
 
 	handler.RegisterHandlerFunc(reflect.TypeOf(outOfRangeErr{}), func(ctx context.Context, err error) *ErrorResponse {
-		return NewErrorResponse(99999, "custom business error", "", "", nil)
+		return NewErrorResponse(99999, "custom business error")
 	})
 
 	rec := httptest.NewRecorder()
@@ -64,7 +64,7 @@ func TestDefaultExceptionHandler_ZeroStatusCode(t *testing.T) {
 	handler := NewDefaultExceptionHandler()
 
 	handler.RegisterHandlerFunc(reflect.TypeOf(zeroCodeErr{}), func(ctx context.Context, err error) *ErrorResponse {
-		return NewErrorResponse(0, "unset code", "", "", nil)
+		return NewErrorResponse(0, "unset code")
 	})
 
 	rec := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestDefaultExceptionHandler_ValidStatusCode(t *testing.T) {
 	handler := NewDefaultExceptionHandler()
 
 	handler.RegisterHandlerFunc(reflect.TypeOf(validCodeErr{}), func(ctx context.Context, err error) *ErrorResponse {
-		return NewErrorResponse(422, "unprocessable entity", "", "", nil)
+		return NewErrorResponse(422, "unprocessable entity")
 	})
 
 	rec := httptest.NewRecorder()

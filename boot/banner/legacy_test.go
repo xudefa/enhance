@@ -8,57 +8,7 @@ import (
 func TestLegacyBanner_Print_TableDriven(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		lines    []string
-		appName  string
-		profiles []string
-		version  string
-		want     []string
-	}{
-		{
-			name:     "with all options",
-			lines:    []string{"Line 1"},
-			appName:  "my-app",
-			profiles: []string{"dev", "test"},
-			version:  "1.0.0",
-			want:     []string{"Line 1", "my-app", "1.0.0", "dev", "test"},
-		},
-		{
-			name:     "no profiles shows default",
-			lines:    []string{},
-			appName:  "app",
-			profiles: []string{},
-			version:  "2.0.0",
-			want:     []string{"default", "app"},
-		},
-		{
-			name:     "nil profiles shows default",
-			lines:    []string{},
-			appName:  "app",
-			profiles: nil,
-			version:  "3.0.0",
-			want:     []string{"default"},
-		},
-		{
-			name:     "empty appName uses Application",
-			lines:    []string{},
-			appName:  "",
-			profiles: []string{},
-			version:  "4.0.0",
-			want:     []string{"Application"},
-		},
-		{
-			name:     "multiple lines",
-			lines:    []string{"A", "B", "C"},
-			appName:  "test",
-			profiles: []string{"prod"},
-			version:  "5.0.0",
-			want:     []string{"A", "B", "C"},
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range testLegacyBannerPrintTableDrivenCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -78,6 +28,70 @@ func TestLegacyBanner_Print_TableDriven(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// legacyBannerTestCase 表示单个横幅打印测试用例。
+type legacyBannerTestCase struct {
+	name     string
+	lines    []string
+	appName  string
+	profiles []string
+	version  string
+	want     []string
+}
+
+func testLegacyBannerPrintTableDrivenCases() []legacyBannerTestCase {
+	return append(legacyBannerBaseCases(), legacyBannerEdgeCases()...)
+}
+
+// legacyBannerBaseCases 返回基础横幅打印测试用例。
+func legacyBannerBaseCases() []legacyBannerTestCase {
+	return []legacyBannerTestCase{
+		{
+			name:     "with all options",
+			lines:    []string{"Line 1"},
+			appName:  "my-app",
+			profiles: []string{"dev", "test"},
+			version:  "1.0.0",
+			want:     []string{"Line 1", "my-app", "1.0.0", "dev", "test"},
+		},
+		{
+			name:     "no profiles shows default",
+			lines:    []string{},
+			profiles: []string{},
+			appName:  "app",
+			version:  "2.0.0",
+			want:     []string{"default", "app"},
+		},
+		{
+			name:    "nil profiles shows default",
+			lines:   []string{},
+			appName: "app",
+			version: "3.0.0",
+			want:    []string{"default"},
+		},
+	}
+}
+
+// legacyBannerEdgeCases 返回边界横幅打印测试用例。
+func legacyBannerEdgeCases() []legacyBannerTestCase {
+	return []legacyBannerTestCase{
+		{
+			name:     "empty appName uses Application",
+			lines:    []string{},
+			profiles: []string{},
+			version:  "4.0.0",
+			want:     []string{"Application"},
+		},
+		{
+			name:     "multiple lines",
+			lines:    []string{"A", "B", "C"},
+			appName:  "test",
+			profiles: []string{"prod"},
+			version:  "5.0.0",
+			want:     []string{"A", "B", "C"},
+		},
 	}
 }
 

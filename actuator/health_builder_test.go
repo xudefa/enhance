@@ -22,12 +22,12 @@ func TestHealthIndicatorBuilder_Build_Success(t *testing.T) {
 		t.Errorf("Expected name 'test', got %s", indicator.Name())
 	}
 
-	h := indicator.Health(context.Background())
-	if h.Status != health.StatusUp {
-		t.Errorf("Expected status UP, got %s", h.Status)
+	healthResult := indicator.Health(context.Background())
+	if healthResult.Status != health.StatusUp {
+		t.Errorf("Expected status UP, got %s", healthResult.Status)
 	}
-	if h.Details["key"] != "value" {
-		t.Errorf("Expected detail key=value, got %v", h.Details["key"])
+	if healthResult.Details["key"] != "value" {
+		t.Errorf("Expected detail key=value, got %v", healthResult.Details["key"])
 	}
 }
 
@@ -38,12 +38,12 @@ func TestHealthIndicatorBuilder_Build_Failure(t *testing.T) {
 		CheckFunc(func(ctx context.Context) error { return errors.New("connection failed") }).
 		Build()
 
-	h := indicator.Health(context.Background())
-	if h.Status != health.StatusDown {
-		t.Errorf("Expected status DOWN, got %s", h.Status)
+	healthResult := indicator.Health(context.Background())
+	if healthResult.Status != health.StatusDown {
+		t.Errorf("Expected status DOWN, got %s", healthResult.Status)
 	}
-	if h.Error == nil || h.Error.Error() != "connection failed" {
-		t.Errorf("Expected error 'connection failed', got %v", h.Error)
+	if healthResult.Error == nil || healthResult.Error.Error() != "connection failed" {
+		t.Errorf("Expected error 'connection failed', got %v", healthResult.Error)
 	}
 }
 
@@ -53,9 +53,9 @@ func TestHealthIndicatorBuilder_Build_NoCheckFunc(t *testing.T) {
 		Name("test").
 		Build()
 
-	h := indicator.Health(context.Background())
-	if h.Status != health.StatusUnknown {
-		t.Errorf("Expected status UNKNOWN, got %s", h.Status)
+	healthResult := indicator.Health(context.Background())
+	if healthResult.Status != health.StatusUnknown {
+		t.Errorf("Expected status UNKNOWN, got %s", healthResult.Status)
 	}
 }
 
@@ -75,8 +75,8 @@ func TestHealthIndicatorBuilder_Build_Timeout(t *testing.T) {
 		Timeout(50 * time.Millisecond).
 		Build()
 
-	h := indicator.Health(context.Background())
-	if h.Status != health.StatusDown {
-		t.Errorf("Expected status DOWN due to timeout, got %s", h.Status)
+	healthResult := indicator.Health(context.Background())
+	if healthResult.Status != health.StatusDown {
+		t.Errorf("Expected status DOWN due to timeout, got %s", healthResult.Status)
 	}
 }

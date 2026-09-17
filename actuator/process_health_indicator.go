@@ -35,20 +35,20 @@ func (p *ProcessHealthIndicator) Name() string {
 func (p *ProcessHealthIndicator) Health(ctx context.Context) health.Health {
 	numGoroutines := runtime.NumGoroutine()
 
-	h := health.Health{
+	healthResult := health.Health{
 		Details:   make(map[string]any),
 		Timestamp: time.Now(),
 	}
 
-	h.Details["goroutines"] = numGoroutines
-	h.Details["cpu_num"] = runtime.NumCPU()
+	healthResult.Details["goroutines"] = numGoroutines
+	healthResult.Details["cpu_num"] = runtime.NumCPU()
 
 	if numGoroutines > p.goroutineThreshold {
-		h.Status = health.StatusDegraded
-		h.Details["message"] = fmt.Sprintf("too many goroutines: %d, exceeds threshold: %d", numGoroutines, p.goroutineThreshold)
-		return h
+		healthResult.Status = health.StatusDegraded
+		healthResult.Details["message"] = fmt.Sprintf("too many goroutines: %d, exceeds threshold: %d", numGoroutines, p.goroutineThreshold)
+		return healthResult
 	}
-	h.Status = health.StatusUp
+	healthResult.Status = health.StatusUp
 
-	return h
+	return healthResult
 }

@@ -9,40 +9,40 @@ func TestParseStringList_Coverage(t *testing.T) {
 	t.Parallel()
 
 	// 空字符串
-	result, err := parseStringList("")
+	parsed, err := parseStringList("")
 	if err != nil {
 		t.Fatalf("parseStringList failed: %v", err)
 	}
-	if len(result.([]string)) != 0 {
-		t.Errorf("Expected empty list, got %v", result)
+	if len(parsed.([]string)) != 0 {
+		t.Errorf("Expected empty list, got %v", parsed)
 	}
 
 	// 单个值
-	result, err = parseStringList("value1")
+	parsed, err = parseStringList("value1")
 	if err != nil {
 		t.Fatalf("parseStringList failed: %v", err)
 	}
-	list := result.([]string)
+	list := parsed.([]string)
 	if len(list) != 1 || list[0] != "value1" {
 		t.Errorf("Expected [value1], got %v", list)
 	}
 
 	// 多个值
-	result, err = parseStringList("value1,value2,value3")
+	parsed, err = parseStringList("value1,value2,value3")
 	if err != nil {
 		t.Fatalf("parseStringList failed: %v", err)
 	}
-	list = result.([]string)
+	list = parsed.([]string)
 	if len(list) != 3 {
 		t.Errorf("Expected 3 values, got %d", len(list))
 	}
 
 	// 带空格
-	result, err = parseStringList(" value1 , value2 ")
+	parsed, err = parseStringList(" value1 , value2 ")
 	if err != nil {
 		t.Fatalf("parseStringList failed: %v", err)
 	}
-	list = result.([]string)
+	list = parsed.([]string)
 	if len(list) != 2 {
 		t.Errorf("Expected 2 values, got %d", len(list))
 	}
@@ -53,32 +53,32 @@ func TestParseStringMap_Coverage(t *testing.T) {
 	t.Parallel()
 
 	// 空字符串
-	result, err := parseStringMap("")
+	parsed, err := parseStringMap("")
 	if err != nil {
 		t.Fatalf("parseStringMap failed: %v", err)
 	}
-	if len(result.(map[string]string)) != 0 {
-		t.Errorf("Expected empty map, got %v", result)
+	if len(parsed.(map[string]string)) != 0 {
+		t.Errorf("Expected empty map, got %v", parsed)
 	}
 
 	// 单个键值对
-	result, err = parseStringMap("key1=value1")
+	parsed, err = parseStringMap("key1=value1")
 	if err != nil {
 		t.Fatalf("parseStringMap failed: %v", err)
 	}
-	m := result.(map[string]string)
-	if m["key1"] != "value1" {
-		t.Errorf("Expected key1=value1, got %v", m)
+	parsedMap := parsed.(map[string]string)
+	if parsedMap["key1"] != "value1" {
+		t.Errorf("Expected key1=value1, got %v", parsedMap)
 	}
 
 	// 多个键值对
-	result, err = parseStringMap("key1=value1,key2=value2")
+	parsed, err = parseStringMap("key1=value1,key2=value2")
 	if err != nil {
 		t.Fatalf("parseStringMap failed: %v", err)
 	}
-	m = result.(map[string]string)
-	if len(m) != 2 {
-		t.Errorf("Expected 2 entries, got %d", len(m))
+	parsedMap = parsed.(map[string]string)
+	if len(parsedMap) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(parsedMap))
 	}
 }
 
@@ -113,24 +113,24 @@ func TestBind_Coverage(t *testing.T) {
 func TestDefaultValidator_Validate_Coverage(t *testing.T) {
 	t.Parallel()
 
-	v := NewValidator()
-	v.AddRequired("app.name", "app.port")
+	validator := NewValidator()
+	validator.AddRequired("app.name", "app.port")
 
 	// 测试 valid
-	data := map[string]any{
+	valid := map[string]any{
 		"app.name": "test-app",
 		"app.port": 8080,
 	}
-	err := v.Validate(data)
+	err := validator.Validate(valid)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// 测试 invalid
-	data2 := map[string]any{
+	invalid := map[string]any{
 		"app.name": "",
 	}
-	err = v.Validate(data2)
+	err = validator.Validate(invalid)
 	if err == nil {
 		t.Error("Expected error for missing required fields")
 	}
@@ -140,19 +140,19 @@ func TestDefaultValidator_Validate_Coverage(t *testing.T) {
 func TestDefaultValidator_AddMin_Coverage(t *testing.T) {
 	t.Parallel()
 
-	v := NewValidator()
-	v.AddMin("app.port", 1024)
+	validator := NewValidator()
+	validator.AddMin("app.port", 1024)
 
 	// valid
-	data := map[string]any{"app.port": 8080}
-	err := v.Validate(data)
+	valid := map[string]any{"app.port": 8080}
+	err := validator.Validate(valid)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// invalid
-	data2 := map[string]any{"app.port": 80}
-	err = v.Validate(data2)
+	invalid := map[string]any{"app.port": 80}
+	err = validator.Validate(invalid)
 	if err == nil {
 		t.Error("Expected error for port below minimum")
 	}
@@ -162,19 +162,19 @@ func TestDefaultValidator_AddMin_Coverage(t *testing.T) {
 func TestDefaultValidator_AddMax_Coverage(t *testing.T) {
 	t.Parallel()
 
-	v := NewValidator()
-	v.AddMax("app.port", 65535)
+	validator := NewValidator()
+	validator.AddMax("app.port", 65535)
 
 	// valid
-	data := map[string]any{"app.port": 8080}
-	err := v.Validate(data)
+	valid := map[string]any{"app.port": 8080}
+	err := validator.Validate(valid)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// invalid
-	data2 := map[string]any{"app.port": 70000}
-	err = v.Validate(data2)
+	invalid := map[string]any{"app.port": 70000}
+	err = validator.Validate(invalid)
 	if err == nil {
 		t.Error("Expected error for port above maximum")
 	}
@@ -184,19 +184,19 @@ func TestDefaultValidator_AddMax_Coverage(t *testing.T) {
 func TestDefaultValidator_AddPattern_Coverage(t *testing.T) {
 	t.Parallel()
 
-	v := NewValidator()
-	v.AddRegex("app.name", "^[a-z]+$")
+	validator := NewValidator()
+	validator.AddRegex("app.name", "^[a-z]+$")
 
 	// valid
-	data := map[string]any{"app.name": "testapp"}
-	err := v.Validate(data)
+	valid := map[string]any{"app.name": "testapp"}
+	err := validator.Validate(valid)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// invalid
-	data2 := map[string]any{"app.name": "TestApp123"}
-	err = v.Validate(data2)
+	invalid := map[string]any{"app.name": "TestApp123"}
+	err = validator.Validate(invalid)
 	if err == nil {
 		t.Error("Expected error for name not matching pattern")
 	}

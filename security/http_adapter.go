@@ -16,6 +16,7 @@ type HttpRequestAdapter struct {
 	request *http.Request
 }
 
+// NewHttpRequestAdapter 创建 HTTP 请求适配器。
 func NewHttpRequestAdapter(request *http.Request) *HttpRequestAdapter {
 	return &HttpRequestAdapter{request: request}
 }
@@ -61,6 +62,7 @@ type HttpResponseAdapter struct {
 	written        bool
 }
 
+// NewHttpResponseAdapter 创建 HTTP 响应适配器。
 func NewHttpResponseAdapter(responseWriter http.ResponseWriter) *HttpResponseAdapter {
 	return &HttpResponseAdapter{responseWriter: responseWriter, statusCode: http.StatusOK}
 }
@@ -110,6 +112,7 @@ type SecurityFilterChainHandler struct {
 	nextHandler         http.Handler
 }
 
+// NewSecurityFilterChainHandler 创建安全过滤器链 HTTP 处理器。
 func NewSecurityFilterChainHandler(securityFilterChain SecurityFilterChain, nextHandler http.Handler) *SecurityFilterChainHandler {
 	return &SecurityFilterChainHandler{
 		securityFilterChain: securityFilterChain,
@@ -160,6 +163,7 @@ type BasicAuthenticationFilter struct {
 	authenticationManager AuthenticationManager
 }
 
+// NewBasicAuthenticationFilter 创建 Basic 认证过滤器。
 func NewBasicAuthenticationFilter(authenticationManager AuthenticationManager) *BasicAuthenticationFilter {
 	return &BasicAuthenticationFilter{
 		authenticationManager: authenticationManager,
@@ -196,13 +200,13 @@ func (f *BasicAuthenticationFilter) doFilter(ctx context.Context, request Securi
 
 	username, password, err := f.extractBasicAuth(authHeader)
 	if err != nil {
-		return err
+		return fmt.Errorf("解析 Basic 认证凭据失败: %w", err)
 	}
 
 	authToken := NewUsernamePasswordAuthenticationToken(username, password)
 	authenticated, err := f.authenticationManager.Authenticate(ctx, authToken)
 	if err != nil {
-		return err
+		return fmt.Errorf("Basic 认证失败: %w", err)
 	}
 
 	ctx = ContextWithAuthentication(ctx, authenticated)

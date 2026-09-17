@@ -32,27 +32,27 @@ func TestLogoutFilter_AddLogoutHandler(t *testing.T) {
 func TestLogoutFilter_DoFilter_InvalidTypes(t *testing.T) {
 	t.Parallel()
 
-	f, err := NewLogoutFilter("/logout", nil)
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
 	if err != nil {
 		t.Fatalf("NewLogoutFilter error: %v", err)
 	}
 
 	t.Run("invalid context", func(t *testing.T) {
-		err := f.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, filter.NewDefaultFilterChain())
+		err := logoutFilter.DoFilter("invalid", &mockSecurityRequest{}, &mockSecurityResponse{}, filter.NewDefaultFilterChain())
 		if err == nil {
 			t.Error("expected error for invalid context")
 		}
 	})
 
 	t.Run("invalid request", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, filter.NewDefaultFilterChain())
+		err := logoutFilter.DoFilter(context.Background(), "invalid", &mockSecurityResponse{}, filter.NewDefaultFilterChain())
 		if err == nil {
 			t.Error("expected error for invalid request")
 		}
 	})
 
 	t.Run("invalid response", func(t *testing.T) {
-		err := f.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", filter.NewDefaultFilterChain())
+		err := logoutFilter.DoFilter(context.Background(), &mockSecurityRequest{}, "invalid", filter.NewDefaultFilterChain())
 		if err == nil {
 			t.Error("expected error for invalid response")
 		}
@@ -61,65 +61,71 @@ func TestLogoutFilter_DoFilter_InvalidTypes(t *testing.T) {
 
 // TestLogoutFilter_DoFilter 测试登出过滤器
 
+func testLogoutFilterDoFilterNoHandlers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	req := &mockSecurityRequest{method: "POST", uri: "/logout"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
+	if err != nil {
+		t.Fatalf("NewLogoutFilter error: %v", err)
+	}
+
+	err = logoutFilter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func testLogoutFilterDoFilterNonLogoutURL(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
+	if err != nil {
+		t.Fatalf("NewLogoutFilter error: %v", err)
+	}
+
+	err = logoutFilter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called for non-logout URL")
+	}
+}
+
+func testLogoutFilterDoFilterGETNotAllowed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	req := &mockSecurityRequest{method: "GET", uri: "/logout"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
+	if err != nil {
+		t.Fatalf("NewLogoutFilter error: %v", err)
+	}
+
+	err = logoutFilter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called for GET logout")
+	}
+}
+
 func TestLogoutFilter_DoFilter(t *testing.T) {
 	t.Parallel()
-
-	t.Run("no logout handlers", func(t *testing.T) {
-		ctx := context.Background()
-		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		f, err := NewLogoutFilter("/logout", nil)
-		if err != nil {
-			t.Fatalf("NewLogoutFilter error: %v", err)
-		}
-
-		err = f.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("non-logout URL passes through", func(t *testing.T) {
-		ctx := context.Background()
-		req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		f, err := NewLogoutFilter("/logout", nil)
-		if err != nil {
-			t.Fatalf("NewLogoutFilter error: %v", err)
-		}
-
-		err = f.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !chain.called {
-			t.Error("expected chain to be called for non-logout URL")
-		}
-	})
-
-	t.Run("GET method not allowed for logout", func(t *testing.T) {
-		ctx := context.Background()
-		req := &mockSecurityRequest{method: "GET", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		f, err := NewLogoutFilter("/logout", nil)
-		if err != nil {
-			t.Fatalf("NewLogoutFilter error: %v", err)
-		}
-
-		err = f.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !chain.called {
-			t.Error("expected chain to be called for GET logout")
-		}
-	})
+	t.Run("no logout handlers", testLogoutFilterDoFilterNoHandlers)
+	t.Run("non-logout URL passes through", testLogoutFilterDoFilterNonLogoutURL)
+	t.Run("GET method not allowed for logout", testLogoutFilterDoFilterGETNotAllowed)
 }
 
 // TestLogoutFilter_WithSuccessHandler 测试带成功处理器的登出过滤器
@@ -133,13 +139,13 @@ func TestLogoutFilter_WithSuccessHandler(t *testing.T) {
 	chain := &mockSecurityFilterChain{}
 
 	successHandler := &mockLogoutSuccessHandler{}
-	f, err := NewLogoutFilter("/logout", nil)
+	logoutFilter, err := NewLogoutFilter("/logout", nil)
 	if err != nil {
 		t.Fatalf("NewLogoutFilter error: %v", err)
 	}
-	f.SetSuccessHandler(successHandler)
+	logoutFilter.SetSuccessHandler(successHandler)
 
-	err = f.DoFilter(ctx, req, resp, chain)
+	err = logoutFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,8 +160,8 @@ func TestLogoutFilter_MustNew(t *testing.T) {
 	t.Parallel()
 
 	t.Run("valid creation", func(t *testing.T) {
-		f := MustNewLogoutFilter("/logout", nil)
-		if f == nil {
+		logoutFilter := MustNewLogoutFilter("/logout", nil)
+		if logoutFilter == nil {
 			t.Fatal("expected non-nil filter")
 		}
 	})

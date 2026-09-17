@@ -9,8 +9,11 @@ import (
 type TransactionPhase string
 
 const (
-	PhaseBeforeCommit  TransactionPhase = "before_commit"  // 事务提交前
-	PhaseAfterCommit   TransactionPhase = "after_commit"   // 事务提交后
+	// PhaseBeforeCommit 事务提交前阶段。
+	PhaseBeforeCommit TransactionPhase = "before_commit" // 事务提交前
+	// PhaseAfterCommit 事务提交后阶段。
+	PhaseAfterCommit TransactionPhase = "after_commit" // 事务提交后
+	// PhaseAfterRollback 事务回滚后阶段。
 	PhaseAfterRollback TransactionPhase = "after_rollback" // 事务回滚后
 )
 

@@ -16,8 +16,8 @@ func TestConditionFunc(t *testing.T) {
 	}
 
 	cond := ConditionFunc(func(ctx ConditionContext) bool {
-		val, ok := ctx.GetProperty("enabled")
-		return ok && val == "true"
+		propValue, ok := ctx.GetProperty("enabled")
+		return ok && propValue == "true"
 	})
 	if !cond.Matches(ctx) {
 		t.Fatal("ConditionFunc should match")
@@ -59,8 +59,8 @@ func TestWhen(t *testing.T) {
 	}
 
 	cond := When("flag is on", func(ctx ConditionContext) bool {
-		val, ok := ctx.GetProperty("flag")
-		return ok && val == "on"
+		propValue, ok := ctx.GetProperty("flag")
+		return ok && propValue == "on"
 	})
 	if !cond.Matches(ctx) {
 		t.Fatal("When should match")
@@ -143,8 +143,8 @@ func TestCustom(t *testing.T) {
 		},
 	}
 	cond := Custom("custom-check", func(ctx ConditionContext) bool {
-		val, ok := ctx.GetProperty("ok")
-		return ok && val == true
+		propValue, ok := ctx.GetProperty("ok")
+		return ok && propValue == true
 	})
 	if !cond.Matches(ctx) {
 		t.Fatal("Custom should match")

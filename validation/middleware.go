@@ -33,8 +33,8 @@ func DefaultErrorHandler(c any, err error) {
 			Code:    http.StatusBadRequest,
 			Message: err.Error(),
 		}
-		if data, jsonErr := resp.ToJSON(); jsonErr == nil {
-			_, _ = ctx.Write(data)
+		if jsonBytes, jsonErr := resp.ToJSON(); jsonErr == nil {
+			_, _ = ctx.Write(jsonBytes)
 		}
 
 	case ResponseWriter:
@@ -44,8 +44,8 @@ func DefaultErrorHandler(c any, err error) {
 			Code:    http.StatusBadRequest,
 			Message: err.Error(),
 		}
-		if data, jsonErr := resp.ToJSON(); jsonErr == nil {
-			_ = ctx.Write(data)
+		if jsonBytes, jsonErr := resp.ToJSON(); jsonErr == nil {
+			_ = ctx.Write(jsonBytes)
 		}
 
 	case *http.Request:
@@ -63,15 +63,15 @@ func findErrorHandlerMethod(c any) func(any, error) {
 	if c == nil {
 		return nil
 	}
-	v := reflect.ValueOf(c)
-	if v.Kind() == reflect.Ptr { //go inline: Constant reflect.Ptr should be inlined
-		v = v.Elem()
+	rv := reflect.ValueOf(c)
+	if rv.Kind() == reflect.Ptr { //go inline: Constant reflect.Ptr should be inlined
+		rv = rv.Elem()
 	}
-	if v.Kind() != reflect.Struct {
+	if rv.Kind() != reflect.Struct {
 		return nil
 	}
 
-	method := v.MethodByName("OnValidationError")
+	method := rv.MethodByName("OnValidationError")
 	if method.IsValid() && method.Type().NumIn() == 1 && method.Type().NumOut() == 0 {
 		return func(c any, err error) {
 			method.Call([]reflect.Value{reflect.ValueOf(err)})
@@ -165,15 +165,15 @@ func getPathFromContext(c any) string {
 		return ""
 	}
 
-	v := reflect.ValueOf(c)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
+	rv := reflect.ValueOf(c)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
 	}
-	if v.Kind() != reflect.Struct {
+	if rv.Kind() != reflect.Struct {
 		return ""
 	}
 
-	pathMethod := v.MethodByName("Path")
+	pathMethod := rv.MethodByName("Path")
 	if pathMethod.IsValid() && pathMethod.Type().NumOut() == 1 {
 		results := pathMethod.Call(nil)
 		if len(results) > 0 {
@@ -183,7 +183,7 @@ func getPathFromContext(c any) string {
 		}
 	}
 
-	uriMethod := v.MethodByName("RequestURI")
+	uriMethod := rv.MethodByName("RequestURI")
 	if uriMethod.IsValid() && uriMethod.Type().NumOut() == 1 {
 		results := uriMethod.Call(nil)
 		if len(results) > 0 {

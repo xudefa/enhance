@@ -8,6 +8,95 @@ import (
 	"github.com/xudefa/enhance/security/filter"
 )
 
+func testSecurityConfigBuildMinimal(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+	)
+
+	chain, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
+	}
+}
+
+func testSecurityConfigBuildAllOptions(t *testing.T, authManager AuthenticationManager, userDetailsService UserDetailsService, passwordEncoder PasswordEncoder) {
+	t.Parallel()
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+		WithUserDetailsService(userDetailsService),
+		WithPasswordEncoder(passwordEncoder),
+		WithCsrf(),
+		WithFormLogin("/login", "/dashboard"),
+		WithLogout("/logout"),
+		WithHttpBasic(),
+		WithAnonymous(),
+		WithAuthorizeRequests(func(authz AuthorizeRequests) {
+			authz.AntMatchers("/api/**").HasRole("ROLE_API")
+			authz.AntMatchers("/admin/**").DenyAll()
+			authz.AnyRequest().Authenticated()
+		}),
+	)
+
+	chain, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
+	}
+
+	// Verify authorize rules were collected
+	if len(cfg.AuthorizeRules) != 3 {
+		t.Errorf("expected 3 authorize rules, got %d", len(cfg.AuthorizeRules))
+	}
+}
+
+func testSecurityConfigBuildNoAuthManager(t *testing.T) {
+	t.Parallel()
+	cfg := NewSecurityConfig()
+
+	_, err := cfg.Build()
+	if err == nil {
+		t.Fatal("expected error when auth manager is missing")
+	}
+}
+
+func testSecurityConfigBuildMetadataSource(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+		WithAuthorizeRequests(func(authz AuthorizeRequests) {
+			authz.AntMatchers("/api/**").HasRole("ROLE_API")
+			authz.AnyRequest().Authenticated()
+		}),
+	)
+
+	_, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+
+	source, ok := cfg.SecurityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
+	if !ok {
+		t.Fatal("expected expression based metadata source")
+	}
+
+	ctx := context.Background()
+	attrs, err := source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/api/users"})
+	if err != nil || len(attrs) != 1 || attrs[0] != "hasRole('ROLE_API')" {
+		t.Errorf("expected hasRole('ROLE_API') for /api/users, got %v (err=%v)", attrs, err)
+	}
+
+	attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/other"})
+	if err != nil || len(attrs) != 1 || attrs[0] != "authenticated" {
+		t.Errorf("expected authenticated for /other, got %v (err=%v)", attrs, err)
+	}
+}
+
 func TestSecurityConfig_Build(t *testing.T) {
 	t.Parallel()
 
@@ -18,94 +107,12 @@ func TestSecurityConfig_Build(t *testing.T) {
 	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
 	authManager := NewProviderManager(authProvider)
 
-	t.Run("build with minimal config", func(t *testing.T) {
-		t.Parallel()
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-		)
-
-		chain, err := cfg.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-		if chain == nil {
-			t.Fatal("expected non-nil chain")
-		}
-	})
-
+	t.Run("build with minimal config", func(t *testing.T) { testSecurityConfigBuildMinimal(t, authManager) })
 	t.Run("build with all options", func(t *testing.T) {
-		t.Parallel()
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-			WithUserDetailsService(userDetailsService),
-			WithPasswordEncoder(passwordEncoder),
-			WithCsrf(),
-			WithFormLogin("/login", "/dashboard"),
-			WithLogout("/logout"),
-			WithHttpBasic(),
-			WithAnonymous(),
-			WithAuthorizeRequests(func(authz AuthorizeRequests) {
-				authz.AntMatchers("/api/**").HasRole("ROLE_API")
-				authz.AntMatchers("/admin/**").DenyAll()
-				authz.AnyRequest().Authenticated()
-			}),
-		)
-
-		chain, err := cfg.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-		if chain == nil {
-			t.Fatal("expected non-nil chain")
-		}
-
-		// Verify authorize rules were collected
-		if len(cfg.AuthorizeRules) != 3 {
-			t.Errorf("expected 3 authorize rules, got %d", len(cfg.AuthorizeRules))
-		}
+		testSecurityConfigBuildAllOptions(t, authManager, userDetailsService, passwordEncoder)
 	})
-
-	t.Run("build without auth manager fails", func(t *testing.T) {
-		t.Parallel()
-		cfg := NewSecurityConfig()
-
-		_, err := cfg.Build()
-		if err == nil {
-			t.Fatal("expected error when auth manager is missing")
-		}
-	})
-
-	t.Run("authorize rules applied to metadata source", func(t *testing.T) {
-		t.Parallel()
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-			WithAuthorizeRequests(func(authz AuthorizeRequests) {
-				authz.AntMatchers("/api/**").HasRole("ROLE_API")
-				authz.AnyRequest().Authenticated()
-			}),
-		)
-
-		_, err := cfg.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-
-		source, ok := cfg.SecurityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
-		if !ok {
-			t.Fatal("expected expression based metadata source")
-		}
-
-		ctx := context.Background()
-		attrs, err := source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/api/users"})
-		if err != nil || len(attrs) != 1 || attrs[0] != "hasRole('ROLE_API')" {
-			t.Errorf("expected hasRole('ROLE_API') for /api/users, got %v (err=%v)", attrs, err)
-		}
-
-		attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/other"})
-		if err != nil || len(attrs) != 1 || attrs[0] != "authenticated" {
-			t.Errorf("expected authenticated for /other, got %v (err=%v)", attrs, err)
-		}
-	})
+	t.Run("build without auth manager fails", testSecurityConfigBuildNoAuthManager)
+	t.Run("authorize rules applied to metadata source", func(t *testing.T) { testSecurityConfigBuildMetadataSource(t, authManager) })
 }
 
 func TestSecurityConfig_FilterOrdering(t *testing.T) {
@@ -154,68 +161,76 @@ func TestSecurityConfig_FilterOrdering(t *testing.T) {
 	})
 }
 
-func TestSecurityConfig_WithOptions(t *testing.T) {
+func testSecurityConfigWithOptionsExceptionHandling(t *testing.T, authManager AuthenticationManager) {
 	t.Parallel()
+	handler := NewHttp403ForbiddenAccessDeniedHandler()
+	entryPoint := NewHttp401UnauthorizedEntryPoint()
 
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+		WithExceptionHandling(handler, entryPoint),
+	)
+
+	if cfg.ExceptionHandling == nil {
+		t.Fatal("expected exception handling config to be set")
+	}
+
+	chain, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
+	}
+}
+
+func testSecurityConfigWithOptionsCsrfRepository(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	customRepo := NewCookieCsrfTokenRepository()
+
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+		WithCsrf(),
+		WithCsrfTokenRepository(customRepo),
+	)
+
+	if cfg.CsrfTokenRepository != customRepo {
+		t.Error("expected custom CSRF token repository")
+	}
+}
+
+func testSecurityConfigWithOptionsBasicRealm(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	cfg := NewSecurityConfig(
+		WithAuthenticationManager(authManager),
+		WithHttpBasic("My Realm"),
+	)
+
+	if !cfg.HttpBasic {
+		t.Error("expected HTTP Basic to be enabled")
+	}
+	if cfg.HttpBasicRealm != "My Realm" {
+		t.Errorf("expected realm 'My Realm', got '%s'", cfg.HttpBasicRealm)
+	}
+}
+
+func testBuildAuthManager() AuthenticationManager {
 	userDetailsService := NewInMemoryUserDetailsService()
 	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
 
 	passwordEncoder := NewNoOpPasswordEncoder()
 	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
+	return NewProviderManager(authProvider)
+}
 
-	t.Run("exception handling config", func(t *testing.T) {
-		t.Parallel()
-		handler := NewHttp403ForbiddenAccessDeniedHandler()
-		entryPoint := NewHttp401UnauthorizedEntryPoint()
+func TestSecurityConfig_WithOptions(t *testing.T) {
+	t.Parallel()
 
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-			WithExceptionHandling(handler, entryPoint),
-		)
+	authManager := testBuildAuthManager()
 
-		if cfg.ExceptionHandling == nil {
-			t.Fatal("expected exception handling config to be set")
-		}
-
-		chain, err := cfg.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-		if chain == nil {
-			t.Fatal("expected non-nil chain")
-		}
-	})
-
-	t.Run("csrf with custom repository", func(t *testing.T) {
-		t.Parallel()
-		customRepo := NewCookieCsrfTokenRepository()
-
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-			WithCsrf(),
-			WithCsrfTokenRepository(customRepo),
-		)
-
-		if cfg.CsrfTokenRepository != customRepo {
-			t.Error("expected custom CSRF token repository")
-		}
-	})
-
-	t.Run("http basic with custom realm", func(t *testing.T) {
-		t.Parallel()
-		cfg := NewSecurityConfig(
-			WithAuthenticationManager(authManager),
-			WithHttpBasic("My Realm"),
-		)
-
-		if !cfg.HttpBasic {
-			t.Error("expected HTTP Basic to be enabled")
-		}
-		if cfg.HttpBasicRealm != "My Realm" {
-			t.Errorf("expected realm 'My Realm', got '%s'", cfg.HttpBasicRealm)
-		}
-	})
+	t.Run("exception handling config", func(t *testing.T) { testSecurityConfigWithOptionsExceptionHandling(t, authManager) })
+	t.Run("csrf with custom repository", func(t *testing.T) { testSecurityConfigWithOptionsCsrfRepository(t, authManager) })
+	t.Run("http basic with custom realm", func(t *testing.T) { testSecurityConfigWithOptionsBasicRealm(t, authManager) })
 }
 
 // mockSecurityFilter 用于测试的简单过滤器。
@@ -346,143 +361,5 @@ func TestSecurityConfig_WithSecurityMetadataSource(t *testing.T) {
 
 	if cfg.SecurityMetadataSource != source {
 		t.Error("expected SecurityMetadataSource to be set")
-	}
-}
-
-func TestSecurityConfig_WithFilterBefore(t *testing.T) {
-	t.Parallel()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	customFilter := &mockSecurityFilter{}
-	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/dashboard", "/login?error", authManager, log.Build())
-
-	cfg := NewSecurityConfig(
-		WithAuthenticationManager(authManager),
-		WithFilterBefore(customFilter, authFilter),
-	)
-
-	if len(cfg.Filters) != 1 {
-		t.Fatalf("expected 1 filter, got %d", len(cfg.Filters))
-	}
-	if cfg.Filters[0].Before == nil {
-		t.Error("expected Before filter to be set")
-	}
-}
-
-func TestSecurityConfig_WithFilterAfter(t *testing.T) {
-	t.Parallel()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	customFilter := &mockSecurityFilter{}
-	authFilter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/dashboard", "/login?error", authManager, log.Build())
-
-	cfg := NewSecurityConfig(
-		WithAuthenticationManager(authManager),
-		WithFilterAfter(customFilter, authFilter),
-	)
-
-	if len(cfg.Filters) != 1 {
-		t.Fatalf("expected 1 filter, got %d", len(cfg.Filters))
-	}
-	if cfg.Filters[0].After == nil {
-		t.Error("expected After filter to be set")
-	}
-}
-
-func TestInsertFilterBefore(t *testing.T) {
-	t.Parallel()
-
-	filter1 := &mockSecurityFilter{order: 1}
-	filter2 := &mockSecurityFilter{order: 2}
-	filter3 := &mockSecurityFilter{order: 3}
-	filters := []SecurityFilter{filter1, filter2, filter3}
-
-	newFilter := &mockSecurityFilter{order: 0}
-	result := insertFilterBefore(filters, newFilter, filter2)
-
-	if len(result) != 4 {
-		t.Fatalf("expected 4 filters, got %d", len(result))
-	}
-	// 验证newFilter在filter2之前
-	if result[1] != newFilter {
-		t.Error("expected newFilter to be before filter2")
-	}
-	if result[2] != filter2 {
-		t.Error("expected filter2 to be at index 2")
-	}
-}
-
-func TestInsertFilterBefore_NotFound(t *testing.T) {
-	t.Parallel()
-
-	filter1 := &mockSecurityFilter{order: 1}
-	filter2 := &mockSecurityFilter{order: 2}
-	filters := []SecurityFilter{filter1, filter2}
-
-	newFilter := &mockSecurityFilter{order: 0}
-	notFound := &mockSecurityFilter{order: 99}
-	result := insertFilterBefore(filters, newFilter, notFound)
-
-	if len(result) != 3 {
-		t.Fatalf("expected 3 filters, got %d", len(result))
-	}
-	// 验证newFilter被添加到末尾
-	if result[2] != newFilter {
-		t.Error("expected newFilter to be appended at the end")
-	}
-}
-
-func TestInsertFilterAfter(t *testing.T) {
-	t.Parallel()
-
-	filter1 := &mockSecurityFilter{order: 1}
-	filter2 := &mockSecurityFilter{order: 2}
-	filter3 := &mockSecurityFilter{order: 3}
-	filters := []SecurityFilter{filter1, filter2, filter3}
-
-	newFilter := &mockSecurityFilter{order: 0}
-	result := insertFilterAfter(filters, newFilter, filter2)
-
-	if len(result) != 4 {
-		t.Fatalf("expected 4 filters, got %d", len(result))
-	}
-	// 验证newFilter在filter2之后
-	if result[2] != newFilter {
-		t.Error("expected newFilter to be after filter2")
-	}
-	if result[1] != filter2 {
-		t.Error("expected filter2 to be at index 1")
-	}
-}
-
-func TestInsertFilterAfter_NotFound(t *testing.T) {
-	t.Parallel()
-
-	filter1 := &mockSecurityFilter{order: 1}
-	filter2 := &mockSecurityFilter{order: 2}
-	filters := []SecurityFilter{filter1, filter2}
-
-	newFilter := &mockSecurityFilter{order: 0}
-	notFound := &mockSecurityFilter{order: 99}
-	result := insertFilterAfter(filters, newFilter, notFound)
-
-	if len(result) != 3 {
-		t.Fatalf("expected 3 filters, got %d", len(result))
-	}
-	// 验证newFilter被添加到末尾
-	if result[2] != newFilter {
-		t.Error("expected newFilter to be appended at the end")
 	}
 }

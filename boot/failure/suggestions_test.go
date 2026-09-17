@@ -86,18 +86,18 @@ func TestFormatFailureAnalysis_Detail(t *testing.T) {
 		Components:  []string{"network"},
 	}
 
-	result := FormatFailureAnalysis(analysis)
+	output := FormatFailureAnalysis(analysis)
 
-	if !strings.Contains(result, "APPLICATION FAILED TO START") {
+	if !strings.Contains(output, "APPLICATION FAILED TO START") {
 		t.Error("expected failure header")
 	}
-	if !strings.Contains(result, analysis.Description) {
+	if !strings.Contains(output, analysis.Description) {
 		t.Error("expected description in output")
 	}
-	if !strings.Contains(result, analysis.Action) {
+	if !strings.Contains(output, analysis.Action) {
 		t.Error("expected action in output")
 	}
-	if !strings.Contains(result, "Suggestions:") {
+	if !strings.Contains(output, "Suggestions:") {
 		t.Error("expected suggestions section")
 	}
 }
@@ -111,12 +111,12 @@ func TestFormatFailureAnalysis_WithoutMatchingDetail(t *testing.T) {
 		Components:  []string{"unknown"},
 	}
 
-	result := FormatFailureAnalysis(analysis)
+	output := FormatFailureAnalysis(analysis)
 
-	if !strings.Contains(result, "Check logs") {
+	if !strings.Contains(output, "Check logs") {
 		t.Error("expected action in output")
 	}
-	if !strings.Contains(result, "Suggestions:") {
+	if !strings.Contains(output, "Suggestions:") {
 		t.Error("expected suggestions section")
 	}
 }

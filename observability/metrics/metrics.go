@@ -19,26 +19,31 @@ func NewCounter(name string) Counter {
 	return &counterImpl{name: name}
 }
 
+// Name 返回计数器的名称。
 func (c *counterImpl) Name() string {
 	return c.name
 }
 
+// Value 返回计数器的当前值。
 func (c *counterImpl) Value() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.value
 }
 
+// Inc 将计数器加一。
 func (c *counterImpl) Inc() {
 	c.Add(1)
 }
 
+// Add 将计数器增加指定增量。
 func (c *counterImpl) Add(delta float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.value += delta
 }
 
+// Reset 将计数器重置为零。
 func (c *counterImpl) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -59,22 +64,26 @@ func NewGauge(name string) Gauge {
 	return &gaugeImpl{name: name}
 }
 
+// Name 返回仪表盘的名称。
 func (g *gaugeImpl) Name() string {
 	return g.name
 }
 
+// Value 返回仪表盘的当前值。
 func (g *gaugeImpl) Value() float64 {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.value
 }
 
+// Set 设置仪表盘的值。
 func (g *gaugeImpl) Set(value float64) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.value = value
 }
 
+// Add 将仪表盘增加指定增量。
 func (g *gaugeImpl) Add(delta float64) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -102,10 +111,12 @@ func NewHistogram(name string) Histogram {
 	}
 }
 
+// Name 返回直方图的名称。
 func (h *histogramImpl) Name() string {
 	return h.name
 }
 
+// Value 返回直方图的平均值，无观测时返回 0。
 func (h *histogramImpl) Value() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -115,6 +126,7 @@ func (h *histogramImpl) Value() float64 {
 	return h.sum / float64(h.count)
 }
 
+// Observe 记录一次观测值并更新求和与最值。
 func (h *histogramImpl) Observe(value float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -128,24 +140,28 @@ func (h *histogramImpl) Observe(value float64) {
 	}
 }
 
+// Count 返回观测次数。
 func (h *histogramImpl) Count() int64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.count
 }
 
+// Sum 返回观测值之和。
 func (h *histogramImpl) Sum() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.sum
 }
 
+// Min 返回观测最小值。
 func (h *histogramImpl) Min() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.min
 }
 
+// Max 返回观测最大值。
 func (h *histogramImpl) Max() float64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -167,10 +183,12 @@ func NewTimer(name string) *Timer {
 	return &Timer{name: name}
 }
 
+// Name 返回计时器的名称。
 func (t *Timer) Name() string {
 	return t.name
 }
 
+// Value 返回计时器的毫秒数。
 func (t *Timer) Value() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -217,12 +235,14 @@ func NewMetricsRegistry() MetricsRegistry {
 	}
 }
 
+// Register 按名称注册指标到注册表。
 func (r *metricsRegistryImpl) Register(metric Metric) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics[metric.Name()] = metric
 }
 
+// Get 按名称查找指标并返回其是否存在。
 func (r *metricsRegistryImpl) Get(name string) (Metric, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -230,6 +250,7 @@ func (r *metricsRegistryImpl) Get(name string) (Metric, bool) {
 	return metric, exists
 }
 
+// List 返回注册表中的全部指标。
 func (r *metricsRegistryImpl) List() []Metric {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -35,8 +35,8 @@ func (m *affirmativeBased) Decide(ctx context.Context, authentication Authentica
 		if !m.supportsAny(voter, attributes) {
 			continue
 		}
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case AccessGranted:
 			grant++
 		case AccessDenied:
@@ -120,8 +120,8 @@ func (m *unanimousBased) Decide(ctx context.Context, authentication Authenticati
 		if !m.supportsAny(voter, attributes) {
 			continue
 		}
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case AccessGranted:
 			grant++
 		case AccessDenied:
@@ -207,8 +207,8 @@ func (m *consensusBased) Decide(ctx context.Context, authentication Authenticati
 		if !m.supportsAny(voter, attributes) {
 			continue
 		}
-		result := voter.Vote(ctx, authentication, resource, attributes)
-		switch result {
+		voteResult := voter.Vote(ctx, authentication, resource, attributes)
+		switch voteResult {
 		case AccessGranted:
 			grant++
 		case AccessDenied:
@@ -302,9 +302,9 @@ func (v *webExpressionVoter) Vote(_ context.Context, authentication Authenticati
 	}
 
 	for _, attribute := range attributes {
-		result := v.evaluateAttribute(authentication, attribute)
-		if result != AccessAbstain {
-			return result
+		voteResult := v.evaluateAttribute(authentication, attribute)
+		if voteResult != AccessAbstain {
+			return voteResult
 		}
 	}
 

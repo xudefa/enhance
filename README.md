@@ -322,6 +322,7 @@ enhance 框架经过六大 Go 风格优化，从 Java/Spring 风格转向符合 
 | [开发规范](AGENTS.md) | AI 智能体编码规范 | AI 智能体、开发者 |
 | [代码风格](CODING_STYLE.md) | 命名、注释、组织规范 | 开发者 |
 | [贡献指南](CONTRIBUTING.md) | 参与开发、提交 PR | 贡献者 |
+| [AI 维护导航](docs/AI_INDEX.md) | AI 维护代码库的导航入口（地图/影响/SOP/坑点） | AI 智能体、开发者 |
 | [集成总览](starter/INTEGRATION_OVERVIEW.md) | 第三方集成清单和指南 | 开发者、架构师 |
 
 ### 子模块文档

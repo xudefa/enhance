@@ -47,12 +47,12 @@ func TestInterceptorChain_Proceed_NoInterceptors(t *testing.T) {
 
 	chain := NewInterceptorChain(nil).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "done" {
-		t.Errorf("expected 'done', got %v", result)
+	if got != "done" {
+		t.Errorf("expected 'done', got %v", got)
 	}
 }
 
@@ -82,12 +82,12 @@ func TestInterceptorChain_Proceed_WithInterceptors(t *testing.T) {
 	chain := NewInterceptorChain([]MethodInterceptor{interceptor1, interceptor2}).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "result" {
-		t.Errorf("expected 'result', got %v", result)
+	if got != "result" {
+		t.Errorf("expected 'result', got %v", got)
 	}
 	expected := []string{"i1", "i2", "handler"}
 	if len(callOrder) != len(expected) {
@@ -112,12 +112,12 @@ func TestInterceptorChain_Invoke(t *testing.T) {
 	inv := NewSimpleMethodInvocation("Do", nil, "target", handler)
 	chain := NewInterceptorChain([]MethodInterceptor{interceptor}).(*interceptorChainImpl)
 
-	result, err := chain.Invoke(inv)
+	got, err := chain.Invoke(inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != 42 {
-		t.Errorf("expected 42, got %v", result)
+	if got != 42 {
+		t.Errorf("expected 42, got %v", got)
 	}
 	expected := []string{"i1", "handler"}
 	for i, v := range expected {
@@ -221,12 +221,12 @@ func TestSimpleMethodInvocation_Proceed(t *testing.T) {
 		return "handled", nil
 	}
 	inv := NewSimpleMethodInvocation("Foo", nil, nil, handler)
-	result, err := inv.Proceed()
+	got, err := inv.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "handled" {
-		t.Errorf("expected 'handled', got %v", result)
+	if got != "handled" {
+		t.Errorf("expected 'handled', got %v", got)
 	}
 }
 
@@ -267,12 +267,12 @@ func TestLoggingInterceptor_Invoke_Success(t *testing.T) {
 	inv := NewSimpleMethodInvocation("LogMethod", []any{1, 2}, "tgt", handler)
 	l := NewLoggingInterceptor()
 
-	result, err := l.Invoke(inv)
+	got, err := l.Invoke(inv)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "log-result" {
-		t.Errorf("expected 'log-result', got %v", result)
+	if got != "log-result" {
+		t.Errorf("expected 'log-result', got %v", got)
 	}
 }
 
@@ -338,12 +338,12 @@ func TestInterceptorChain_InterceptorCanModifyResult(t *testing.T) {
 	chain := NewInterceptorChain([]MethodInterceptor{modifier}).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "modified-value" {
-		t.Errorf("expected 'modified-value', got %v", result)
+	if got != "modified-value" {
+		t.Errorf("expected 'modified-value', got %v", got)
 	}
 }
 
@@ -360,12 +360,12 @@ func TestInterceptorChain_InterceptorCanShortCircuit(t *testing.T) {
 	chain := NewInterceptorChain([]MethodInterceptor{shortCircuit}).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "short-circuited" {
-		t.Errorf("expected 'short-circuited', got %v", result)
+	if got != "short-circuited" {
+		t.Errorf("expected 'short-circuited', got %v", got)
 	}
 	if handlerCalled {
 		t.Error("handler should not be called when short-circuited")

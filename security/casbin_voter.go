@@ -11,29 +11,44 @@ import (
 
 const (
 	// Casbin 配置
-	CasbinEnabled          = "security.casbin.enabled"
-	CasbinModelType        = "security.casbin.model-type"
-	CasbinModelPath        = "security.casbin.model-path"
-	CasbinModelText        = "security.casbin.model-text"
-	CasbinPolicyType       = "security.casbin.policy-type"
-	CasbinPolicyPath       = "security.casbin.policy-path"
-	CasbinPolicyText       = "security.casbin.policy-text"
-	CasbinAutoLoad         = "security.casbin.auto-load"
+	CasbinEnabled = "security.casbin.enabled"
+	// CasbinModelType Casbin 模型类型配置键。
+	CasbinModelType = "security.casbin.model-type"
+	// CasbinModelPath Casbin 模型文件路径配置键。
+	CasbinModelPath = "security.casbin.model-path"
+	// CasbinModelText Casbin 模型文本配置键。
+	CasbinModelText = "security.casbin.model-text"
+	// CasbinPolicyType Casbin 策略类型配置键。
+	CasbinPolicyType = "security.casbin.policy-type"
+	// CasbinPolicyPath Casbin 策略文件路径配置键。
+	CasbinPolicyPath = "security.casbin.policy-path"
+	// CasbinPolicyText Casbin 策略文本配置键。
+	CasbinPolicyText = "security.casbin.policy-text"
+	// CasbinAutoLoad 是否自动加载策略的配置键。
+	CasbinAutoLoad = "security.casbin.auto-load"
+	// CasbinAutoLoadInterval 自动加载间隔（秒）配置键。
 	CasbinAutoLoadInterval = "security.casbin.auto-load-interval"
 
 	// casbin 字段常量
-	CasbinLogFieldModel  = "model-path"
+	CasbinLogFieldModel = "model-path"
+	// CasbinLogFieldPolicy 策略路径日志字段名。
 	CasbinLogFieldPolicy = "policy-path"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	DefaultCasbinModelType        = "file"
-	DefaultCasbinModelPath        = "config/casbin_model.conf"
-	DefaultCasbinPolicyType       = "file"
-	DefaultCasbinPolicyPath       = "config/casbin_policy.csv"
-	DefaultCasbinAutoLoad         = false
+	// DefaultCasbinModelType 默认 Casbin 模型类型。
+	DefaultCasbinModelType = "file"
+	// DefaultCasbinModelPath 默认 Casbin 模型文件路径。
+	DefaultCasbinModelPath = "config/casbin_model.conf"
+	// DefaultCasbinPolicyType 默认 Casbin 策略类型。
+	DefaultCasbinPolicyType = "file"
+	// DefaultCasbinPolicyPath 默认 Casbin 策略文件路径。
+	DefaultCasbinPolicyPath = "config/casbin_policy.csv"
+	// DefaultCasbinAutoLoad 默认是否自动加载策略。
+	DefaultCasbinAutoLoad = false
+	// DefaultCasbinAutoLoadInterval 默认自动加载间隔（秒）。
 	DefaultCasbinAutoLoadInterval = 5
 )
 
@@ -52,6 +67,7 @@ type CasbinVoter struct {
 	enforcer CasbinEnforcer
 }
 
+// NewCasbinVoter 创建 Casbin 投票者，enforcer 为空时返回错误。
 func NewCasbinVoter(enforcer CasbinEnforcer) (*CasbinVoter, error) {
 	if enforcer == nil {
 		return nil, fmt.Errorf("casbin: enforcer must not be nil")

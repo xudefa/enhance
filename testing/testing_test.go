@@ -141,58 +141,74 @@ func TestTestFunctions(t *testing.T) {
 	t.Parallel()
 	t.Run("Test", func(t *testing.T) {
 		t.Parallel()
-		called := false
-		Test(t, func(ctx TestContext) {
-			called = true
-			if ctx == nil {
-				t.Error("expected non-nil context")
-			}
-		})
-
-		if !called {
-			t.Error("expected test function to be called")
-		}
+		testTestFunctionsTest(t)
 	})
 
 	t.Run("TestWithContainer", func(t *testing.T) {
 		t.Parallel()
-		container := core.NewContainer()
-		called := false
-		TestWithContainer(t, container, func(ctx TestContext) {
-			called = true
-			if ctx.Container() != container {
-				t.Error("expected container to match")
-			}
-		})
-
-		if !called {
-			t.Error("expected test function to be called")
-		}
+		testTestFunctionsTestWithContainer(t)
 	})
 
 	t.Run("SetupTest", func(t *testing.T) {
 		t.Parallel()
-		ctx := SetupTest(t, func(ctx TestContext) {
-			ctx.SetProperty("setup.key", "setup-value")
-		})
-
-		value := ctx.GetProperty("setup.key")
-		if value != "setup-value" {
-			t.Errorf("expected 'setup-value', got %v", value)
-		}
+		testTestFunctionsSetupTest(t)
 	})
 
 	t.Run("RunSubtest", func(t *testing.T) {
 		t.Parallel()
-		called := false
-		RunSubtest(t, "subtest", func(ctx TestContext) {
-			called = true
-		})
+		testTestFunctionsRunSubtest(t)
+	})
+}
 
-		if !called {
-			t.Error("expected subtest to be called")
+func testTestFunctionsTest(t *testing.T) {
+	called := false
+	Test(t, func(ctx TestContext) {
+		called = true
+		if ctx == nil {
+			t.Error("expected non-nil context")
 		}
 	})
+
+	if !called {
+		t.Error("expected test function to be called")
+	}
+}
+
+func testTestFunctionsTestWithContainer(t *testing.T) {
+	container := core.NewContainer()
+	called := false
+	TestWithContainer(t, container, func(ctx TestContext) {
+		called = true
+		if ctx.Container() != container {
+			t.Error("expected container to match")
+		}
+	})
+
+	if !called {
+		t.Error("expected test function to be called")
+	}
+}
+
+func testTestFunctionsSetupTest(t *testing.T) {
+	ctx := SetupTest(t, func(ctx TestContext) {
+		ctx.SetProperty("setup.key", "setup-value")
+	})
+
+	value := ctx.GetProperty("setup.key")
+	if value != "setup-value" {
+		t.Errorf("expected 'setup-value', got %v", value)
+	}
+}
+
+func testTestFunctionsRunSubtest(t *testing.T) {
+	called := false
+	RunSubtest(t, "subtest", func(ctx TestContext) {
+		called = true
+	})
+
+	if !called {
+		t.Error("expected subtest to be called")
+	}
 }
 
 func TestParallel(t *testing.T) {
@@ -221,8 +237,8 @@ func TestMustGet(t *testing.T) {
 
 	t.Run("ExistingBean", func(t *testing.T) {
 		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("unexpected panic: %v", r)
+			if rec := recover(); rec != nil {
+				t.Errorf("unexpected panic: %v", rec)
 			}
 		}()
 
@@ -277,7 +293,7 @@ func TestMock_CallExceedTimes(t *testing.T) {
 	t.Parallel()
 	mock := NewMock()
 
-	mock.ExpectTimes("GetUser", []any{1}, &User{Name: "Alice"}, nil, 1)
+	mock.ExpectTimes(ExpectationRequest{Method: "GetUser", Args: []any{1}, Result: &User{Name: "Alice"}, Times: 1})
 
 	_, err := mock.Call("GetUser", 1)
 	if err != nil {
@@ -294,7 +310,7 @@ func TestMock_VerifyPartialCalls(t *testing.T) {
 	t.Parallel()
 	mock := NewMock()
 
-	mock.ExpectTimes("GetUser", []any{1}, &User{Name: "Alice"}, nil, 3)
+	mock.ExpectTimes(ExpectationRequest{Method: "GetUser", Args: []any{1}, Result: &User{Name: "Alice"}, Times: 3})
 
 	_, _ = mock.Call("GetUser", 1)
 	_, _ = mock.Call("GetUser", 1)
@@ -310,13 +326,13 @@ func TestMockRecorder(t *testing.T) {
 	mock := NewMock()
 	recorder := NewMockRecorder(mock)
 
-	result := recorder.Return(&User{Name: "Bob"}, nil)
-	if result != mock {
+	got := recorder.Return(&User{Name: "Bob"}, nil)
+	if got != mock {
 		t.Error("expected Return to return mock")
 	}
 
-	result = recorder.Times(5)
-	if result != mock {
+	got = recorder.Times(5)
+	if got != mock {
 		t.Error("expected Times to return mock")
 	}
 }
@@ -344,8 +360,8 @@ func TestAssertExpectations_Failure(t *testing.T) {
 	mock := NewMock()
 	mock.Expect("GetUser", []any{1}, &User{Name: "Alice"}, nil)
 
-	result := AssertExpectations(&mockTestingT{}, mock)
-	if result {
+	assertOK := AssertExpectations(&mockTestingT{}, mock)
+	if assertOK {
 		t.Error("expected assertion to fail")
 	}
 }

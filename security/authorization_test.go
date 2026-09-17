@@ -225,17 +225,17 @@ func TestRoleVoter_Vote(t *testing.T) {
 
 	t.Run("abstain when no attributes", func(t *testing.T) {
 		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
+		voteResult := voter.Vote(context.Background(), nil, "/test", []string{})
+		if voteResult != ACCESS_ABSTAIN {
+			t.Errorf("Expected ACCESS_ABSTAIN, got %d", voteResult)
 		}
 	})
 
 	t.Run("abstain when no matching attribute", func(t *testing.T) {
 		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"other"})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
+		voteResult := voter.Vote(context.Background(), nil, "/test", []string{"other"})
+		if voteResult != ACCESS_ABSTAIN {
+			t.Errorf("Expected ACCESS_ABSTAIN, got %d", voteResult)
 		}
 	})
 
@@ -245,9 +245,9 @@ func TestRoleVoter_Vote(t *testing.T) {
 			principalName: "user",
 			authorities:   []string{"ROLE_ADMIN"},
 		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
+		voteResult := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
+		if voteResult != ACCESS_GRANTED {
+			t.Errorf("Expected ACCESS_GRANTED, got %d", voteResult)
 		}
 	})
 
@@ -257,68 +257,77 @@ func TestRoleVoter_Vote(t *testing.T) {
 			principalName: "user",
 			authorities:   []string{"ROLE_USER"},
 		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
+		voteResult := voter.Vote(context.Background(), auth, "/test", []string{"ROLE_ADMIN"})
+		if voteResult != ACCESS_DENIED {
+			t.Errorf("Expected ACCESS_DENIED, got %d", voteResult)
 		}
 	})
 }
 
 // TestAuthenticatedVoter_Vote 测试 AuthenticatedVoter.Vote 方法
+func testAuthVoterVoteAbstainNoAttributes(t *testing.T) {
+	t.Parallel()
+	voter := &AuthenticatedVoter{}
+	voteResult := voter.Vote(context.Background(), nil, "/test", []string{})
+	if voteResult != ACCESS_ABSTAIN {
+		t.Errorf("Expected ACCESS_ABSTAIN, got %d", voteResult)
+	}
+}
+
+func testAuthVoterVoteGrantFullyAuthenticated(t *testing.T) {
+	t.Parallel()
+	voter := &AuthenticatedVoter{}
+	auth := &mockRoleAuth{
+		principalName: "user",
+		authenticated: true,
+	}
+	voteResult := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
+	if voteResult != ACCESS_GRANTED {
+		t.Errorf("Expected ACCESS_GRANTED, got %d", voteResult)
+	}
+}
+
+func testAuthVoterVoteDenyFullyUnauthenticated(t *testing.T) {
+	t.Parallel()
+	voter := &AuthenticatedVoter{}
+	auth := &mockRoleAuth{
+		principalName: "user",
+		authenticated: false,
+	}
+	voteResult := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
+	if voteResult != ACCESS_DENIED {
+		t.Errorf("Expected ACCESS_DENIED, got %d", voteResult)
+	}
+}
+
+func testAuthVoterVoteGrantRememberedAuthenticated(t *testing.T) {
+	t.Parallel()
+	voter := &AuthenticatedVoter{}
+	auth := &mockRoleAuth{
+		principalName: "user",
+		authenticated: true,
+	}
+	voteResult := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_REMEMBERED"})
+	if voteResult != ACCESS_GRANTED {
+		t.Errorf("Expected ACCESS_GRANTED, got %d", voteResult)
+	}
+}
+
+func testAuthVoterVoteGrantAnonymous(t *testing.T) {
+	t.Parallel()
+	voter := &AuthenticatedVoter{}
+	voteResult := voter.Vote(context.Background(), nil, "/test", []string{"IS_AUTHENTICATED_ANONYMOUSLY"})
+	if voteResult != ACCESS_GRANTED {
+		t.Errorf("Expected ACCESS_GRANTED, got %d", voteResult)
+	}
+}
+
 func TestAuthenticatedVoter_Vote(t *testing.T) {
 	t.Parallel()
 
-	voter := &AuthenticatedVoter{}
-
-	t.Run("abstain when no attributes", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{})
-		if result != ACCESS_ABSTAIN {
-			t.Errorf("Expected ACCESS_ABSTAIN, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_FULLY when authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockRoleAuth{
-			principalName: "user",
-			authenticated: true,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("deny IS_AUTHENTICATED_FULLY when not authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockRoleAuth{
-			principalName: "user",
-			authenticated: false,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_FULLY"})
-		if result != ACCESS_DENIED {
-			t.Errorf("Expected ACCESS_DENIED, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_REMEMBERED when authenticated", func(t *testing.T) {
-		t.Parallel()
-		auth := &mockRoleAuth{
-			principalName: "user",
-			authenticated: true,
-		}
-		result := voter.Vote(context.Background(), auth, "/test", []string{"IS_AUTHENTICATED_REMEMBERED"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
-
-	t.Run("grant IS_AUTHENTICATED_ANONYMOUSLY always", func(t *testing.T) {
-		t.Parallel()
-		result := voter.Vote(context.Background(), nil, "/test", []string{"IS_AUTHENTICATED_ANONYMOUSLY"})
-		if result != ACCESS_GRANTED {
-			t.Errorf("Expected ACCESS_GRANTED, got %d", result)
-		}
-	})
+	t.Run("abstain when no attributes", testAuthVoterVoteAbstainNoAttributes)
+	t.Run("grant IS_AUTHENTICATED_FULLY when authenticated", testAuthVoterVoteGrantFullyAuthenticated)
+	t.Run("deny IS_AUTHENTICATED_FULLY when not authenticated", testAuthVoterVoteDenyFullyUnauthenticated)
+	t.Run("grant IS_AUTHENTICATED_REMEMBERED when authenticated", testAuthVoterVoteGrantRememberedAuthenticated)
+	t.Run("grant IS_AUTHENTICATED_ANONYMOUSLY always", testAuthVoterVoteGrantAnonymous)
 }

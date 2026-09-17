@@ -51,11 +51,11 @@ func (d *DiskSpaceHealthIndicator) Health(ctx context.Context) health.Health {
 
 	// stat.Bsize 在 macOS 上是 uint32，在 Linux 上是 int64
 	var bsize uint64
-	switch v := any(stat.Bsize).(type) {
+	switch bsizeVal := any(stat.Bsize).(type) {
 	case uint32:
-		bsize = uint64(v)
+		bsize = uint64(bsizeVal)
 	case int64:
-		bsize = uint64(v)
+		bsize = uint64(bsizeVal)
 	default:
 		bsize = uint64(stat.Bsize)
 	}
@@ -66,23 +66,28 @@ func (d *DiskSpaceHealthIndicator) Health(ctx context.Context) health.Health {
 
 	usagePercent := float64(used) / float64(total)
 
-	h := health.Health{
+	return d.buildHealthResult(used, total, free, usagePercent)
+}
+
+// buildHealthResult 构建磁盘健康检查结果。
+func (d *DiskSpaceHealthIndicator) buildHealthResult(used, total, free uint64, usagePercent float64) health.Health {
+	healthResult := health.Health{
 		Details:   make(map[string]any),
 		Timestamp: time.Now(),
 	}
 
-	h.Details["path"] = d.path
-	h.Details["total_bytes"] = total
-	h.Details["used_bytes"] = used
-	h.Details["free_bytes"] = total - used
-	h.Details["usage_percent"] = fmt.Sprintf("%.2f%%", usagePercent*100)
+	healthResult.Details["path"] = d.path
+	healthResult.Details["total_bytes"] = total
+	healthResult.Details["used_bytes"] = used
+	healthResult.Details["free_bytes"] = total - used
+	healthResult.Details["usage_percent"] = fmt.Sprintf("%.2f%%", usagePercent*100)
 
 	if usagePercent > d.threshold {
-		h.Status = health.StatusDegraded
-		h.Details["message"] = fmt.Sprintf("disk usage %.2f%% exceeds threshold %.2f%%", usagePercent*100, d.threshold*100)
-		return h
+		healthResult.Status = health.StatusDegraded
+		healthResult.Details["message"] = fmt.Sprintf("disk usage %.2f%% exceeds threshold %.2f%%", usagePercent*100, d.threshold*100)
+		return healthResult
 	}
-	h.Status = health.StatusUp
+	healthResult.Status = health.StatusUp
 
-	return h
+	return healthResult
 }

@@ -5,19 +5,19 @@ import "strconv"
 // valAsString 将任意值转换为字符串
 //
 // 支持 string、bool、int、float64 类型，其他类型返回空字符串。
-func valAsString(val any) string {
-	switch v := val.(type) {
+func valAsString(value any) string {
+	switch typed := value.(type) {
 	case string:
-		return v
+		return typed
 	case bool:
-		if v {
+		if typed {
 			return "true"
 		}
 		return "false"
 	case int:
-		return strconv.Itoa(v)
+		return strconv.Itoa(typed)
 	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
+		return strconv.FormatFloat(typed, 'f', -1, 64)
 	}
 	return ""
 }

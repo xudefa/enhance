@@ -151,8 +151,8 @@ func TestDefaultErrorHandler(t *testing.T) {
 // TestShouldSkipPath 测试跳过路径
 func TestShouldSkipPath(t *testing.T) {
 	t.Parallel()
-	result := shouldSkipPath(nil, []string{"/skip"})
-	if result {
+	skipped := shouldSkipPath(nil, []string{"/skip"})
+	if skipped {
 		t.Error("shouldSkipPath 应该返回 false（未实现）")
 	}
 }
@@ -166,11 +166,11 @@ func TestErrorResponse_ToJSON(t *testing.T) {
 		Message: "validation failed",
 	}
 
-	data, err := resp.ToJSON()
+	jsonBytes, err := resp.ToJSON()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(data) == 0 {
+	if len(jsonBytes) == 0 {
 		t.Error("expected non-empty JSON data")
 	}
 }
@@ -205,12 +205,12 @@ func TestFindErrorHandlerMethod(t *testing.T) {
 	var capturedErr error
 	wh := &WithHandler{}
 	// 通过反射调用测试
-	v := reflect.ValueOf(wh)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
+	rv := reflect.ValueOf(wh)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
 	}
 	// 检查是否有方法
-	if v.NumMethod() == 0 {
+	if rv.NumMethod() == 0 {
 		// 没有方法，应该返回 nil
 		handler = findErrorHandlerMethod(wh)
 		if handler != nil {

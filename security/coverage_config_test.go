@@ -13,26 +13,26 @@ func TestConfigRegistry_AddRule(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty patterns returns nil", func(t *testing.T) {
-		r := &configRegistry{cfg: &SecurityConfig{}, patterns: []string{}}
-		result := r.addRule([]string{"permitAll"})
-		if result != nil {
+		registry := &configRegistry{cfg: &SecurityConfig{}, patterns: []string{}}
+		addRuleErr := registry.addRule([]string{"permitAll"})
+		if addRuleErr != nil {
 			t.Error("expected nil for empty patterns")
 		}
 	})
 
 	t.Run("empty attrs returns nil", func(t *testing.T) {
-		r := &configRegistry{cfg: &SecurityConfig{}, patterns: []string{"/test"}}
-		result := r.addRule([]string{})
-		if result != nil {
+		registry := &configRegistry{cfg: &SecurityConfig{}, patterns: []string{"/test"}}
+		addRuleErr := registry.addRule([]string{})
+		if addRuleErr != nil {
 			t.Error("expected nil for empty attrs")
 		}
 	})
 
 	t.Run("valid rule added", func(t *testing.T) {
 		cfg := &SecurityConfig{}
-		r := &configRegistry{cfg: cfg, patterns: []string{"/api/**"}}
-		result := r.addRule([]string{"authenticated"})
-		if result != nil {
+		registry := &configRegistry{cfg: cfg, patterns: []string{"/api/**"}}
+		addRuleErr := registry.addRule([]string{"authenticated"})
+		if addRuleErr != nil {
 			t.Error("expected nil for valid rule")
 		}
 		if len(cfg.AuthorizeRules) != 1 {
@@ -67,8 +67,8 @@ func TestConfigRegistry_AllMethods(t *testing.T) {
 
 	t.Run("HasRole", func(t *testing.T) {
 		cfg := &SecurityConfig{}
-		r := &configRegistry{cfg: cfg, patterns: []string{"/admin/**"}}
-		r.HasRole("ADMIN")
+		registry := &configRegistry{cfg: cfg, patterns: []string{"/admin/**"}}
+		registry.HasRole("ADMIN")
 		if len(cfg.AuthorizeRules) != 1 {
 			t.Errorf("expected 1 rule, got %d", len(cfg.AuthorizeRules))
 		}
@@ -76,8 +76,8 @@ func TestConfigRegistry_AllMethods(t *testing.T) {
 
 	t.Run("HasAnyRole", func(t *testing.T) {
 		cfg := &SecurityConfig{}
-		r := &configRegistry{cfg: cfg, patterns: []string{"/api/**"}}
-		r.HasAnyRole("ADMIN", "USER")
+		registry := &configRegistry{cfg: cfg, patterns: []string{"/api/**"}}
+		registry.HasAnyRole("ADMIN", "USER")
 		if len(cfg.AuthorizeRules) != 1 {
 			t.Errorf("expected 1 rule, got %d", len(cfg.AuthorizeRules))
 		}

@@ -28,24 +28,16 @@ func (c *adapterTestChain) Matches(request interface{}) bool { return true }
 func (c *adapterTestChain) GetFilters() []filter.Filter { return nil }
 
 // TestSecurityFilterChainHandler_ServeHTTP 验证安全响应产生后不再调用 nextHandler（H2）。
-func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
-	t.Parallel()
+type testSecurityFilterChainHandlerCase struct {
+	name           string
+	chainFunc      func(ctx interface{}, request interface{}, response interface{}) error
+	wantStatus     int
+	wantBody       string
+	wantNextCalled bool
+}
 
-	newHandler := func(chainFunc func(ctx interface{}, request interface{}, response interface{}) error) (*SecurityFilterChainHandler, *bool) {
-		nextCalled := false
-		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			nextCalled = true
-		})
-		return NewSecurityFilterChainHandler(&adapterTestChain{doFilter: chainFunc}, next), &nextCalled
-	}
-
-	tests := []struct {
-		name           string
-		chainFunc      func(ctx interface{}, request interface{}, response interface{}) error
-		wantStatus     int
-		wantBody       string
-		wantNextCalled bool
-	}{
+func testSecurityFilterChainHandlerCases() []testSecurityFilterChainHandlerCase {
+	return []testSecurityFilterChainHandlerCase{
 		{
 			name: "redirect response terminates request",
 			chainFunc: func(ctx interface{}, request interface{}, response interface{}) error {
@@ -87,12 +79,24 @@ func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
 			wantNextCalled: true,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func testSecurityFilterChainHandlerBuild(chainFunc func(ctx interface{}, request interface{}, response interface{}) error) (*SecurityFilterChainHandler, *bool) {
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+	})
+	return NewSecurityFilterChainHandler(&adapterTestChain{doFilter: chainFunc}, next), &nextCalled
+}
+
+func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range testSecurityFilterChainHandlerCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			handler, nextCalled := newHandler(tt.chainFunc)
+			handler, nextCalled := testSecurityFilterChainHandlerBuild(tt.chainFunc)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api", nil))
 

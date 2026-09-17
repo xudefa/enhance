@@ -22,6 +22,7 @@ type TokenBucket struct {
 	lastAccess time.Time
 }
 
+// NewTokenBucket 创建具有指定容量和补速率的令牌桶。
 func NewTokenBucket(capacity, rate int) *TokenBucket {
 	now := time.Now()
 	return &TokenBucket{
@@ -33,6 +34,7 @@ func NewTokenBucket(capacity, rate int) *TokenBucket {
 	}
 }
 
+// Take 尝试从令牌桶取走一个令牌，无可用令牌时返回 false。
 func (b *TokenBucket) Take() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -90,6 +92,7 @@ type RateLimitFilter struct {
 	closeOnce        sync.Once
 }
 
+// NewRateLimitFilter 创建限流过滤器，自动补齐默认配置。
 func NewRateLimitFilter(config RateLimitConfig) *RateLimitFilter {
 	if config.Rate == 0 {
 		config.Rate = 100
@@ -103,32 +106,32 @@ func NewRateLimitFilter(config RateLimitConfig) *RateLimitFilter {
 	if config.CleanupInterval <= 0 {
 		config.CleanupInterval = defaultCleanupInterval
 	}
-	f := &RateLimitFilter{
+	rateLimiter := &RateLimitFilter{
 		config:           config,
 		globalBucket:     NewTokenBucket(config.Burst, config.Rate),
 		logger:           config.Log,
 		trustedProxyNets: parseTrustedProxies(config.TrustedProxies),
 		done:             make(chan struct{}),
 	}
-	newBucketCleanup(f)
-	return f
+	newBucketCleanup(rateLimiter)
+	return rateLimiter
 }
 
 // newBucketCleanup 启动过期限流桶后台清理协程。
-func newBucketCleanup(f *RateLimitFilter) {
+func newBucketCleanup(rateLimiter *RateLimitFilter) {
 	go func() {
 		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] bucket cleanup panic: %v\n", r)
+			if rec := recover(); rec != nil {
+				fmt.Printf("[rate_limit] bucket cleanup panic: %v\n", rec)
 			}
 		}()
-		ticker := time.NewTicker(f.config.CleanupInterval)
+		ticker := time.NewTicker(rateLimiter.config.CleanupInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				f.cleanupBuckets()
-			case <-f.done:
+				rateLimiter.cleanupBuckets()
+			case <-rateLimiter.done:
 				return
 			}
 		}

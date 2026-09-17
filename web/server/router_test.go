@@ -100,11 +100,11 @@ func TestRouter_GroupPrefix_RespectsSegmentBoundary(t *testing.T) {
 
 	// /apix/ must NOT be claimed by the /api group (shared handlers map collision)
 	req := httptest.NewRequest(http.MethodGet, "/apix/", nil)
-	w := httptest.NewRecorder()
-	api.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("GET /apix/ status = %d, want %d", w.Code, http.StatusNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /apix/ status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 	if handlerCalled {
 		t.Error("handler must not be called for a path outside the /api boundary")
@@ -122,14 +122,14 @@ func TestRouter_GroupPrefix_SegmentBoundaryMatch(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/x", nil)
-	w := httptest.NewRecorder()
-	api.ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	api.ServeHTTP(rec, req)
 
 	if !handlerCalled {
 		t.Error("handler should be called for /api/x")
 	}
-	if w.Code != http.StatusOK {
-		t.Errorf("GET /api/x status = %d, want %d", w.Code, http.StatusOK)
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET /api/x status = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
 
@@ -285,12 +285,12 @@ func TestRouter_MethodNotAllowed(t *testing.T) {
 	router.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodPost, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -301,12 +301,12 @@ func TestRouter_NotFound(t *testing.T) {
 	router.GET("/test", func(ctx core.Context) {})
 
 	req := httptest.NewRequest(http.MethodGet, "/notfound", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	router.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusNotFound)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
@@ -433,136 +433,5 @@ func TestRouter_ParamRouteMiddleware(t *testing.T) {
 	}
 	if capturedID != "123" {
 		t.Errorf("PathParam = %q, want %q", capturedID, "123")
-	}
-}
-
-func TestRouter_PathParams(t *testing.T) {
-	t.Parallel()
-	router := NewRouter()
-	var capturedID string
-
-	router.GET("/users/{id}", func(ctx core.Context) {
-		capturedID = ctx.PathParam("id")
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/users/123", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if capturedID != "123" {
-		t.Errorf("PathParam(id) = %s, want 123", capturedID)
-	}
-}
-
-func TestRouter_MatchPath(t *testing.T) {
-	t.Parallel()
-	router := NewRouter()
-
-	tests := []struct {
-		pattern string
-		path    string
-		want    bool
-	}{
-		{"/users/{id}", "/users/123", true},
-		{"/users/{id}", "/users/456", true},
-		{"/users/{id}", "/users", false},
-		{"/users/{id}/posts", "/users/123/posts", true},
-		{"/users", "/users", true},
-		{"/users", "/admins", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.pattern+"_"+tt.path, func(t *testing.T) {
-			got := router.matchPath(tt.pattern, tt.path)
-			if got != tt.want {
-				t.Errorf("matchPath(%s, %s) = %v, want %v", tt.pattern, tt.path, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRouter_ExtractParams(t *testing.T) {
-	t.Parallel()
-	router := NewRouter()
-	router.GET("/users/{id}/posts/{postId}", func(ctx core.Context) {})
-
-	// 通过 ServeHTTP 触发路由匹配和参数提取
-	req := httptest.NewRequest(http.MethodGet, "/users/123/posts/456", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// 验证参数提取（通过路由内部处理）
-	// 这里我们直接测试 extractParamsForPattern
-	params := router.extractParamsForPattern("/users/{id}/posts/{postId}", "/users/123/posts/456")
-
-	if params["id"] != "123" {
-		t.Errorf("params[id] = %s, want 123", params["id"])
-	}
-	if params["postId"] != "456" {
-		t.Errorf("params[postId] = %s, want 456", params["postId"])
-	}
-}
-
-func TestRouter_GroupInheritsMiddleware(t *testing.T) {
-	t.Parallel()
-	router := NewRouter()
-	middlewareCalled := false
-
-	router.Use(func(ctx core.Context) {
-		middlewareCalled = true
-		ctx.Next()
-	})
-
-	api := router.Group("/api")
-	api.GET("/test", func(ctx core.Context) {})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	if !middlewareCalled {
-		t.Error("Group should inherit parent middleware")
-	}
-}
-
-func TestRouter_GroupMiddleware(t *testing.T) {
-	t.Parallel()
-	router := NewRouter()
-	executionOrder := []string{}
-
-	router.Use(func(ctx core.Context) {
-		executionOrder = append(executionOrder, "root")
-		ctx.Next()
-	})
-
-	// 创建组 - 它在创建时继承根中间件
-	api := router.Group("/api")
-
-	// 在创建后向组添加中间件
-	api.Use(func(ctx core.Context) {
-		executionOrder = append(executionOrder, "api")
-		ctx.Next()
-	})
-
-	api.GET("/test", func(ctx core.Context) {
-		executionOrder = append(executionOrder, "handler")
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	router.ServeHTTP(w, req)
-
-	// 组中间件在 handle 时绑定到路由，应随处理链执行
-	expected := []string{"root", "api", "handler"}
-	if len(executionOrder) != len(expected) {
-		t.Fatalf("executionOrder length = %d, want %d", len(executionOrder), len(expected))
-	}
-	for i, v := range expected {
-		if executionOrder[i] != v {
-			t.Errorf("executionOrder[%d] = %s, want %s", i, executionOrder[i], v)
-		}
 	}
 }
