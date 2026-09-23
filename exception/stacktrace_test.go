@@ -24,7 +24,8 @@ func (h *recordingHandler) RegisterResolver(_ ExceptionResolver) {}
 
 func (h *recordingHandler) RegisterException(_ reflect.Type, _ ExceptionResolver) {}
 
-func (h *recordingHandler) RegisterHandlerFunc(_ reflect.Type, _ func(context.Context, error) *ErrorResponse) {}
+func (h *recordingHandler) RegisterHandlerFunc(_ reflect.Type, _ func(context.Context, error) *ErrorResponse) {
+}
 
 func (h *recordingHandler) IncludeStackTrace() bool { return h.includeStack }
 
@@ -37,8 +38,8 @@ func invokeMiddleware(t *testing.T, handler ExceptionHandler) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
-	middleware(nextHandler).ServeHTTP(w, req)
+	rec := httptest.NewRecorder()
+	middleware(nextHandler).ServeHTTP(rec, req)
 }
 
 // TestExceptionHandlingMiddleware_Panic_NoStackTrace 默认配置不应泄露堆栈跟踪（回归测试）。

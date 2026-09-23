@@ -152,6 +152,13 @@ type BaseEvent struct {
 // 因此使用指针包装器来支持 CAS 操作。
 type listenerList struct {
 	listeners []EventListener
+	entries   []listenerEntry // 性能优化：预存函数指针，Unsubscribe 时 O(1) 比较
+}
+
+// listenerEntry 监听器条目，预存函数指针以优化 Unsubscribe 性能。
+type listenerEntry struct {
+	handler EventListener
+	funcPtr uintptr
 }
 
 // listenerSlice 包装器，使 slice 可用于 atomic.Value 的 CAS 操作。
@@ -163,28 +170,37 @@ type listenerSlice struct {
 type orderedListener struct {
 	config    ListenerConfig
 	original  EventListener // 用于 Unsubscribe 比较
+	funcPtr   uintptr       // 性能优化：预存函数指针，避免 Unsubscribe 时重复反射调用
 	wrapperID int           // 唯一标识，用于区分相同函数多次注册
 }
 
-// EventBus 事件总线。
+// EventBus 事件总线接口。
 //
 // 负责事件的发布与订阅管理，支持多监听器注册。
 // 线程安全，支持并发发布和订阅。
-// 使用 sync.Map 优化读多写少场景的性能。
 //
-// # 性能优化
+// # 核心方法
 //
-//   - 使用 sync.Map 存储监听器，无锁读取
-//   - 使用 CAS 操作实现无锁订阅更新
-//   - 避免 range 分配迭代器，使用索引遍历
+//   - Publish: 发布事件到所有匹配的监听器
+//   - Subscribe: 订阅指定类型的事件
+//   - Unsubscribe: 取消订阅指定类型的事件
 //
-// # 并发安全
+// # 使用示例
 //
-// EventBus 的所有方法都是并发安全的。
-// 订阅和取消订阅使用 CAS 操作实现无锁更新，
-// 发布事件使用无锁读取，性能优异。
-type EventBus struct {
-	listeners sync.Map // map[string]*listenerList
+//	bus := event.NewEventBus()
+//	bus.Subscribe("user.created", func(e event.ApplicationEvent) {
+//	    log.Println("New user created:", e.Type())
+//	})
+//	bus.Publish(&event.BaseEvent{EventType: "user.created"})
+type EventBus interface {
+	// Publish 发布事件，通知所有订阅了该事件类型的监听器。
+	Publish(event ApplicationEvent)
+
+	// Subscribe 订阅指定类型的事件。
+	Subscribe(eventType string, listener EventListener)
+
+	// Unsubscribe 取消订阅指定类型的事件。
+	Unsubscribe(eventType string, target EventListener)
 }
 
 // EventBusWithOrdering 支持优先级和过滤条件的事件总线。
@@ -205,7 +221,7 @@ type EventBusWithOrdering struct {
 }
 
 // LegacyEventBusAdapter 将 EventBusWithOrdering 适配为 EventBus 接口。
-// 用于需要 *EventBus 类型的场景。
+// 用于需要 EventBus 接口的场景。
 type LegacyEventBusAdapter struct {
 	bus *EventBusWithOrdering
 }

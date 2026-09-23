@@ -29,11 +29,13 @@ type Service interface {
 	Run() error
 }
 
+// Options Micro 服务配置选项。
 type Options struct {
 	Name    string
 	Version string
 }
 
+// Option 函数选项模式，用于配置 Micro 服务。
 type Option func(*Options)
 
 func main() {

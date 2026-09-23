@@ -113,20 +113,28 @@ var (
 
 type (
 	// authentication 包的类型别名
-	Authentication         = authentication.Authentication
-	AuthenticationToken    = authentication.AuthenticationToken
-	AuthenticationManager  = authentication.AuthenticationManager
+	Authentication = authentication.Authentication
+	// AuthenticationToken 认证令牌类型的别名。
+	AuthenticationToken = authentication.AuthenticationToken
+	// AuthenticationManager 认证管理器类型的别名。
+	AuthenticationManager = authentication.AuthenticationManager
+	// AuthenticationProvider 认证提供者类型的别名。
 	AuthenticationProvider = authentication.AuthenticationProvider
-	UserDetails            = authentication.UserDetails
-	UserDetailsService     = authentication.UserDetailsService
-	PasswordEncoder        = authentication.PasswordEncoder
+	// UserDetails 用户详情类型的别名。
+	UserDetails = authentication.UserDetails
+	// UserDetailsService 用户详情服务类型的别名。
+	UserDetailsService = authentication.UserDetailsService
+	// PasswordEncoder 密码编码器类型的别名。
+	PasswordEncoder = authentication.PasswordEncoder
 
 	// authorization 包的类型别名
 	AccessDecisionManager = authorization.AccessDecisionManager
-	AccessDecisionVoter   = authorization.AccessDecisionVoter
+	// AccessDecisionVoter 访问决策投票者类型的别名。
+	AccessDecisionVoter = authorization.AccessDecisionVoter
 
 	// filter 包的类型别名
-	SecurityFilter      = filter.Filter
+	SecurityFilter = filter.Filter
+	// SecurityFilterChain 安全过滤器链类型的别名。
 	SecurityFilterChain = filter.SecurityFilterChain
 )
 
@@ -376,5 +384,46 @@ const (
 // ==================== 条件值常量 ====================
 
 const (
+	// ConditionTrue 条件值常量，表示开启。
 	ConditionTrue = "true"
 )
+
+// ==================== Casbin 配置键常量 ====================
+
+const (
+	CasbinEnabled          = "security.casbin.enabled"
+	CasbinModelType        = "security.casbin.model-type"
+	CasbinModelPath        = "security.casbin.model-path"
+	CasbinModelText        = "security.casbin.model-text"
+	CasbinPolicyType       = "security.casbin.policy-type"
+	CasbinPolicyPath       = "security.casbin.policy-path"
+	CasbinPolicyText       = "security.casbin.policy-text"
+	CasbinAutoLoad         = "security.casbin.auto-load"
+	CasbinAutoLoadInterval = "security.casbin.auto-load-interval"
+	CasbinLogFieldModel    = "model-path"
+	CasbinLogFieldPolicy   = "policy-path"
+)
+
+const (
+	DefaultCasbinModelType        = "file"
+	DefaultCasbinModelPath        = "config/casbin_model.conf"
+	DefaultCasbinPolicyType       = "file"
+	DefaultCasbinPolicyPath       = "config/casbin_policy.csv"
+	DefaultCasbinAutoLoad         = false
+	DefaultCasbinAutoLoadInterval = 5
+)
+
+// CasbinEnforcer Casbin 执行器接口。
+type CasbinEnforcer interface {
+	Enforce(ctx context.Context, subject, object, action string) (bool, error)
+	AddPolicy(ctx context.Context, sub, obj, act string) error
+	RemovePolicy(ctx context.Context, sub, obj, act string) error
+	GetPolicy(ctx context.Context) ([][]string, error)
+	LoadPolicy(ctx context.Context) error
+	SavePolicy(ctx context.Context) error
+}
+
+// CasbinVoter Casbin 投票者实现。
+type CasbinVoter struct {
+	enforcer CasbinEnforcer
+}

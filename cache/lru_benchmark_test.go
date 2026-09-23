@@ -40,12 +40,12 @@ func BenchmarkLRUCache_Concurrent(b *testing.B) {
 	ctx := context.Background()
 
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			key := fmt.Sprintf("key-%d", i%100)
-			_ = cache.Set(ctx, key, i, time.Minute)
+			key := fmt.Sprintf("key-%d", seq%100)
+			_ = cache.Set(ctx, key, seq, time.Minute)
 			_, _ = cache.Get(ctx, key)
-			i++
+			seq++
 		}
 	})
 }
@@ -83,74 +83,39 @@ func BenchmarkShardedLRUCache_Concurrent(b *testing.B) {
 	ctx := context.Background()
 
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			key := fmt.Sprintf("key-%d", i%100)
-			_ = cache.Set(ctx, key, i, time.Minute)
+			key := fmt.Sprintf("key-%d", seq%100)
+			_ = cache.Set(ctx, key, seq, time.Minute)
 			_, _ = cache.Get(ctx, key)
-			i++
+			seq++
+		}
+	})
+}
+
+func benchLRUCacheComparisonRun(b *testing.B, shards int) {
+	var cache Cache
+	if shards == 1 {
+		cache = NewLRUCache(1000)
+	} else {
+		cache = NewShardedLRUCache(1000, shards)
+	}
+	ctx := context.Background()
+
+	b.RunParallel(func(pb *testing.PB) {
+		seq := 0
+		for pb.Next() {
+			key := fmt.Sprintf("key-%d", seq%100)
+			_ = cache.Set(ctx, key, seq, time.Minute)
+			_, _ = cache.Get(ctx, key)
+			seq++
 		}
 	})
 }
 
 func BenchmarkLRUCache_Comparison(b *testing.B) {
-	b.Run("Single-Shard", func(b *testing.B) {
-		cache := NewLRUCache(1000)
-		ctx := context.Background()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				key := fmt.Sprintf("key-%d", i%100)
-				_ = cache.Set(ctx, key, i, time.Minute)
-				_, _ = cache.Get(ctx, key)
-				i++
-			}
-		})
-	})
-
-	b.Run("Sharded-16", func(b *testing.B) {
-		cache := NewShardedLRUCache(1000, 16)
-		ctx := context.Background()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				key := fmt.Sprintf("key-%d", i%100)
-				_ = cache.Set(ctx, key, i, time.Minute)
-				_, _ = cache.Get(ctx, key)
-				i++
-			}
-		})
-	})
-
-	b.Run("Sharded-32", func(b *testing.B) {
-		cache := NewShardedLRUCache(1000, 32)
-		ctx := context.Background()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				key := fmt.Sprintf("key-%d", i%100)
-				_ = cache.Set(ctx, key, i, time.Minute)
-				_, _ = cache.Get(ctx, key)
-				i++
-			}
-		})
-	})
-
-	b.Run("Sharded-64", func(b *testing.B) {
-		cache := NewShardedLRUCache(1000, 64)
-		ctx := context.Background()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				key := fmt.Sprintf("key-%d", i%100)
-				_ = cache.Set(ctx, key, i, time.Minute)
-				_, _ = cache.Get(ctx, key)
-				i++
-			}
-		})
-	})
+	b.Run("Single-Shard", func(b *testing.B) { benchLRUCacheComparisonRun(b, 1) })
+	b.Run("Sharded-16", func(b *testing.B) { benchLRUCacheComparisonRun(b, 16) })
+	b.Run("Sharded-32", func(b *testing.B) { benchLRUCacheComparisonRun(b, 32) })
+	b.Run("Sharded-64", func(b *testing.B) { benchLRUCacheComparisonRun(b, 64) })
 }

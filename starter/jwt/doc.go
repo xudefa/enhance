@@ -100,36 +100,50 @@ import (
 const (
 	// HTTP Header 常量
 	HeaderAuthorization = "Authorization"
-	HeaderBearerPrefix  = "Bearer "
+	// HeaderBearerPrefix Bearer Token 前缀。
+	HeaderBearerPrefix = "Bearer "
 
 	// JWT 配置
-	JWTEnabled                = "security.jwt.enabled"
-	JWTSecretKey              = "security.jwt.secret-key"
-	JWTIssuer                 = "security.jwt.issuer"
-	JWTExpiresDuration        = "security.jwt.expires-duration"
+	JWTEnabled = "security.jwt.enabled"
+	// JWTSecretKey JWT 签名密钥。
+	JWTSecretKey = "security.jwt.secret-key"
+	// JWTIssuer JWT 签发者。
+	JWTIssuer = "security.jwt.issuer"
+	// JWTExpiresDuration JWT 过期时间。
+	JWTExpiresDuration = "security.jwt.expires-duration"
+	// JWTRefreshExpiresDuration JWT 刷新过期时间。
 	JWTRefreshExpiresDuration = "security.jwt.refresh-expires-duration"
-	JWTExcludePaths           = "security.jwt.exclude-paths"
-	JWTSigningMethod          = "security.jwt.signing-method"
+	// JWTExcludePaths JWT 排除路径。
+	JWTExcludePaths = "security.jwt.exclude-paths"
+	// JWTSigningMethod JWT 签名算法。
+	JWTSigningMethod = "security.jwt.signing-method"
 
 	// Security 配置
 	SecurityEnabled = "security.enabled"
 
 	// 日志字段常量
-	LogFieldError   = "error"
-	LogFieldSecret  = "secret-key"
+	LogFieldError = "error"
+	// LogFieldSecret 日志字段：密钥。
+	LogFieldSecret = "secret-key"
+	// LogFieldExclude 日志字段：排除路径。
 	LogFieldExclude = "exclude-paths"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	// JWT 默认值
-	DefaultJWTSecretKey              = "enhanceJwtSecret"
-	DefaultJWTIssuer                 = "enhance"
-	DefaultJWTExpiresDuration        = 600
+	// DefaultJWTSecretKey 默认 JWT 签名密钥。
+	DefaultJWTSecretKey = "enhanceJwtSecret"
+	// DefaultJWTIssuer 默认 JWT 签发者。
+	DefaultJWTIssuer = "enhance"
+	// DefaultJWTExpiresDuration 默认 JWT 过期时间（秒）。
+	DefaultJWTExpiresDuration = 600
+	// DefaultJWTRefreshExpiresDuration 默认 JWT 刷新过期时间（秒）。
 	DefaultJWTRefreshExpiresDuration = 3600
-	DefaultJWTExcludePaths           = "/login,/register,/health,/actuator/health"
-	DefaultJWTSigningMethod          = "HS256"
+	// DefaultJWTExcludePaths 默认 JWT 排除路径。
+	DefaultJWTExcludePaths = "/login,/register,/health,/actuator/health"
+	// DefaultJWTSigningMethod 默认 JWT 签名算法。
+	DefaultJWTSigningMethod = "HS256"
 
 	// 条件值常量
 	ConditionTrue = "true"

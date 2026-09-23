@@ -77,11 +77,13 @@ type responseWriter struct {
 	statusCode int
 }
 
+// WriteHeader 设置响应状态码。
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// Write 写入响应体。
 func (rw *responseWriter) Write(b []byte) (int, error) {
 	if rw.statusCode == 0 {
 		rw.statusCode = http.StatusOK

@@ -116,7 +116,7 @@ func TestRouterAdapter_GET(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.GET("/test", handler)
@@ -144,7 +144,7 @@ func TestRouterAdapter_POST(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.POST("/test", handler)
@@ -169,7 +169,7 @@ func TestRouterAdapter_PUT(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.PUT("/test", handler)
@@ -194,7 +194,7 @@ func TestRouterAdapter_DELETE(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.DELETE("/test", handler)
@@ -219,7 +219,7 @@ func TestRouterAdapter_PATCH(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.PATCH("/test", handler)
@@ -246,7 +246,7 @@ func TestRouterAdapter_Handle(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	adapter.Handle("OPTIONS", "/test", handler)
@@ -271,7 +271,7 @@ func TestRouterAdapter_Handle_Nil(t *testing.T) {
 	groupFunc := func(prefix string) core.Router { return nil }
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, nil, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: nil, Group: groupFunc, Use: useFunc})
 
 	handler := func(ctx core.Context) {}
 	// 不应该 panic
@@ -294,7 +294,7 @@ func TestRouterAdapter_Group(t *testing.T) {
 	}
 	useFunc := func(middleware core.MiddlewareFunc) {}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	adapter.Group("/api")
 
@@ -318,7 +318,7 @@ func TestRouterAdapter_Use(t *testing.T) {
 		receivedMiddleware = middleware
 	}
 
-	adapter := NewRouterAdapter(getFunc, postFunc, putFunc, deleteFunc, patchFunc, handleFunc, groupFunc, useFunc)
+	adapter := NewRouterAdapter(RouterAdapterConfig{Get: getFunc, Post: postFunc, Put: putFunc, Delete: deleteFunc, Patch: patchFunc, Handle: handleFunc, Group: groupFunc, Use: useFunc})
 
 	middleware := func(ctx core.Context) {
 		ctx.Next()

@@ -20,8 +20,8 @@ func (a *ActuatorAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 
 	if indicators, err := ctx.Container().Get(reflect.TypeOf((*health.Indicator)(nil)).Elem()); err == nil && len(indicators) > 0 {
 		for _, ind := range indicators {
-			if h, ok := ind.(health.Indicator); ok && h != nil {
-				agg.AddIndicator(h)
+			if indicator, ok := ind.(health.Indicator); ok && indicator != nil {
+				agg.AddIndicator(indicator)
 			}
 		}
 	}
@@ -39,8 +39,8 @@ func (a *ActuatorAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 			appName = DefaultAppName
 		}
 		appVersion := DefaultAppVersion
-		if v, ok := ctx.Environment().GetProperty(AppVersion); ok && v != "" {
-			if versionStr, ok := v.(string); ok {
+		if versionValue, ok := ctx.Environment().GetProperty(AppVersion); ok && versionValue != "" {
+			if versionStr, ok := versionValue.(string); ok {
 				appVersion = versionStr
 			}
 		}

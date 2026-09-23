@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/xudefa/enhance/security/authentication"
@@ -11,10 +12,10 @@ import (
 func TestAuthContextFilter_DoFilter(t *testing.T) {
 	t.Parallel()
 
-	f := NewAuthContextFilter()
+	authContextFilter := NewAuthContextFilter()
 
-	if f.Order() != AuthContextFilterOrder {
-		t.Errorf("expected order %d, got %d", AuthContextFilterOrder, f.Order())
+	if authContextFilter.Order() != AuthContextFilterOrder {
+		t.Errorf("expected order %d, got %d", AuthContextFilterOrder, authContextFilter.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -22,7 +23,7 @@ func TestAuthContextFilter_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := authContextFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -31,10 +32,10 @@ func TestAuthContextFilter_DoFilter(t *testing.T) {
 func TestAnonymousAuthenticationFilter_DoFilter(t *testing.T) {
 	t.Parallel()
 
-	f := NewAnonymousAuthenticationFilter()
+	anonymousFilter := NewAnonymousAuthenticationFilter()
 
-	if f.Order() != AnonymousAuthenticationFilterOrder {
-		t.Errorf("expected order %d, got %d", AnonymousAuthenticationFilterOrder, f.Order())
+	if anonymousFilter.Order() != AnonymousAuthenticationFilterOrder {
+		t.Errorf("expected order %d, got %d", AnonymousAuthenticationFilterOrder, anonymousFilter.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -42,7 +43,7 @@ func TestAnonymousAuthenticationFilter_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := anonymousFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -85,14 +86,14 @@ func TestExceptionTranslationFilter_DoFilter(t *testing.T) {
 
 	accessDeniedHandler := &mockAccessDeniedHandler{}
 	authEntryPoint := &mockAuthenticationEntryPoint{}
-	f := NewExceptionTranslationFilter(accessDeniedHandler, authEntryPoint)
+	exceptionFilter := NewExceptionTranslationFilter(accessDeniedHandler, authEntryPoint)
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := exceptionFilter.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -101,13 +102,13 @@ func TestExceptionTranslationFilter_DoFilter(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidContext(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	req := &mockSecurityRequest{}
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter("invalid", req, resp, chain)
+	err := exceptionFilter.DoFilter("invalid", req, resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid context")
 	}
@@ -116,12 +117,12 @@ func TestExceptionTranslationFilter_DoFilter_InvalidContext(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), "invalid", resp, chain)
+	err := exceptionFilter.DoFilter(context.Background(), "invalid", resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid request")
 	}
@@ -130,12 +131,12 @@ func TestExceptionTranslationFilter_DoFilter_InvalidRequest(t *testing.T) {
 func TestExceptionTranslationFilter_DoFilter_InvalidResponse(t *testing.T) {
 	t.Parallel()
 
-	f := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
+	exceptionFilter := NewExceptionTranslationFilter(&mockAccessDeniedHandler{}, &mockAuthenticationEntryPoint{})
 
 	req := &mockSecurityRequest{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), req, "invalid", chain)
+	err := exceptionFilter.DoFilter(context.Background(), req, "invalid", chain)
 	if err == nil {
 		t.Fatal("expected error for invalid response")
 	}
@@ -148,10 +149,10 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 	decisionManager := NewAffirmativeBased()
 	metadataSource := NewExpressionBasedFilterInvocationSecurityMetadataSource()
 
-	f := NewFilterSecurityInterceptor(metadataSource, decisionManager, authManager)
+	interceptor := NewFilterSecurityInterceptor(metadataSource, decisionManager, authManager)
 
-	if f.Order() != FilterSecurityInterceptorOrder {
-		t.Errorf("expected order %d, got %d", FilterSecurityInterceptorOrder, f.Order())
+	if interceptor.Order() != FilterSecurityInterceptorOrder {
+		t.Errorf("expected order %d, got %d", FilterSecurityInterceptorOrder, interceptor.Order())
 	}
 
 	req := &mockSecurityRequest{method: "GET", uri: "/test"}
@@ -159,7 +160,7 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 	chain := filter.NewDefaultFilterChain()
 
 	ctx := context.Background()
-	err := f.DoFilter(ctx, req, resp, chain)
+	err := interceptor.DoFilter(ctx, req, resp, chain)
 	if err != nil {
 		t.Fatalf("DoFilter error: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestFilterSecurityInterceptor_DoFilter(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -178,7 +179,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter("invalid", req, resp, chain)
+	err := interceptor.DoFilter("invalid", req, resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid context")
 	}
@@ -187,7 +188,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidContext(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -196,7 +197,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 	resp := &mockSecurityResponse{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), "invalid", resp, chain)
+	err := interceptor.DoFilter(context.Background(), "invalid", resp, chain)
 	if err == nil {
 		t.Fatal("expected error for invalid request")
 	}
@@ -205,7 +206,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidRequest(t *testing.T) {
 func TestFilterSecurityInterceptor_DoFilter_InvalidResponse(t *testing.T) {
 	t.Parallel()
 
-	f := NewFilterSecurityInterceptor(
+	interceptor := NewFilterSecurityInterceptor(
 		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
 		NewAffirmativeBased(),
 		&mockAuthenticationManager{},
@@ -214,7 +215,7 @@ func TestFilterSecurityInterceptor_DoFilter_InvalidResponse(t *testing.T) {
 	req := &mockSecurityRequest{}
 	chain := filter.NewDefaultFilterChain()
 
-	err := f.DoFilter(context.Background(), req, "invalid", chain)
+	err := interceptor.DoFilter(context.Background(), req, "invalid", chain)
 	if err == nil {
 		t.Fatal("expected error for invalid response")
 	}
@@ -236,4 +237,86 @@ type mockAuthenticationManager struct{}
 
 func (m *mockAuthenticationManager) Authenticate(ctx context.Context, token authentication.AuthenticationToken) (authentication.Authentication, error) {
 	return nil, nil
+}
+
+// ==================== Interceptor Coverage Tests ====================
+
+func TestFilterSecurityInterceptor_Setters(t *testing.T) {
+	t.Parallel()
+
+	interceptor := &FilterSecurityInterceptor{}
+
+	source := NewExpressionBasedFilterInvocationSecurityMetadataSource()
+	interceptor.SetSecurityMetadataSource(source)
+	if interceptor.securityMetadataSource != source {
+		t.Error("expected securityMetadataSource to be set")
+	}
+
+	manager := NewAffirmativeBased()
+	interceptor.SetAccessDecisionManager(manager)
+	if interceptor.accessDecisionManager != manager {
+		t.Error("expected accessDecisionManager to be set")
+	}
+
+	authManager := &mockAuthenticationManager{}
+	interceptor.SetAuthenticationManager(authManager)
+	if interceptor.authenticationManager != authManager {
+		t.Error("expected authenticationManager to be set")
+	}
+}
+
+func TestFilterSecurityInterceptor_DoFilter_FilterApplied(t *testing.T) {
+	t.Parallel()
+
+	interceptor := NewFilterSecurityInterceptor(
+		NewExpressionBasedFilterInvocationSecurityMetadataSource(),
+		NewAffirmativeBased(),
+		&mockAuthenticationManager{},
+	)
+
+	req := &mockSecurityRequest{method: "GET", uri: "/test"}
+	req.SetAttribute(filterAppliedKey, true)
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := interceptor.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called")
+	}
+}
+
+func TestMatchWildcard(t *testing.T) {
+	t.Parallel()
+
+	source := NewExpressionBasedFilterInvocationSecurityMetadataSource()
+	source.AddMapping("/api/*/detail", []string{"authenticated"})
+
+	req := NewHttpRequestAdapter(&http.Request{
+		Method: "GET",
+		URL:    mustParseURL("/api/user/detail"),
+	})
+
+	attrs, err := source.GetAttributes(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(attrs) != 1 || attrs[0] != "authenticated" {
+		t.Errorf("expected [authenticated], got %v", attrs)
+	}
+
+	// Test non-matching wildcard
+	req2 := NewHttpRequestAdapter(&http.Request{
+		Method: "GET",
+		URL:    mustParseURL("/api/user/profile"),
+	})
+	attrs, err = source.GetAttributes(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(attrs) != 0 {
+		t.Errorf("expected 0 attributes, got %v", attrs)
+	}
 }

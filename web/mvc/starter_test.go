@@ -86,17 +86,17 @@ func (m *mockApplicationContext) EventBus() boot.EventBusResult {
 
 func TestWebStarter_StartErrorObservable(t *testing.T) {
 	t.Parallel()
-	s := &WebStarter{
+	webStarter := &WebStarter{
 		router: &dummyRouter{},
 		server: &failingServer{},
 		config: Config{Host: "127.0.0.1", Port: 0},
 		logger: log.Build(),
 	}
-	if err := s.Start(nil); err != nil {
+	if err := webStarter.Start(nil); err != nil {
 		t.Fatalf("Start error = %v", err)
 	}
 	select {
-	case err := <-s.errCh:
+	case err := <-webStarter.errCh:
 		if err == nil {
 			t.Fatal("expected non-nil start error")
 		}

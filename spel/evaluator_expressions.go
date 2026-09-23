@@ -12,7 +12,6 @@ func (e *complexExpressionImpl) evaluateMethodCall(expr string, ctx EvaluationCo
 		return nil, fmt.Errorf("invalid method call")
 	}
 
-	// 缺少右括号时避免切片越界
 	if !strings.HasSuffix(expr, ")") {
 		return nil, fmt.Errorf("invalid method call: missing closing parenthesis")
 	}
@@ -20,64 +19,14 @@ func (e *complexExpressionImpl) evaluateMethodCall(expr string, ctx EvaluationCo
 	methodName := strings.TrimSpace(expr[:dotIdx])
 	argsStr := expr[dotIdx+1 : len(expr)-1]
 
-	root := ctx.GetRootObject()
-	if root == nil {
-		return nil, fmt.Errorf("root object is nil")
+	method, err := e.resolveRootMethod(ctx, methodName)
+	if err != nil {
+		return nil, fmt.Errorf("resolve root method: %w", err)
 	}
 
-	v := reflect.ValueOf(root)
-	if v.Kind() == reflect.Pointer {
-		v = v.Elem()
-	}
-
-	// 先尝试在值上查找方法，如果找不到，再尝试在指针上查找
-	method := v.MethodByName(methodName)
-	if !method.IsValid() && v.CanAddr() {
-		method = v.Addr().MethodByName(methodName)
-	}
-
-	if !method.IsValid() {
-		return nil, fmt.Errorf("method %s not found", methodName)
-	}
-
-	var args []reflect.Value
-	if argsStr != "" {
-		parsedArgs := splitArgsRespectingQuotes(argsStr)
-		for _, arg := range parsedArgs {
-			val, err := e.evaluate(strings.TrimSpace(arg), ctx)
-			if err != nil {
-				return nil, err
-			}
-			args = append(args, reflect.ValueOf(val))
-		}
-	}
-
-	if method.Type().NumIn() != len(args) {
-		return nil, fmt.Errorf("method %s expects %d arguments, got %d",
-			methodName, method.Type().NumIn(), len(args))
-	}
-
-	// 将参数转换为方法期望的类型，避免类型不匹配导致 reflect.Call panic
-	mt := method.Type()
-	for i := range args {
-		target := mt.In(i)
-		arg := args[i]
-		if !arg.IsValid() {
-			if isNilable(target) {
-				args[i] = reflect.Zero(target)
-				continue
-			}
-			return nil, fmt.Errorf("method %s argument %d: cannot pass nil to %s", methodName, i, target)
-		}
-		if arg.Type().AssignableTo(target) {
-			continue
-		}
-		if arg.Type().ConvertibleTo(target) {
-			args[i] = arg.Convert(target)
-			continue
-		}
-		return nil, fmt.Errorf("method %s argument %d: cannot convert %s to %s",
-			methodName, i, arg.Type(), target)
+	args, err := e.evaluateMethodCallArgs(argsStr, ctx, method, methodName)
+	if err != nil {
+		return nil, fmt.Errorf("evaluate method call args: %w", err)
 	}
 
 	results := method.Call(args)
@@ -86,6 +35,93 @@ func (e *complexExpressionImpl) evaluateMethodCall(expr string, ctx EvaluationCo
 	}
 
 	return results[0].Interface(), nil
+}
+
+// resolveRootMethod 从根对象上解析指定名称的方法，找不到时返回错误。
+func (e *complexExpressionImpl) resolveRootMethod(ctx EvaluationContext, methodName string) (reflect.Value, error) {
+	root := ctx.GetRootObject()
+	if root == nil {
+		return reflect.Value{}, fmt.Errorf("root object is nil")
+	}
+
+	rootValue := reflect.ValueOf(root)
+	if rootValue.Kind() == reflect.Pointer {
+		rootValue = rootValue.Elem()
+	}
+
+	method := rootValue.MethodByName(methodName)
+	if !method.IsValid() && rootValue.CanAddr() {
+		method = rootValue.Addr().MethodByName(methodName)
+	}
+
+	if !method.IsValid() {
+		return reflect.Value{}, fmt.Errorf("method %s not found", methodName)
+	}
+
+	return method, nil
+}
+
+// evaluateMethodCallArgs 解析并转换方法调用参数。
+func (e *complexExpressionImpl) evaluateMethodCallArgs(argsStr string, ctx EvaluationContext, method reflect.Value, methodName string) ([]reflect.Value, error) {
+	var args []reflect.Value
+	if argsStr != "" {
+		var err error
+		args, err = e.evaluateMethodArgs(argsStr, ctx)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate method args: %w", err)
+		}
+	}
+
+	if method.Type().NumIn() != len(args) {
+		return nil, fmt.Errorf("method %s expects %d arguments, got %d",
+			methodName, method.Type().NumIn(), len(args))
+	}
+
+	if err := convertArgsToMethodParams(method.Type(), args, methodName); err != nil {
+		return nil, fmt.Errorf("convert args to method params: %w", err)
+	}
+
+	return args, nil
+}
+
+// evaluateMethodArgs 求值方法调用参数列表。
+func (e *complexExpressionImpl) evaluateMethodArgs(argsStr string, ctx EvaluationContext) ([]reflect.Value, error) {
+	parsedArgs := splitArgsRespectingQuotes(argsStr)
+	args := make([]reflect.Value, 0, len(parsedArgs))
+	for _, arg := range parsedArgs {
+		argValue, err := e.evaluate(strings.TrimSpace(arg), ctx)
+		if err != nil {
+			return nil, fmt.Errorf("求值方法参数 %s 失败: %w", arg, err)
+		}
+		args = append(args, reflect.ValueOf(argValue))
+	}
+	return args, nil
+}
+
+// convertArgsToMethodParams 将参数值转换为方法期望的参数类型。
+func convertArgsToMethodParams(methodType reflect.Type, args []reflect.Value, methodName string) error {
+	mt := methodType
+	for i := range args {
+		target := mt.In(i)
+		arg := args[i]
+		if !arg.IsValid() {
+			if isNilable(target) {
+				args[i] = reflect.Zero(target)
+				continue
+			}
+			return fmt.Errorf("method %s argument %d: cannot pass nil to %s", methodName, i, target)
+		}
+		if arg.Type().AssignableTo(target) {
+			continue
+		}
+		if arg.Type().ConvertibleTo(target) {
+			args[i] = arg.Convert(target)
+			continue
+		}
+		return fmt.Errorf("method %s argument %d: cannot convert %s to %s",
+			methodName, i, arg.Type(), target)
+	}
+	return nil
 }
 
 func (e *complexExpressionImpl) evaluatePropertyChain(expr string, ctx EvaluationContext) (any, error) {
@@ -97,11 +133,11 @@ func (e *complexExpressionImpl) evaluatePropertyChain(expr string, ctx Evaluatio
 			return nil, fmt.Errorf("cannot access property %s on nil", part)
 		}
 
-		val, err := ctx.GetPropertyAccessor().GetProperty(current, part)
+		propValue, err := ctx.GetPropertyAccessor().GetProperty(current, part)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("获取属性链属性 %s 失败: %w", part, err)
 		}
-		current = val
+		current = propValue
 	}
 
 	return current, nil
@@ -143,8 +179,8 @@ func (e *complexExpressionImpl) evaluate(expr string, ctx EvaluationContext) (an
 		return e.evaluateLiteral(expr)
 	}
 
-	if val, ok := ctx.GetVariable(expr); ok {
-		return val, nil
+	if variableValue, ok := ctx.GetVariable(expr); ok {
+		return variableValue, nil
 	}
 
 	// 递归处理逻辑运算符
@@ -306,44 +342,44 @@ func parseInt(s string, _, _ int) (int64, error) {
 		return 0, fmt.Errorf("empty string")
 	}
 
-	var n int64
+	var parsed int64
 	negative := false
-	i := 0
+	pos := 0
 
 	if len(s) > 0 && s[0] == '-' {
 		negative = true
-		i = 1
+		pos = 1
 	}
 
-	for ; i < len(s); i++ {
-		c := s[i]
+	for ; pos < len(s); pos++ {
+		c := s[pos]
 		if c < '0' || c > '9' {
 			return 0, fmt.Errorf("invalid integer: %s", s)
 		}
-		n = n*10 + int64(c-'0')
+		parsed = parsed*10 + int64(c-'0')
 	}
 
 	if negative {
-		return -n, nil
+		return -parsed, nil
 	}
-	return n, nil
+	return parsed, nil
 }
 
 // parseFloat 简单浮点数解析。
 func parseFloat(s string, _ int) (float64, error) {
-	var n, frac float64
+	var intPart, fracPart float64
 	var negative bool
 	var inFrac bool
 	var fracDiv float64 = 1
 
-	i := 0
+	pos := 0
 	if len(s) > 0 && s[0] == '-' {
 		negative = true
-		i = 1
+		pos = 1
 	}
 
-	for ; i < len(s); i++ {
-		c := s[i]
+	for ; pos < len(s); pos++ {
+		c := s[pos]
 		if c == '.' {
 			inFrac = true
 			continue
@@ -354,15 +390,15 @@ func parseFloat(s string, _ int) (float64, error) {
 		digit := float64(c - '0')
 		if inFrac {
 			fracDiv *= 10
-			frac += digit / fracDiv
+			fracPart += digit / fracDiv
 			continue
 		}
-		n = n*10 + digit
+		intPart = intPart*10 + digit
 	}
 
-	result := n + frac
+	parsedValue := intPart + fracPart
 	if negative {
-		result = -result
+		parsedValue = -parsedValue
 	}
-	return result, nil
+	return parsedValue, nil
 }

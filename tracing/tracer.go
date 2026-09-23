@@ -26,6 +26,54 @@ type Tracer struct {
 	exportMu    sync.Mutex
 }
 
+// AlwaysOnSampler 始终采样器。
+type AlwaysOnSampler struct{}
+
+// AlwaysOffSampler 从不采样器。
+type AlwaysOffSampler struct{}
+
+// ProbabilitySampler 概率采样器。
+type ProbabilitySampler struct {
+	rate float64
+	mu   sync.Mutex
+	rand *mathrand.Rand
+}
+
+// ConsoleExporter 控制台导出器。
+type ConsoleExporter struct{}
+
+// tracingContextKey context 中存储 SpanContext 的键类型。
+type tracingContextKey struct{}
+
+// NewTracer 创建追踪器。
+//
+// 使用函数式选项模式配置 Tracer，支持服务名称、采样器、导出器等配置。
+// 默认使用 AlwaysOnSampler 和 ConsoleExporter。
+func NewTracer(opts ...TracerOption) *Tracer {
+	tracer := &Tracer{
+		serviceName: DefaultServiceName,
+		sampler:     &AlwaysOnSampler{},
+		exporter:    &ConsoleExporter{},
+		maxSpans:    DefaultMaxSpans,
+	}
+
+	for _, opt := range opts {
+		opt(tracer)
+	}
+
+	return tracer
+}
+
+// NewProbabilitySampler 创建概率采样器。
+//
+// rate 参数范围 [0.0, 1.0]，0.0 表示不采样，1.0 表示全量采样。
+func NewProbabilitySampler(rate float64) *ProbabilitySampler {
+	return &ProbabilitySampler{
+		rate: rate,
+		rand: mathrand.New(mathrand.NewSource(time.Now().UnixNano())),
+	}
+}
+
 // WithServiceName 设置服务名称。
 func WithServiceName(name string) TracerOption {
 	return func(t *Tracer) {
@@ -89,25 +137,6 @@ func WithTags(tags map[string]string) SpanOption {
 	}
 }
 
-// NewTracer 创建追踪器。
-//
-// 使用函数式选项模式配置 Tracer，支持服务名称、采样器、导出器等配置。
-// 默认使用 AlwaysOnSampler 和 ConsoleExporter。
-func NewTracer(opts ...TracerOption) *Tracer {
-	tracer := &Tracer{
-		serviceName: DefaultServiceName,
-		sampler:     &AlwaysOnSampler{},
-		exporter:    &ConsoleExporter{},
-		maxSpans:    DefaultMaxSpans,
-	}
-
-	for _, opt := range opts {
-		opt(tracer)
-	}
-
-	return tracer
-}
-
 // StartSpan 创建新的 Span。
 //
 // 根据采样器决定是否创建真实 Span，未采样时返回空 Span。
@@ -125,6 +154,15 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		}
 	}
 
+	span := t.newSpan(name, serviceName, opts)
+
+	t.recordSpan(span)
+
+	return span
+}
+
+// newSpan 根据采样结果构建 Span，应用选项并推导追踪上下文。
+func (t *Tracer) newSpan(name string, serviceName string, opts []SpanOption) *Span {
 	span := &Span{
 		TraceID:   TraceID(generateID()),
 		SpanID:    SpanID(generateID()),
@@ -158,6 +196,11 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 		Sampled:      sampled,
 	}
 
+	return span
+}
+
+// recordSpan 将 Span 记录到追踪器，并在超出上限时淘汰最旧的 Span。
+func (t *Tracer) recordSpan(span *Span) {
 	t.mu.Lock()
 	if t.maxSpans > 0 && len(t.spans) >= t.maxSpans {
 		t.spans = t.spans[1:]
@@ -166,8 +209,6 @@ func (t *Tracer) StartSpan(name string, opts ...SpanOption) *Span {
 	t.mu.Unlock()
 
 	t.spanCount.Add(1)
-
-	return span
 }
 
 // Inject 注入追踪上下文到 HTTP 头部。
@@ -270,45 +311,22 @@ func (t *Tracer) Clear() {
 // 使用 crypto/rand 生成密码学安全的随机 ID。
 // 如果 crypto/rand 失败，回退到时间戳方案。
 func generateID() string {
-	b := make([]byte, 8)
-	n, err := rand.Read(b)
-	if err != nil || n != len(b) {
+	idBytes := make([]byte, 8)
+	n, err := rand.Read(idBytes)
+	if err != nil || n != len(idBytes) {
 		return fmt.Sprintf("%016x", time.Now().UnixNano())
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(idBytes)
 }
-
-// AlwaysOnSampler 始终采样器。
-type AlwaysOnSampler struct{}
 
 // ShouldSample 实现 Sampler 接口，始终返回 true。
 func (s *AlwaysOnSampler) ShouldSample() bool {
 	return true
 }
 
-// AlwaysOffSampler 从不采样器。
-type AlwaysOffSampler struct{}
-
 // ShouldSample 实现 Sampler 接口，始终返回 false。
 func (s *AlwaysOffSampler) ShouldSample() bool {
 	return false
-}
-
-// ProbabilitySampler 概率采样器。
-type ProbabilitySampler struct {
-	rate float64
-	mu   sync.Mutex
-	rand *mathrand.Rand
-}
-
-// NewProbabilitySampler 创建概率采样器。
-//
-// rate 参数范围 [0.0, 1.0]，0.0 表示不采样，1.0 表示全量采样。
-func NewProbabilitySampler(rate float64) *ProbabilitySampler {
-	return &ProbabilitySampler{
-		rate: rate,
-		rand: mathrand.New(mathrand.NewSource(time.Now().UnixNano())),
-	}
 }
 
 // ShouldSample 实现 Sampler 接口，按概率返回是否采样。
@@ -317,9 +335,6 @@ func (s *ProbabilitySampler) ShouldSample() bool {
 	defer s.mu.Unlock()
 	return s.rand.Float64() < s.rate
 }
-
-// ConsoleExporter 控制台导出器。
-type ConsoleExporter struct{}
 
 // ExportSpans 实现 Exporter 接口，将 Span 打印到控制台。
 func (e *ConsoleExporter) ExportSpans(spans []*Span) error {
@@ -335,9 +350,6 @@ func (e *ConsoleExporter) ExportSpans(spans []*Span) error {
 	}
 	return nil
 }
-
-// tracingContextKey context 中存储 SpanContext 的键类型。
-type tracingContextKey struct{}
 
 // TraceFromContext 从 context 获取追踪上下文。
 //

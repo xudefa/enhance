@@ -7,6 +7,7 @@ import (
 )
 
 func TestRedisConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-redis", environment.PriorityNormal, map[string]any{
 		"redis.enabled": "true",
@@ -47,6 +48,7 @@ func TestRedisConfig_LoadConfig(t *testing.T) {
 }
 
 func TestRedisConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &RedisConfig{
 		Host:     DefaultRedisHost,
 		Port:     DefaultRedisPort,

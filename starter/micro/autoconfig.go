@@ -21,7 +21,8 @@ var microAutoConfig = &MicroAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(microAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(MicroEnabled, ConditionTrue),
+			// 约定优于配置：当 micro.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(MicroEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityBusinessLayer)),
 	)
@@ -112,7 +113,7 @@ func (c *MicroAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *MicroAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(MicroEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(MicroEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetService 获取 go-micro 服务实例。

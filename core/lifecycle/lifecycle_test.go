@@ -80,7 +80,7 @@ func TestInvokeInitError(t *testing.T) {
 		t.Fatal("Expected InvokeInit to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected init error, got: %v", err)
 	}
 }
@@ -100,7 +100,7 @@ func TestInvokeInitFuncError(t *testing.T) {
 		t.Fatal("Expected InvokeInit to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected func init error, got: %v", err)
 	}
 }
@@ -160,7 +160,7 @@ func TestInvokeDestroyError(t *testing.T) {
 		t.Fatal("Expected InvokeDestroy to fail")
 	}
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Errorf("Expected destroy error, got: %v", err)
 	}
 }
@@ -202,18 +202,36 @@ func TestDestroyAll(t *testing.T) {
 		t.Fatalf("DestroyAll failed: %v", err)
 	}
 
-	// Verify reverse order destruction
-	if len(destroyOrder) != 3 {
-		t.Fatalf("Expected 3 destroy calls, got %d", len(destroyOrder))
+	testLifecycleDestroyAllVerify(destroyAllVerifyArgs{
+		t:            t,
+		destroyOrder: destroyOrder,
+		bean1:        bean1,
+		bean2:        bean2,
+		bean3:        bean3,
+	})
+}
+
+// destroyAllVerifyArgs 测试销毁全部 Bean 时的验证参数。
+type destroyAllVerifyArgs struct {
+	t            *testing.T
+	destroyOrder []string
+	bean1        *TestLifecycleBean
+	bean2        *TestLifecycleBean
+	bean3        *TestLifecycleBean
+}
+
+func testLifecycleDestroyAllVerify(args destroyAllVerifyArgs) {
+	args.t.Helper()
+	if len(args.destroyOrder) != 3 {
+		args.t.Fatalf("Expected 3 destroy calls, got %d", len(args.destroyOrder))
 	}
 
-	if destroyOrder[0] != "bean3" || destroyOrder[1] != "bean2" || destroyOrder[2] != "bean1" {
-		t.Errorf("Expected reverse order destroy [bean3, bean2, bean1], got %v", destroyOrder)
+	if args.destroyOrder[0] != "bean3" || args.destroyOrder[1] != "bean2" || args.destroyOrder[2] != "bean1" {
+		args.t.Errorf("Expected reverse order destroy [bean3, bean2, bean1], got %v", args.destroyOrder)
 	}
 
-	// Verify all beans were destroyed
-	if !bean1.DestroyCalled || !bean2.DestroyCalled || !bean3.DestroyCalled {
-		t.Error("Expected all beans to be destroyed")
+	if !args.bean1.DestroyCalled || !args.bean2.DestroyCalled || !args.bean3.DestroyCalled {
+		args.t.Error("Expected all beans to be destroyed")
 	}
 }
 

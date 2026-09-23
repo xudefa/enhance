@@ -141,8 +141,8 @@ func TestEmailValidation(t *testing.T) {
 	}
 
 	for _, email := range validEmails {
-		obj := TestStruct{Email: email}
-		err := validator.Validate(obj)
+		target := TestStruct{Email: email}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期邮箱 %s 验证成功，但得到错误: %v", email, err)
 		}
@@ -156,8 +156,8 @@ func TestEmailValidation(t *testing.T) {
 	}
 
 	for _, email := range invalidEmails {
-		obj := TestStruct{Email: email}
-		err := validator.Validate(obj)
+		target := TestStruct{Email: email}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期邮箱 %s 验证失败，但没有得到错误", email)
 		}
@@ -181,8 +181,8 @@ func TestURLValidation(t *testing.T) {
 	}
 
 	for _, url := range validURLs {
-		obj := TestStruct{URL: url}
-		err := validator.Validate(obj)
+		target := TestStruct{URL: url}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期URL %s 验证成功，但得到错误: %v", url, err)
 		}
@@ -196,8 +196,8 @@ func TestURLValidation(t *testing.T) {
 	}
 
 	for _, url := range invalidURLs {
-		obj := TestStruct{URL: url}
-		err := validator.Validate(obj)
+		target := TestStruct{URL: url}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期URL %s 验证失败，但没有得到错误", url)
 		}
@@ -221,8 +221,8 @@ func TestIPValidation(t *testing.T) {
 	}
 
 	for _, ip := range validIPs {
-		obj := TestStruct{IP: ip}
-		err := validator.Validate(obj)
+		target := TestStruct{IP: ip}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期IP %s 验证成功，但得到错误: %v", ip, err)
 		}
@@ -237,8 +237,8 @@ func TestIPValidation(t *testing.T) {
 	}
 
 	for _, ip := range invalidIPs {
-		obj := TestStruct{IP: ip}
-		err := validator.Validate(obj)
+		target := TestStruct{IP: ip}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期IP %s 验证失败，但没有得到错误", ip)
 		}
@@ -257,8 +257,8 @@ func TestOneOfValidation(t *testing.T) {
 	validRoles := []string{"admin", "user", "guest"}
 
 	for _, role := range validRoles {
-		obj := TestStruct{Role: role}
-		err := validator.Validate(obj)
+		target := TestStruct{Role: role}
+		err := validator.Validate(target)
 		if err != nil {
 			t.Errorf("预期角色 %s 验证成功，但得到错误: %v", role, err)
 		}
@@ -267,8 +267,8 @@ func TestOneOfValidation(t *testing.T) {
 	invalidRoles := []string{"superadmin", "moderator", "owner"}
 
 	for _, role := range invalidRoles {
-		obj := TestStruct{Role: role}
-		err := validator.Validate(obj)
+		target := TestStruct{Role: role}
+		err := validator.Validate(target)
 		if err == nil {
 			t.Errorf("预期角色 %s 验证失败，但没有得到错误", role)
 		}
@@ -290,18 +290,18 @@ func TestBindingPackage(t *testing.T) {
 		Number int    `json:"number" form:"number"`
 	}
 
-	obj := &TestStruct{}
-	err := binder.Bind(req, obj)
+	target := &TestStruct{}
+	err := binder.Bind(req, target)
 	if err != nil {
 		t.Errorf("预期没有绑定错误，但得到: %v", err)
 	}
 
-	if obj.Field != "value" {
-		t.Errorf("预期Field为'value'，但得到: '%s'", obj.Field)
+	if target.Field != "value" {
+		t.Errorf("预期Field为'value'，但得到: '%s'", target.Field)
 	}
 
-	if obj.Number != 42 {
-		t.Errorf("预期Number为42，但得到: %d", obj.Number)
+	if target.Number != 42 {
+		t.Errorf("预期Number为42，但得到: %d", target.Number)
 	}
 }
 
@@ -319,23 +319,23 @@ func TestBindAndValidate(t *testing.T) {
 		Age   int    `json:"age" validate:"required,min=1,max=120"`
 	}
 
-	obj := &TestStruct{}
-	err := BindAndValidate(req, obj)
+	target := &TestStruct{}
+	err := BindAndValidate(req, target)
 	if err != nil {
 		t.Errorf("预期没有绑定/验证错误，但得到: %v", err)
 	}
 
-	if obj.Field != "test" {
-		t.Errorf("预期Field为'test'，但得到: '%s'", obj.Field)
+	if target.Field != "test" {
+		t.Errorf("预期Field为'test'，但得到: '%s'", target.Field)
 	}
 
-	if obj.Age != 25 {
-		t.Errorf("预期Age为25，但得到: %d", obj.Age)
+	if target.Age != 25 {
+		t.Errorf("预期Age为25，但得到: %d", target.Age)
 	}
 }
 
 // TestValidateStruct 测试结构体验证便捷函数
-func TestValidateStruct(t *testing.T) {
+func TestValidateStruct_Coverage(t *testing.T) {
 	t.Parallel()
 	type TestStruct struct {
 		Name string `validate:"required,min=2"`
@@ -462,5 +462,68 @@ func TestQueryBinder(t *testing.T) {
 
 	if params.Role != "user" {
 		t.Errorf("预期Role为'user'，但得到: '%s'", params.Role)
+	}
+}
+
+func TestMinRule_InvalidValue(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type S struct {
+		Count int `validate:"min=5"`
+	}
+
+	errs := validator.Validate(S{Count: 3})
+	if errs == nil {
+		t.Error("expected validation error for min rule")
+	}
+}
+
+func TestMaxRule_InvalidValue(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type S struct {
+		Count int `validate:"max=10"`
+	}
+
+	errs := validator.Validate(S{Count: 15})
+	if errs == nil {
+		t.Error("expected validation error for max rule")
+	}
+}
+
+func TestLengthRule(t *testing.T) {
+	t.Parallel()
+	validator := NewTagValidator()
+
+	type S struct {
+		Name string `validate:"len=5"`
+	}
+
+	errs := validator.Validate(S{Name: "abc"})
+	if errs == nil {
+		t.Error("expected validation error for len rule")
+	}
+
+	errs = validator.Validate(S{Name: "hello"})
+	if errs != nil {
+		t.Errorf("expected no error, got %v", errs)
+	}
+}
+
+func TestRequestValidation_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	rv, err := NewRequestValidator(ValidationConfig{})
+	if err != nil {
+		t.Fatalf("NewRequestValidator failed: %v", err)
+	}
+	req, _ := http.NewRequest("POST", "/test", strings.NewReader("{invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	result := rv.Validate(req)
+	if result == nil {
+		t.Error("expected non-nil result")
 	}
 }

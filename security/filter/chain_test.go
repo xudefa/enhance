@@ -150,12 +150,12 @@ func TestDefaultFilterChain_ContextPropagation(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), "key", "value")
-	f := newMockFilter(1)
-	chain := NewDefaultFilterChainWithFilters(f)
+	mockFilter := newMockFilter(1)
+	chain := NewDefaultFilterChainWithFilters(mockFilter)
 
 	chain.DoFilter(ctx, nil, nil)
 
-	if f.ctx == nil || f.ctx.Value("key") != "value" {
+	if mockFilter.ctx == nil || mockFilter.ctx.Value("key") != "value" {
 		t.Error("expected context to be propagated")
 	}
 }

@@ -80,6 +80,11 @@ func (b *Boot) Start() (err error) {
 	// 创建应用根 context，在 Stop() 时取消
 	b.rootCtx, b.rootCancel = context.WithCancel(context.Background())
 
+	// 启动报告：开始计时
+	report := GetStartupReport()
+	report.SetAppInfo(b.config.AppName, b.config.Version)
+	report.StartTiming()
+
 	// 启动失败时重置状态，支持失败后重试 Start；同时取消并清理根 context，避免资源泄漏
 	defer func() {
 		if err != nil {
@@ -96,125 +101,71 @@ func (b *Boot) Start() (err error) {
 	}()
 
 	// === 阶段 1：初始化阶段 ===
-	if b.configLoader != nil {
-		configSources, err := b.configLoader.Load()
-		if err != nil {
-			return b.reportError("初始化", fmt.Errorf("加载配置文件失败: %w", err))
-		}
+	if err := b.startPhaseInit(report); err != nil {
+		return fmt.Errorf("initialize phase: %w", err)
+	}
 
-		for _, source := range configSources {
-			b.ctx.Environment().AddPropertySource(source)
+	// === 阶段 2：运行阶段 ===
+	if err := b.startPhaseRunning(report); err != nil {
+		return fmt.Errorf("running phase: %w", err)
+	}
+
+	return nil
+}
+
+// startPhaseRunning 执行启动阶段 2：切换运行态、发布就绪事件并启动插件。
+func (b *Boot) startPhaseRunning(report *StartupReport) error {
+	// === 阶段 2：运行阶段 ===
+	if err := b.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
+		return b.reportError("running", err)
+	}
+
+	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationStarted})
+	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationReady})
+
+	// 初始化并启动插件（如果配置了插件）
+	if err := b.runPlugins(); err != nil {
+		return fmt.Errorf("run plugins: %w", err)
+	}
+
+	// 停止计时并打印启动报告
+	report.StopTiming()
+	report.SetBeanCount(len(b.ctx.Container().ListBeans()))
+	report.Print()
+
+	return nil
+}
+
+// runPlugins 注册、初始化并启动所有配置的插件。
+func (b *Boot) runPlugins() error {
+	if len(b.config.Plugins) == 0 {
+		return nil
+	}
+	pm := NewPluginManager()
+	pm.SetContext(newPluginAppCtx(b.ctx, b.rootCtx))
+
+	// 注册所有插件
+	for _, plugin := range b.config.Plugins {
+		if err := pm.Register(plugin); err != nil {
+			return b.reportError("插件注册", fmt.Errorf("插件 %s 注册失败: %w", plugin.Name(), err))
 		}
 	}
 
-	if b.config.ConfigCenterEnabled {
-		if err := b.loadConfigCenterConfig(); err != nil {
-			return b.reportError("初始化", fmt.Errorf("加载配置中心失败: %w", err))
-		}
+	// 初始化插件
+	if err := pm.InitAll(); err != nil {
+		return b.reportError("插件初始化", fmt.Errorf("插件初始化失败: %w", err))
 	}
 
-	for _, source := range b.config.CustomPropertySources {
-		b.ctx.Environment().AddPropertySourceFirst(source)
+	// 启动插件
+	if err := pm.StartAll(); err != nil {
+		return b.reportError("插件启动", fmt.Errorf("插件启动失败: %w", err))
 	}
 
-	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventEnvironmentPrepared})
+	return nil
+}
 
-	if b.config.AutoExecute {
-		entries := GlobalRegistry().GetMatchingWithExclude(newConditionCtx(b.ctx), b.config.ExcludedAutoConfigs)
-		allEntries := GlobalRegistry().GetAll()
-
-		// 收集自动配置报告
-		reportEnabled := IsAutoConfigReportEnabled() || b.ctx.Environment().GetBool("enhance.debug", false)
-		if reportEnabled {
-			ResetAutoConfigReport()
-			b.collectAutoConfigReport(allEntries, entries)
-		}
-
-		for _, entry := range entries {
-			if err := entry.Config.Configure(newAppCtx(b.ctx, b.rootCtx)); err != nil {
-				return b.reportError("初始化", fmt.Errorf("自动配置 %T 失败: %w", entry.Config, err))
-			}
-		}
-
-		// 打印自动配置报告
-		if reportEnabled {
-			GetAutoConfigReport().Print()
-		}
-	}
-
-	// 安装显式模块（Go 风格组合）
-	for _, module := range b.config.Modules {
-		// 检查模块条件
-		if !b.moduleMatches(module) {
-			continue
-		}
-		if err := module.Install(b.ctx.Container()); err != nil {
-			return b.reportError("初始化", fmt.Errorf("模块 %s 安装失败: %w", module.ModuleName(), err))
-		}
-		// 收集模块的 Starter
-		if b.config.Starters {
-			b.starters = append(b.starters, module.ModuleStarters()...)
-		}
-		// 收集模块的钩子
-		for _, h := range module.ModuleHooks() {
-			b.hooks.Register(h)
-		}
-	}
-
-	// 注册全局钩子
-	for _, h := range lifecycle.GlobalHookRegistry().GetAll() {
-		b.hooks.Register(h)
-	}
-
-	// 注册配置中的钩子（通过 WithHook / WithHookFunc）
-	for _, h := range b.config.Hooks {
-		b.hooks.Register(h)
-	}
-
-	// 合并全局注册的 Starter 和模块 Starter，然后拓扑排序
-	allStarters := append(b.starters, GlobalStarterRegistry().GetOrdered()...)
-	b.starters = deduplicateStarters(allStarters)
-
-	if b.config.Starters {
-		for _, s := range b.starters {
-			if !b.starterMatches(s) {
-				continue
-			}
-			if err := s.Configure(newAppCtx(b.ctx, b.rootCtx)); err != nil {
-				return b.reportError("初始化", fmt.Errorf("启动器 %s 配置失败: %w", s.Name(), err))
-			}
-		}
-	}
-
-	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventContextRefreshed})
-
-	// 执行 OnInit 钩子（Bean 注册完成后）
-	if b.hooks.Count() > 0 {
-		if err := b.hooks.InitAll(b.rootCtx); err != nil {
-			return b.reportError("initializing", err)
-		}
-	}
-
-	if b.config.Starters {
-		started := make([]Starter, 0, len(b.starters))
-		for _, s := range b.starters {
-			if !b.starterMatches(s) {
-				continue
-			}
-			if err := s.Start(newAppCtx(b.ctx, b.rootCtx)); err != nil {
-				// 逆序停止已启动的 Starter，避免部分启动失败导致资源泄漏
-				for i := len(started) - 1; i >= 0; i-- {
-					if stopErr := started[i].Stop(newAppCtx(b.ctx, b.rootCtx)); stopErr != nil {
-						fmt.Fprintf(os.Stderr, "starter %s stop error: %v\n", started[i].Name(), stopErr)
-					}
-				}
-				return b.reportError("初始化", fmt.Errorf("启动器 %s 启动失败: %w", s.Name(), err))
-			}
-			started = append(started, s)
-		}
-		b.startersStarted = true
-	}
-
+// runStartHooks 执行 OnStart 钩子并打印横幅。
+func (b *Boot) runStartHooks() error {
 	// 执行 OnStart 钩子（应用启动前）
 	if b.hooks.Count() > 0 {
 		if err := b.hooks.StartAll(b.rootCtx); err != nil {
@@ -230,15 +181,6 @@ func (b *Boot) Start() (err error) {
 	if err := banners.Print(b.config.Version); err != nil {
 		slog.Debug("failed to print banner", "error", err)
 	}
-
-	// === 阶段 2：运行阶段 ===
-	if err := b.ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
-		return b.reportError("running", err)
-	}
-
-	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationStarted})
-	b.ctx.EventBus().Publish(&event.BaseEvent{EventType: event.EventApplicationReady})
-
 	return nil
 }
 
@@ -260,12 +202,12 @@ func (b *Boot) Stop() error {
 	phase := b.ctx.Lifecycle().GetPhase()
 	if b.config.Starters && (b.startersStarted || phase == lifecycle.PhaseRunning) {
 		for i := len(b.starters) - 1; i >= 0; i-- {
-			s := b.starters[i]
-			if !b.starterMatches(s) {
+			starter := b.starters[i]
+			if !b.starterMatches(starter) {
 				continue
 			}
-			if err := s.Stop(newAppCtx(b.ctx, b.rootCtx)); err != nil {
-				fmt.Fprintf(os.Stderr, "starter %s stop error: %v\n", s.Name(), err)
+			if err := starter.Stop(newAppCtx(b.ctx, b.rootCtx)); err != nil {
+				fmt.Fprintf(os.Stderr, "starter %s stop error: %v\n", starter.Name(), err)
 			}
 		}
 	}
@@ -320,7 +262,7 @@ func BindConfig[T any](b *Boot, opts ...BindConfigOption) (T, error) {
 		err = b.ctx.Environment().Bind(target)
 	}
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("绑定配置失败: %w", err)
 	}
 	return *target, nil
 }

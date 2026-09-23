@@ -18,6 +18,7 @@ import (
 )
 
 func TestChiTracingIntegration(t *testing.T) {
+	tt.Parallel()
 	router := chi.NewRouter()
 
 	app, err := boot.NewApplication(
@@ -139,6 +140,7 @@ func TestChiTracingIntegration(t *testing.T) {
 }
 
 func TestChiTracingHTTP(t *testing.T) {
+	tt.Parallel()
 	router := chi.NewRouter()
 
 	app, err := boot.NewApplication(
@@ -266,6 +268,7 @@ func TestChiTracingHTTP(t *testing.T) {
 }
 
 func TestChiActuatorEndpointsWithTracing(t *testing.T) {
+	tt.Parallel()
 	router := chi.NewRouter()
 
 	app, err := boot.NewApplication(
@@ -372,6 +375,7 @@ func TestChiActuatorEndpointsWithTracing(t *testing.T) {
 }
 
 func TestChiActuatorEndpointsTracingContextPropagation(t *testing.T) {
+	tt.Parallel()
 	router := chi.NewRouter()
 
 	app, err := boot.NewApplication(

@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&XormAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(XORMEnabled, ConditionTrue),
+			// 约定优于配置：当 xorm.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(XORMEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)),
 	)

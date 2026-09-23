@@ -290,38 +290,41 @@ func (q *InMemoryQueue) Consume(handler MessageHandler) error {
 	q.mu.Unlock()
 
 	q.wg.Add(1)
-	go func() {
-		defer q.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[MQ] message handler panic recovered in queue %s: %v\n", q.name, r)
-			}
-		}()
+	go q.consumeLoop(handler, stopChan)
 
-		for {
-			if !q.consuming.Load() {
-				return
-			}
+	return nil
+}
 
-			select {
-			case <-stopChan:
-				return
-			default:
-				msg, err := q.ReceiveWithTimeout(DefaultReceiveTimeout)
-				if err != nil {
-					continue
-				}
-
-				if err := handler(msg); err != nil {
-					msg.Nack(true)
-					continue
-				}
-				msg.Ack()
-			}
+// consumeLoop 消息消费循环（WaitGroup 保护）。
+func (q *InMemoryQueue) consumeLoop(handler MessageHandler, stopChan chan struct{}) {
+	defer q.wg.Done()
+	defer func() {
+		if rec := recover(); rec != nil {
+			fmt.Printf("[MQ] message handler panic recovered in queue %s: %v\n", q.name, rec)
 		}
 	}()
 
-	return nil
+	for {
+		if !q.consuming.Load() {
+			return
+		}
+
+		select {
+		case <-stopChan:
+			return
+		default:
+			msg, err := q.ReceiveWithTimeout(DefaultReceiveTimeout)
+			if err != nil {
+				continue
+			}
+
+			if err := handler(msg); err != nil {
+				msg.Nack(true)
+				continue
+			}
+			msg.Ack()
+		}
+	}
 }
 
 // StopConsuming 实现 Queue 接口

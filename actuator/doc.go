@@ -81,11 +81,35 @@ type SanitizeStrategy interface {
 	IsSensitive(key string, value any) bool
 }
 
+// HttpEndpointRegistry HTTP 端点注册表接口
+//
+// 该接口作为 Web 框架和 Actuator 之间的桥梁,允许 Actuator 将端点
+// 挂载到任意 HTTP 框架,而无需关心框架的具体实现细节。
+type HttpEndpointRegistry interface {
+	RegisterEndpoint(method, path string, handler http.Handler)
+	RegisterEndpoints(endpoints []EndpointConfig)
+	HasEndpoint(path string) bool
+}
+
+// EndpointConfig 端点配置
+type EndpointConfig struct {
+	Method      string
+	Path        string
+	Handler     http.Handler
+	Description string
+}
+
+// HttpHandlerRegistry HTTP Handler 注册表
+type HttpHandlerRegistry interface {
+	Handle(pattern string, handler http.Handler)
+}
+
 // ==================== 配置键常量 ====================
 
 const (
 	// 应用配置
-	AppName    = "app.name"
+	AppName = "app.name"
+	// AppVersion 应用版本配置键。
 	AppVersion = "app.version"
 
 	// Actuator 配置
@@ -96,7 +120,8 @@ const (
 
 const (
 	// 应用默认值
-	DefaultAppName    = "enhance-app"
+	DefaultAppName = "enhance-app"
+	// DefaultAppVersion 默认应用版本号。
 	DefaultAppVersion = "1.0.0"
 
 	// 条件值常量

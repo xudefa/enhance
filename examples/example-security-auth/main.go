@@ -1,6 +1,5 @@
-// Package main demonstrates the enhance security framework:
-// security filter chain setup, username/password authentication,
-// role-based authorization, and access control.
+// Package main 演示 enhance 安全框架：
+// 安全过滤器链设置、用户名/密码认证、基于角色的授权和访问控制。
 package main
 
 import (
@@ -15,19 +14,30 @@ import (
 // SimpleLogger implements log.Logger for demo purposes.
 type SimpleLogger struct{}
 
+// Debug 输出调试级别日志。
 func (l *SimpleLogger) Debug(_ context.Context, msg string, _ ...log.KeyValue) {
 	fmt.Printf("  [DEBUG] %s\n", msg)
 }
+
+// Info 输出信息级别日志。
 func (l *SimpleLogger) Info(_ context.Context, msg string, _ ...log.KeyValue) {
 	fmt.Printf("  [INFO] %s\n", msg)
 }
+
+// Warn 输出警告级别日志。
 func (l *SimpleLogger) Warn(_ context.Context, msg string, _ ...log.KeyValue) {
 	fmt.Printf("  [WARN] %s\n", msg)
 }
+
+// Error 输出错误级别日志。
 func (l *SimpleLogger) Error(_ context.Context, msg string, _ ...log.KeyValue) {
 	fmt.Printf("  [ERROR] %s\n", msg)
 }
-func (l *SimpleLogger) Sync() error                              { return nil }
+
+// Sync 刷新日志缓冲区。
+func (l *SimpleLogger) Sync() error { return nil }
+
+// With 返回带有附加字段的日志实例。
 func (l *SimpleLogger) With(_ context.Context, _ ...log.KeyValue) log.Logger { return l }
 
 func main() {
@@ -60,22 +70,22 @@ func main() {
 
 	// Successful login
 	token := security.NewUsernamePasswordAuthenticationToken("admin", "admin123")
-	result, err := authManager.Authenticate(ctx, token)
+	authResult, err := authManager.Authenticate(ctx, token)
 	if err != nil {
 		fmt.Printf("  admin auth failed: %v\n", err)
 	} else {
 		fmt.Printf("  admin authenticated: %v, authorities: %v\n",
-			result.Authenticated(), result.Authorities())
+			authResult.Authenticated(), authResult.Authorities())
 	}
 
 	// Successful login
 	token = security.NewUsernamePasswordAuthenticationToken("user", "user123")
-	result, err = authManager.Authenticate(ctx, token)
+	authResult, err = authManager.Authenticate(ctx, token)
 	if err != nil {
 		fmt.Printf("  user auth failed: %v\n", err)
 	} else {
 		fmt.Printf("  user authenticated: %v, authorities: %v\n",
-			result.Authenticated(), result.Authorities())
+			authResult.Authenticated(), authResult.Authorities())
 	}
 
 	// Failed login (wrong password)
@@ -108,38 +118,38 @@ func main() {
 
 	// Test admin access to /api/admin
 	fmt.Println("  Resource: /api/admin")
-	testDecision(ctx, decisionManager, adminAuth, "/api/admin",
-		[]string{"hasRole('ADMIN')"})
-	testDecision(ctx, decisionManager, userAuth, "/api/admin",
-		[]string{"hasRole('ADMIN')"})
-	testDecision(ctx, decisionManager, managerAuth, "/api/admin",
-		[]string{"hasRole('ADMIN')"})
+	testDecision(testDecisionArgs{ctx, decisionManager, adminAuth, "/api/admin",
+		[]string{"hasRole('ADMIN')"}})
+	testDecision(testDecisionArgs{ctx, decisionManager, userAuth, "/api/admin",
+		[]string{"hasRole('ADMIN')"}})
+	testDecision(testDecisionArgs{ctx, decisionManager, managerAuth, "/api/admin",
+		[]string{"hasRole('ADMIN')"}})
 
 	// Test access to /api/users (any authenticated user)
 	fmt.Println("  Resource: /api/users")
-	testDecision(ctx, decisionManager, adminAuth, "/api/users",
-		[]string{"authenticated"})
-	testDecision(ctx, decisionManager, userAuth, "/api/users",
-		[]string{"authenticated"})
+	testDecision(testDecisionArgs{ctx, decisionManager, adminAuth, "/api/users",
+		[]string{"authenticated"}})
+	testDecision(testDecisionArgs{ctx, decisionManager, userAuth, "/api/users",
+		[]string{"authenticated"}})
 
 	// Test hasAnyRole
 	fmt.Println("  Resource: /api/reports (any of ADMIN, MANAGER)")
-	testDecision(ctx, decisionManager, adminAuth, "/api/reports",
-		[]string{"hasAnyRole('ADMIN','MANAGER')"})
-	testDecision(ctx, decisionManager, userAuth, "/api/reports",
-		[]string{"hasAnyRole('ADMIN','MANAGER')"})
-	testDecision(ctx, decisionManager, managerAuth, "/api/reports",
-		[]string{"hasAnyRole('ADMIN','MANAGER')"})
+	testDecision(testDecisionArgs{ctx, decisionManager, adminAuth, "/api/reports",
+		[]string{"hasAnyRole('ADMIN','MANAGER')"}})
+	testDecision(testDecisionArgs{ctx, decisionManager, userAuth, "/api/reports",
+		[]string{"hasAnyRole('ADMIN','MANAGER')"}})
+	testDecision(testDecisionArgs{ctx, decisionManager, managerAuth, "/api/reports",
+		[]string{"hasAnyRole('ADMIN','MANAGER')"}})
 
 	// Test denyAll
 	fmt.Println("  Resource: /api/secret")
-	testDecision(ctx, decisionManager, adminAuth, "/api/secret",
-		[]string{"denyAll"})
+	testDecision(testDecisionArgs{ctx, decisionManager, adminAuth, "/api/secret",
+		[]string{"denyAll"}})
 
 	// Test permitAll
 	fmt.Println("  Resource: /public")
-	testDecision(ctx, decisionManager, userAuth, "/public",
-		[]string{"permitAll"})
+	testDecision(testDecisionArgs{ctx, decisionManager, userAuth, "/public",
+		[]string{"permitAll"}})
 
 	// ---- 6. SecurityBuilder demo ----
 	fmt.Println()
@@ -162,29 +172,37 @@ func main() {
 	unanimousMgr := authorization.NewUnanimousBased(voter)
 
 	fmt.Println("  Admin (has ROLE_ADMIN):")
-	testDecision(ctx, unanimousMgr, adminAuth, "/resource",
-		[]string{"hasRole('ADMIN')"})
+	testDecision(testDecisionArgs{ctx, unanimousMgr, adminAuth, "/resource",
+		[]string{"hasRole('ADMIN')"}})
 
 	fmt.Println("  User (has ROLE_USER only):")
-	testDecision(ctx, unanimousMgr, userAuth, "/resource",
-		[]string{"hasRole('ADMIN')"})
+	testDecision(testDecisionArgs{ctx, unanimousMgr, userAuth, "/resource",
+		[]string{"hasRole('ADMIN')"}})
 
 	fmt.Println("  Manager (has ROLE_MANAGER):")
-	testDecision(ctx, unanimousMgr, managerAuth, "/resource",
-		[]string{"hasRole('ADMIN')"})
+	testDecision(testDecisionArgs{ctx, unanimousMgr, managerAuth, "/resource",
+		[]string{"hasRole('ADMIN')"}})
 
 	fmt.Println()
 	fmt.Println("=== Example completed successfully ===")
 }
 
+// testDecisionArgs 授权决策测试参数。
+type testDecisionArgs struct {
+	ctx        context.Context
+	mgr        authorization.AccessDecisionManager
+	auth       security.Authentication
+	resource   string
+	attributes []string
+}
+
 // testDecision checks authorization and prints the result.
-func testDecision(ctx context.Context, mgr authorization.AccessDecisionManager,
-	auth security.Authentication, resource string, attributes []string) {
-	err := mgr.Decide(ctx, auth, resource, attributes)
+func testDecision(args testDecisionArgs) {
+	err := args.mgr.Decide(args.ctx, args.auth, args.resource, args.attributes)
 	status := "GRANTED"
 	if err != nil {
 		status = fmt.Sprintf("DENIED (%v)", err)
 	}
 	fmt.Printf("    %s -> %s %v: %s\n",
-		auth.Principal(), resource, attributes, status)
+		args.auth.Principal(), args.resource, args.attributes, status)
 }

@@ -90,9 +90,9 @@ func (e *Environment) AddPropertySourceFirst(source PropertySource) {
 func (e *Environment) GetPropertySources() []PropertySource {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	result := make([]PropertySource, len(e.sources))
-	copy(result, e.sources)
-	return result
+	sourceCopy := make([]PropertySource, len(e.sources))
+	copy(sourceCopy, e.sources)
+	return sourceCopy
 }
 
 // GetActiveProfiles 获取当前激活的 Profile 列表.
@@ -102,9 +102,9 @@ func (e *Environment) GetPropertySources() []PropertySource {
 func (e *Environment) GetActiveProfiles() []string {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	result := make([]string, len(e.activeProfiles))
-	copy(result, e.activeProfiles)
-	return result
+	profilesCopy := make([]string, len(e.activeProfiles))
+	copy(profilesCopy, e.activeProfiles)
+	return profilesCopy
 }
 
 // AddActiveProfile 激活指定 Profile.
@@ -231,8 +231,8 @@ func (e *Environment) notifyConfigChange(event ConfigChangeEvent) {
 		go func(l func(ConfigChangeEvent)) {
 			defer e.wg.Done()
 			defer func() {
-				if r := recover(); r != nil {
-					fmt.Printf("[Environment] config listener panic recovered: %v\n", r)
+				if recovered := recover(); recovered != nil {
+					fmt.Printf("[Environment] config listener panic recovered: %v\n", recovered)
 				}
 			}()
 			l(event)

@@ -1,6 +1,7 @@
 package exception
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -77,13 +78,24 @@ func TestErrorCodeRegistry(t *testing.T) {
 		}
 	}()
 	_ = registry.MustGet("nonexistent")
+
+	// 测试 GetAll 方法
+	registry2 := NewErrorCodeRegistry()
+	registry2.Register(ErrorCode{Code: 400, Message: "Test error 1", Detail: "test.error1"})
+	registry2.Register(ErrorCode{Code: 500, Message: "Test error 2", Detail: "test.error2"})
+
+	codes := registry2.GetAll()
+	if len(codes) != 2 {
+		t.Errorf("Expected 2 codes, got %d", len(codes))
+	}
 }
 
 // TestBusinessError 验证 BusinessError 功能:
 //  1. 创建业务错误
-//  2. 添加详细信息
+//  2. 添加详细信息（WithDetail 和 WithDetails）
 //  3. Error() 方法
 //  4. ErrorCode() 方法
+//  5. GetDetails() 方法
 func TestBusinessError(t *testing.T) {
 	t.Parallel()
 	code := ErrorCode{404, "用户不存在", "user_not_found"}
@@ -95,7 +107,7 @@ func TestBusinessError(t *testing.T) {
 		t.Errorf("expected code 404, got %d", returnedCode.Code)
 	}
 
-	// 测试添加详细信息
+	// 测试添加详细信息（单个）
 	_ = bizErr.WithDetail("id", "123").WithDetail("type", "user")
 	details := bizErr.GetDetails()
 	if details["id"] != "123" {
@@ -105,10 +117,27 @@ func TestBusinessError(t *testing.T) {
 		t.Errorf("expected detail type='user', got '%v'", details["type"])
 	}
 
+	// 测试添加详细信息（批量）
+	code2 := ErrorCode{400, "参数错误", "invalid_param"}
+	bizErr2 := New(code2).WithDetails(map[string]any{"field1": "value1", "field2": 456})
+	if bizErr2.ErrorCode().Code != 400 {
+		t.Errorf("expected code 400, got %d", bizErr2.ErrorCode().Code)
+	}
+	details2 := bizErr2.GetDetails()
+	if details2["field1"] != "value1" {
+		t.Errorf("expected field1='value1', got '%v'", details2["field1"])
+	}
+
 	// 测试 Error() 方法
 	errMsg := bizErr.Error()
 	if errMsg == "" {
 		t.Error("expected non-empty error message")
+	}
+
+	// 测试带详细信息的 Error() 方法
+	errMsg2 := bizErr2.Error()
+	if errMsg2 == "" {
+		t.Error("expected non-empty error message with details")
 	}
 
 	// 测试 ErrorCode() 方法
@@ -147,8 +176,16 @@ func TestPredefinedErrorCodes(t *testing.T) {
 // TestGlobalRegistry 验证全局注册表功能:
 //  1. 注册自定义错误码
 //  2. 从全局注册表查询
+//  3. GlobalErrorCodeRegistry 返回非空实例
 func TestGlobalRegistry(t *testing.T) {
 	t.Parallel()
+
+	// 测试 GlobalErrorCodeRegistry 返回非空实例
+	globalRegistry := GlobalErrorCodeRegistry()
+	if globalRegistry == nil {
+		t.Fatal("expected non-nil global registry")
+	}
+
 	customCode := ErrorCode{418, "我是茶壶", "im_a_teapot"}
 	RegisterErrorCode(customCode)
 
@@ -164,14 +201,32 @@ func TestGlobalRegistry(t *testing.T) {
 // TestErrorCodeExceptionResolver 验证错误码异常解析器:
 //  1. 支持 ErrorCode 类型
 //  2. 解析生成正确的 ErrorResponse
+//  3. Order 方法返回正确值
+//  4. 不支持普通 error 类型
 func TestErrorCodeExceptionResolver(t *testing.T) {
 	t.Parallel()
 	resolver := NewErrorCodeExceptionResolver()
+
+	// 测试 Order
+	if resolver.Order() != 50 {
+		t.Errorf("expected order 50, got %d", resolver.Order())
+	}
 
 	// 测试 Supports
 	code := ErrorCode{404, "用户不存在", "user_not_found"}
 	if !resolver.Supports(code) {
 		t.Error("expected resolver to support ErrorCode")
+	}
+
+	// 测试不支持普通 error
+	regularErr := errors.New("regular error")
+	if resolver.Supports(regularErr) {
+		t.Error("expected resolver to not support regular error")
+	}
+
+	// 测试不支持 nil
+	if resolver.Supports(nil) {
+		t.Error("expected resolver to not support nil error")
 	}
 
 	// 测试 Resolve
@@ -183,8 +238,9 @@ func TestErrorCodeExceptionResolver(t *testing.T) {
 		t.Errorf("expected details 'user_not_found', got '%v'", response.Details)
 	}
 
-	// 测试不支持的错误类型
-	if resolver.Supports(nil) {
-		t.Error("expected resolver to not support nil error")
+	// 测试 Resolve 不支持的错误类型
+	response = resolver.Resolve(nil, regularErr)
+	if response != nil {
+		t.Error("expected nil response for unsupported error")
 	}
 }

@@ -7,6 +7,7 @@ import (
 )
 
 func TestCasbinGormConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &CasbinGormConfig{
 		ModelType:        security.DefaultCasbinModelType,
 		ModelPath:        security.DefaultCasbinModelPath,
@@ -35,6 +36,7 @@ func TestCasbinGormConfig_DefaultValues(t *testing.T) {
 }
 
 func TestCasbinGormConfig_Validation(t *testing.T) {
+	tt.Parallel()
 	tests := []struct {
 		name    string
 		cfg     *CasbinGormConfig

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/condition"
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/lifecycle"
 )
 
@@ -357,5 +357,43 @@ func TestWithPropertySource(t *testing.T) {
 
 	if len(cfg.CustomPropertySources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(cfg.CustomPropertySources))
+	}
+}
+
+// ==================== Boot 选项集成测试（从 coverage 迁移） ====================
+
+func TestBootWithConfigType(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultBootConfig()
+	opt := WithConfigType("json")
+	opt(cfg)
+	if cfg.ConfigType != "json" {
+		t.Errorf("Expected ConfigType 'json', got %s", cfg.ConfigType)
+	}
+}
+
+func TestBootWithPluginOption(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultBootConfig()
+	plugin := &testPlugin{name: "test-plugin", version: "1.0.0"}
+	opt := WithPlugin(plugin)
+	opt(cfg)
+	if len(cfg.Plugins) != 1 {
+		t.Errorf("Expected 1 plugin, got %d", len(cfg.Plugins))
+	}
+}
+
+func TestBootWithPluginsOption(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultBootConfig()
+	plugin1 := &testPlugin{name: "plugin1", version: "1.0.0"}
+	plugin2 := &testPlugin{name: "plugin2", version: "1.0.0"}
+	opt := WithPlugins(plugin1, plugin2)
+	opt(cfg)
+	if len(cfg.Plugins) != 2 {
+		t.Errorf("Expected 2 plugins, got %d", len(cfg.Plugins))
 	}
 }

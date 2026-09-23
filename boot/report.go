@@ -101,35 +101,58 @@ func (r *ConditionEvaluationReport) String() string {
 
 	var sb strings.Builder
 
+	writeAutoConfigHeader(&sb)
+
+	// 正匹配
+	writePositiveMatches(&sb, r, positiveMatches)
+
+	// 负匹配
+	writeNegativeMatches(&sb, r, negativeMatches)
+
+	// Exclusions
+	writeExclusions(&sb, exclusions)
+
+	// 无条件类
+	writeUnconditionalClasses(&sb, unconditional)
+
+	return sb.String()
+}
+
+// writeAutoConfigHeader 写入报告头部。
+func writeAutoConfigHeader(sb *strings.Builder) {
 	sb.WriteString("\n")
 	sb.WriteString("============================\n")
 	sb.WriteString("AUTO-CONFIGURATION REPORT\n")
 	sb.WriteString("============================\n\n")
+}
 
-	// 正匹配
+// writePositiveMatches 写入正匹配结果。
+func writePositiveMatches(sb *strings.Builder, r *ConditionEvaluationReport, matches []AutoConfigMatchResult) {
 	sb.WriteString("Positive matches:\n")
 	sb.WriteString("-----------------\n")
-	if len(positiveMatches) > 0 {
-		for _, match := range r.sortByName(positiveMatches) {
-			fmt.Fprintf(&sb, "   %s matched:\n", match.Name)
+	if len(matches) > 0 {
+		for _, match := range r.sortByName(matches) {
+			fmt.Fprintf(sb, "   %s matched:\n", match.Name)
 			for _, cond := range match.Conditions {
-				fmt.Fprintf(&sb, "      - %s matched\n", cond.Message)
+				fmt.Fprintf(sb, "      - %s matched\n", cond.Message)
 			}
 		}
 	} else {
 		sb.WriteString("   (none)\n")
 	}
 	sb.WriteString("\n")
+}
 
-	// 负匹配
+// writeNegativeMatches 写入负匹配结果。
+func writeNegativeMatches(sb *strings.Builder, r *ConditionEvaluationReport, matches []AutoConfigMatchResult) {
 	sb.WriteString("Negative matches:\n")
 	sb.WriteString("-----------------\n")
-	if len(negativeMatches) > 0 {
-		for _, match := range r.sortByName(negativeMatches) {
-			fmt.Fprintf(&sb, "   %s did not match:\n", match.Name)
+	if len(matches) > 0 {
+		for _, match := range r.sortByName(matches) {
+			fmt.Fprintf(sb, "   %s did not match:\n", match.Name)
 			for _, cond := range match.Conditions {
 				if !cond.Matched {
-					fmt.Fprintf(&sb, "      - %s not matched\n", cond.Message)
+					fmt.Fprintf(sb, "      - %s not matched\n", cond.Message)
 				}
 			}
 		}
@@ -137,31 +160,33 @@ func (r *ConditionEvaluationReport) String() string {
 		sb.WriteString("   (none)\n")
 	}
 	sb.WriteString("\n")
+}
 
-	// Exclusions
+// writeExclusions 写入排除项。
+func writeExclusions(sb *strings.Builder, exclusions []string) {
 	sb.WriteString("Exclusions:\n")
 	sb.WriteString("-----------\n")
 	if len(exclusions) > 0 {
 		for _, ex := range exclusions {
-			fmt.Fprintf(&sb, "   - %s\n", ex)
+			fmt.Fprintf(sb, "   - %s\n", ex)
 		}
 	} else {
 		sb.WriteString("   (none)\n")
 	}
 	sb.WriteString("\n")
+}
 
-	// 无条件类
+// writeUnconditionalClasses 写入无条件类。
+func writeUnconditionalClasses(sb *strings.Builder, unconditional []string) {
 	sb.WriteString("Unconditional classes:\n")
 	sb.WriteString("----------------------\n")
 	if len(unconditional) > 0 {
 		for _, name := range unconditional {
-			fmt.Fprintf(&sb, "   - %s\n", name)
+			fmt.Fprintf(sb, "   - %s\n", name)
 		}
 	} else {
 		sb.WriteString("   (none)\n")
 	}
-
-	return sb.String()
 }
 
 func (r *ConditionEvaluationReport) sortByName(matches []AutoConfigMatchResult) []AutoConfigMatchResult {

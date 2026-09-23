@@ -90,7 +90,7 @@ func TestExceptionHandlerBuilder_WithExceptionHandler(t *testing.T) {
 	handler, err := NewExceptionHandlerBuilder().
 		ExceptionHandler(reflect.TypeOf(errors.New("")), func(ctx context.Context, err error) *ErrorResponse {
 			handlerCalled = true
-			return NewErrorResponse(500, "internal error", "", "", nil)
+			return NewErrorResponse(500, "internal error")
 		}).
 		Build()
 
@@ -223,10 +223,10 @@ func TestExceptionHandlerBuilder_MultipleExceptionHandlers(t *testing.T) {
 
 	handler, err := NewExceptionHandlerBuilder().
 		ExceptionHandler(errType1, func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(400, "error1", "", "", nil)
+			return NewErrorResponse(400, "error1")
 		}).
 		ExceptionHandler(errType2, func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(500, "error2", "", "", nil)
+			return NewErrorResponse(500, "error2")
 		}).
 		Build()
 

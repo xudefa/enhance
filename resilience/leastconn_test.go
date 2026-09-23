@@ -28,12 +28,12 @@ func TestLeastConnections_Next_SingleBackend(t *testing.T) {
 		{URL: "http://backend1", ID: "1", Active: 5},
 	}
 
-	result, err := lc.Next(backends)
+	backend, err := lc.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -46,12 +46,12 @@ func TestLeastConnections_Next_SelectLeastActive(t *testing.T) {
 		{URL: "http://backend3", ID: "3", Active: 8},
 	}
 
-	result, err := lc.Next(backends)
+	backend, err := lc.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend2" {
-		t.Errorf("expected http://backend2 (least active), got %s", result.URL)
+	if backend.URL != "http://backend2" {
+		t.Errorf("expected http://backend2 (least active), got %s", backend.URL)
 	}
 }
 
@@ -64,11 +64,11 @@ func TestLeastConnections_Next_WithNilBackends(t *testing.T) {
 		nil,
 	}
 
-	result, err := lc.Next(backends)
+	backend, err := lc.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }

@@ -158,29 +158,29 @@ func TestBuildMessage_PlainText(t *testing.T) {
 		Body:    "Test Body",
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsLine(result, "From: sender@test.com") {
+	if !containsLine(message, "From: sender@test.com") {
 		t.Error("期望消息中包含 From 头")
 	}
 
-	if !containsLine(result, "To: recipient@example.com") {
+	if !containsLine(message, "To: recipient@example.com") {
 		t.Error("期望消息中包含 To 头")
 	}
 
-	if !containsLine(result, "Subject: Test Subject") {
+	if !containsLine(message, "Subject: Test Subject") {
 		t.Error("期望消息中包含 Subject 头")
 	}
 
-	if !containsLine(result, "MIME-Version: 1.0") {
+	if !containsLine(message, "MIME-Version: 1.0") {
 		t.Error("期望消息中包含 MIME-Version 头")
 	}
 
-	if !containsLine(result, "Content-Type: text/plain; charset=UTF-8") {
+	if !containsLine(message, "Content-Type: text/plain; charset=UTF-8") {
 		t.Error("期望文本内容为 text/plain 类型")
 	}
 
-	if !containsSubstring(result, "Test Body") {
+	if !containsSubstring(message, "Test Body") {
 		t.Error("期望消息中包含正文内容")
 	}
 }
@@ -197,13 +197,13 @@ func TestBuildMessage_HTML(t *testing.T) {
 		HTML:    "<h1>Hello</h1>",
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsLine(result, "Content-Type: text/html; charset=UTF-8") {
+	if !containsLine(message, "Content-Type: text/html; charset=UTF-8") {
 		t.Error("期望 HTML内容为 text/html 类型")
 	}
 
-	if !containsSubstring(result, "<h1>Hello</h1>") {
+	if !containsSubstring(message, "<h1>Hello</h1>") {
 		t.Error("期望消息中包含 HTML 内容")
 	}
 }
@@ -220,10 +220,10 @@ func TestBuildMessage_MultipleRecipients(t *testing.T) {
 		Body:    "Body",
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsLine(result, "To: user1@example.com, user2@example.com") {
-		t.Errorf("期望 To 头包含多个收件人, 得到:\n%s", result)
+	if !containsLine(message, "To: user1@example.com, user2@example.com") {
+		t.Errorf("期望 To 头包含多个收件人, 得到:\n%s", message)
 	}
 }
 
@@ -242,9 +242,9 @@ func TestBuildMessage_CustomHeaders(t *testing.T) {
 		},
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsLine(result, "X-Custom-Header: custom-value") {
+	if !containsLine(message, "X-Custom-Header: custom-value") {
 		t.Error("期望消息中包含自定义头")
 	}
 }
@@ -275,9 +275,9 @@ func TestJoinAddresses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := joinAddresses(tt.addresses)
-			if result != tt.expected {
-				t.Errorf("期望 %s, 得到 %s", tt.expected, result)
+			joined := joinAddresses(tt.addresses)
+			if joined != tt.expected {
+				t.Errorf("期望 %s, 得到 %s", tt.expected, joined)
 			}
 		})
 	}
@@ -402,17 +402,17 @@ func TestBuildMessage_Multipart(t *testing.T) {
 		},
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsSubstring(result, "multipart/mixed") {
+	if !containsSubstring(message, "multipart/mixed") {
 		t.Error("期望消息为 multipart/mixed 类型")
 	}
 
-	if !containsSubstring(result, "test.txt") {
+	if !containsSubstring(message, "test.txt") {
 		t.Error("期望消息中包含附件文件名")
 	}
 
-	if !containsSubstring(result, "text/plain") {
+	if !containsSubstring(message, "text/plain") {
 		t.Error("期望消息中包含附件内容类型")
 	}
 }
@@ -436,21 +436,21 @@ func TestBuildMessage_Multipart_HTML(t *testing.T) {
 		},
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsSubstring(result, "multipart/mixed") {
+	if !containsSubstring(message, "multipart/mixed") {
 		t.Error("期望消息为 multipart/mixed 类型")
 	}
 
-	if !containsSubstring(result, "text/html") {
+	if !containsSubstring(message, "text/html") {
 		t.Error("期望消息中包含 HTML 内容类型")
 	}
 
-	if !containsSubstring(result, "<h1>Hello</h1>") {
+	if !containsSubstring(message, "<h1>Hello</h1>") {
 		t.Error("期望消息中包含 HTML 内容")
 	}
 
-	if !containsSubstring(result, "report.pdf") {
+	if !containsSubstring(message, "report.pdf") {
 		t.Error("期望消息中包含附件文件名")
 	}
 }
@@ -479,13 +479,13 @@ func TestBuildMessage_Multipart_MultipleAttachments(t *testing.T) {
 		},
 	}
 
-	result := impl.buildMessage(msg, msg.From)
+	message := impl.buildMessage(msg, msg.From)
 
-	if !containsSubstring(result, "doc1.txt") {
+	if !containsSubstring(message, "doc1.txt") {
 		t.Error("期望消息中包含第一个附件文件名")
 	}
 
-	if !containsSubstring(result, "doc2.txt") {
+	if !containsSubstring(message, "doc2.txt") {
 		t.Error("期望消息中包含第二个附件文件名")
 	}
 }

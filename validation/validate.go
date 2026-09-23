@@ -23,7 +23,7 @@ func Validate(value any, rules string) error {
 		}
 
 		if err := validateSingleRule(value, rule); err != nil {
-			return err
+			return fmt.Errorf("validate rule %s: %w", rule, err)
 		}
 	}
 
@@ -108,42 +108,42 @@ func isRequiredValidForValue(value any) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return v.String() != ""
+		return rv.String() != ""
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() != 0
+		return rv.Int() != 0
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() != 0
+		return rv.Uint() != 0
 	case reflect.Float32, reflect.Float64:
-		return v.Float() != 0
+		return rv.Float() != 0
 	case reflect.Bool:
-		return v.Bool()
+		return rv.Bool()
 	case reflect.Ptr, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice:
-		return !v.IsNil()
+		return !rv.IsNil()
 	default:
-		return v.IsValid() && value != reflect.Zero(v.Type()).Interface()
+		return rv.IsValid() && value != reflect.Zero(rv.Type()).Interface()
 	}
 }
 
 // isMinValidForValue 验证最小值
 func isMinValidForValue(value any, minStr string) bool {
-	min, err := strconv.Atoi(minStr)
+	threshold, err := strconv.Atoi(minStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) >= min
+		return len([]rune(rv.String())) >= threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() >= int64(min)
+		return rv.Int() >= int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() >= uint64(min)
+		return rv.Uint() >= uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() >= float64(min)
+		return rv.Float() >= float64(threshold)
 	default:
 		return false
 	}
@@ -151,21 +151,21 @@ func isMinValidForValue(value any, minStr string) bool {
 
 // isMaxValidForValue 验证最大值
 func isMaxValidForValue(value any, maxStr string) bool {
-	max, err := strconv.Atoi(maxStr)
+	threshold, err := strconv.Atoi(maxStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) <= max
+		return len([]rune(rv.String())) <= threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() <= int64(max)
+		return rv.Int() <= int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() <= uint64(max)
+		return rv.Uint() <= uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() <= float64(max)
+		return rv.Float() <= float64(threshold)
 	default:
 		return false
 	}
@@ -178,12 +178,12 @@ func isLenValidForValue(value any, lenStr string) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) == length
+		return len([]rune(rv.String())) == length
 	case reflect.Array, reflect.Slice:
-		return v.Len() == length
+		return rv.Len() == length
 	default:
 		return false
 	}
@@ -195,11 +195,11 @@ func isEmailValidForValue(value any) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	if v.Kind() != reflect.String {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.String {
 		return false
 	}
-	email := v.String()
+	email := rv.String()
 	emailRegex := compileRegex(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	return emailRegex.MatchString(email)
 }
@@ -210,34 +210,34 @@ func isRegexpValidForValue(value any, pattern string) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	if v.Kind() != reflect.String {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.String {
 		return false
 	}
 	re := compileRegex(pattern)
 	if re == nil {
 		return false
 	}
-	return re.MatchString(v.String())
+	return re.MatchString(rv.String())
 }
 
 // isGtValidForValue 验证大于指定值
 func isGtValidForValue(value any, valueStr string) bool {
-	val, err := strconv.Atoi(valueStr)
+	threshold, err := strconv.Atoi(valueStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) > val
+		return len([]rune(rv.String())) > threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() > int64(val)
+		return rv.Int() > int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() > uint64(val)
+		return rv.Uint() > uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() > float64(val)
+		return rv.Float() > float64(threshold)
 	default:
 		return false
 	}
@@ -245,21 +245,21 @@ func isGtValidForValue(value any, valueStr string) bool {
 
 // isGteValidForValue 验证大于等于指定值
 func isGteValidForValue(value any, valueStr string) bool {
-	val, err := strconv.Atoi(valueStr)
+	threshold, err := strconv.Atoi(valueStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) >= val
+		return len([]rune(rv.String())) >= threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() >= int64(val)
+		return rv.Int() >= int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() >= uint64(val)
+		return rv.Uint() >= uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() >= float64(val)
+		return rv.Float() >= float64(threshold)
 	default:
 		return false
 	}
@@ -267,21 +267,21 @@ func isGteValidForValue(value any, valueStr string) bool {
 
 // isLtValidForValue 验证小于指定值
 func isLtValidForValue(value any, valueStr string) bool {
-	val, err := strconv.Atoi(valueStr)
+	threshold, err := strconv.Atoi(valueStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) < val
+		return len([]rune(rv.String())) < threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() < int64(val)
+		return rv.Int() < int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() < uint64(val)
+		return rv.Uint() < uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() < float64(val)
+		return rv.Float() < float64(threshold)
 	default:
 		return false
 	}
@@ -289,21 +289,21 @@ func isLtValidForValue(value any, valueStr string) bool {
 
 // isLteValidForValue 验证小于等于指定值
 func isLteValidForValue(value any, valueStr string) bool {
-	val, err := strconv.Atoi(valueStr)
+	threshold, err := strconv.Atoi(valueStr)
 	if err != nil {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		return len([]rune(v.String())) <= val
+		return len([]rune(rv.String())) <= threshold
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() <= int64(val)
+		return rv.Int() <= int64(threshold)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint() <= uint64(val)
+		return rv.Uint() <= uint64(threshold)
 	case reflect.Float32, reflect.Float64:
-		return v.Float() <= float64(val)
+		return rv.Float() <= float64(threshold)
 	default:
 		return false
 	}
@@ -315,11 +315,11 @@ func isURLValidForValue(value any) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	if v.Kind() != reflect.String {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.String {
 		return false
 	}
-	url := v.String()
+	url := rv.String()
 	urlRegex := compileRegex(`^https?:\/\/(?:[-\w.])+(?:\:[0-9]+)?(?:\/(?:[\w\/_.])*(?:\?(?:[\w&=%.])*)?(?:\#(?:[\w.])*)?)?$`)
 	return urlRegex.MatchString(url)
 }
@@ -330,11 +330,11 @@ func isIPValidForValue(value any) bool {
 		return false
 	}
 
-	v := reflect.ValueOf(value)
-	if v.Kind() != reflect.String {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.String {
 		return false
 	}
-	ip := v.String()
+	ip := rv.String()
 	ipRegex := compileRegex(`^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`)
 	return ipRegex.MatchString(ip)
 }
@@ -346,41 +346,32 @@ func isOneOfValidForValue(value any, optionsStr string) bool {
 	}
 
 	options := strings.Split(optionsStr, " ")
-
 	for i, opt := range options {
 		options[i] = strings.TrimSpace(opt)
 	}
 
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
+	optionSet := make(map[string]struct{}, len(options))
+	for _, opt := range options {
+		optionSet[opt] = struct{}{}
+	}
+
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
 	case reflect.String:
-		strVal := v.String()
-		for _, opt := range options {
-			if strVal == opt {
-				return true
-			}
-		}
+		_, ok := optionSet[rv.String()]
+		return ok
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intVal := v.Int()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseInt(opt, 10, 64); err == nil && intVal == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatInt(rv.Int(), 10)
+		_, ok := optionSet[key]
+		return ok
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintVal := v.Uint()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseUint(opt, 10, 64); err == nil && uintVal == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatUint(rv.Uint(), 10)
+		_, ok := optionSet[key]
+		return ok
 	case reflect.Float32, reflect.Float64:
-		floatVal := v.Float()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseFloat(opt, 64); err == nil && floatVal == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatFloat(rv.Float(), 'f', -1, 64)
+		_, ok := optionSet[key]
+		return ok
 	}
 
 	return false

@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// minSampleSize 计算错误率所需的最小请求样本数。
+const minSampleSize = 10
+
 // breakerImpl Breaker 接口的默认实现。
 type breakerImpl struct {
 	state            atomic.Int32
@@ -50,21 +53,22 @@ func WithWaitDuration(duration time.Duration) BreakerOption {
 
 // NewBreaker 创建熔断器。
 func NewBreaker(opts ...BreakerOption) Breaker {
-	b := &breakerImpl{
+	breaker := &breakerImpl{
 		maxRequests:    DefaultMaxRequests,
 		errorThreshold: DefaultErrorThreshold,
 		waitDuration:   DefaultWaitDuration,
 	}
-	b.state.Store(int32(StateClosed))
-	b.lastStateChange.Store(time.Now().UnixNano())
+	breaker.state.Store(int32(StateClosed))
+	breaker.lastStateChange.Store(time.Now().UnixNano())
 
 	for _, opt := range opts {
-		opt(b)
+		opt(breaker)
 	}
 
-	return b
+	return breaker
 }
 
+// Allow 判断当前请求是否允许通过，必要时触发状态转换。
 func (b *breakerImpl) Allow() error {
 	state := State(b.state.Load())
 
@@ -100,6 +104,7 @@ func (b *breakerImpl) Allow() error {
 	return ErrCircuitOpen
 }
 
+// RecordSuccess 记录一次成功调用，半开状态下达标后转为关闭。
 func (b *breakerImpl) RecordSuccess() {
 	state := State(b.state.Load())
 	switch state {
@@ -132,6 +137,7 @@ func (b *breakerImpl) RecordSuccess() {
 	}
 }
 
+// RecordFailure 记录一次失败调用，错误率超限或半开失败时熔断。
 func (b *breakerImpl) RecordFailure() {
 	state := State(b.state.Load())
 	// 仅在 CLOSED / HALF_OPEN 状态统计失败，避免 OPEN 状态的计数
@@ -142,7 +148,7 @@ func (b *breakerImpl) RecordFailure() {
 		b.requests.Add(1)
 
 		total := b.requests.Load()
-		if total >= 10 {
+		if total >= minSampleSize {
 			errorRate := float64(b.errors.Load()) / float64(total)
 			if errorRate >= b.errorThreshold {
 				b.mu.Lock()
@@ -192,6 +198,7 @@ func (b *breakerImpl) resetCounters() {
 	b.requests.Store(0)
 }
 
+// State 返回熔断器当前状态。
 func (b *breakerImpl) State() State {
 	return State(b.state.Load())
 }

@@ -17,6 +17,7 @@ import (
 )
 
 func TestGinTracingIntegration(t *testing.T) {
+	tt.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -131,6 +132,7 @@ func TestGinTracingIntegration(t *testing.T) {
 }
 
 func TestGinTracingHTTP(t *testing.T) {
+	tt.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -276,6 +278,7 @@ func (e *httpError) Error() string {
 }
 
 func TestActuatorEndpointsWithTracing(t *testing.T) {
+	tt.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
@@ -366,6 +369,7 @@ func TestActuatorEndpointsWithTracing(t *testing.T) {
 }
 
 func TestActuatorEndpointsTracingContextPropagation(t *testing.T) {
+	tt.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()

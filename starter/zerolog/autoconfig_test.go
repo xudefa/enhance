@@ -181,11 +181,11 @@ func TestBuildZerolog_WithOutputFile(t *testing.T) {
 	if err := zl.Close(); err != nil {
 		t.Errorf("Close() error = %v", err)
 	}
-	data, err := os.ReadFile(fpath)
+	logData, err := os.ReadFile(fpath)
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
-	if len(data) == 0 {
+	if len(logData) == 0 {
 		t.Error("expected non-empty log file")
 	}
 }

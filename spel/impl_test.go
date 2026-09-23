@@ -6,10 +6,10 @@ import (
 )
 
 type testSettable struct {
-	Name   string
-	Count  int64
-	Items  []string
-	Value  interface{}
+	Name  string
+	Count int64
+	Items []string
+	Value interface{}
 }
 
 func TestNewSpelParser(t *testing.T) {
@@ -66,12 +66,12 @@ func TestNewInterceptorChain_WithMultipleInterceptors(t *testing.T) {
 	chain := NewInterceptorChain([]MethodInterceptor{i1, i2, i3}).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "result" {
-		t.Errorf("expected 'result', got %v", result)
+	if got != "result" {
+		t.Errorf("expected 'result', got %v", got)
 	}
 	expected := []string{"i1", "i2", "i3", "handler"}
 	if len(order) != len(expected) {
@@ -88,12 +88,12 @@ func TestNewInterceptorChain_EmptyProceedWithNilInvocation(t *testing.T) {
 	t.Parallel()
 
 	chain := NewInterceptorChain(nil).(*interceptorChainImpl)
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Errorf("expected nil result, got %v", result)
+	if got != nil {
+		t.Errorf("expected nil result, got %v", got)
 	}
 }
 
@@ -115,12 +115,12 @@ func TestNewSimpleMethodInvocation_AllFields(t *testing.T) {
 		t.Errorf("expected 'myTarget', got %v", inv.GetTarget())
 	}
 
-	result, err := inv.Proceed()
+	got, err := inv.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "handled" {
-		t.Errorf("expected 'handled', got %v", result)
+	if got != "handled" {
+		t.Errorf("expected 'handled', got %v", got)
 	}
 }
 
@@ -341,12 +341,41 @@ func TestNewReflectPropertyAccessor_SetProperty_NilToNilableType(t *testing.T) {
 func TestNewLoggingInterceptor_Invoke(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		handler    func() (any, error)
-		wantResult any
-		wantErr    bool
-	}{
+	tests := testNewLoggingInterceptorInvokeCases()
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			inv := NewSimpleMethodInvocation("Test", []any{1, 2}, "tgt", tt.handler)
+			l := NewLoggingInterceptor()
+
+			got, err := l.Invoke(inv)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.wantResult {
+				t.Errorf("got %v, want %v", got, tt.wantResult)
+			}
+		})
+	}
+}
+
+type loggingInterceptorInvokeCase struct {
+	name       string
+	handler    func() (any, error)
+	wantResult any
+	wantErr    bool
+}
+
+func testNewLoggingInterceptorInvokeCases() []loggingInterceptorInvokeCase {
+	return []loggingInterceptorInvokeCase{
 		{
 			name:       "success",
 			handler:    func() (any, error) { return "result", nil },
@@ -364,29 +393,6 @@ func TestNewLoggingInterceptor_Invoke(t *testing.T) {
 			wantResult: nil,
 			wantErr:    false,
 		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			inv := NewSimpleMethodInvocation("Test", []any{1, 2}, "tgt", tt.handler)
-			l := NewLoggingInterceptor()
-
-			result, err := l.Invoke(inv)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("expected error")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if result != tt.wantResult {
-				t.Errorf("got %v, want %v", result, tt.wantResult)
-			}
-		})
 	}
 }
 
@@ -465,12 +471,12 @@ func TestInterceptorChain_Proceed_AfterAllInterceptors(t *testing.T) {
 	chain := NewInterceptorChain([]MethodInterceptor{i1, i2}).(*interceptorChainImpl)
 	chain.SetInvocation(inv)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "done" {
-		t.Errorf("expected 'done', got %v", result)
+	if got != "done" {
+		t.Errorf("expected 'done', got %v", got)
 	}
 	if !handlerCalled {
 		t.Error("expected handler to be called")
@@ -483,11 +489,11 @@ func TestInterceptorChain_Invoke_NilInvocation(t *testing.T) {
 	chain := NewInterceptorChain(nil).(*interceptorChainImpl)
 	chain.SetInvocation(nil)
 
-	result, err := chain.Proceed()
+	got, err := chain.Proceed()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
 	}
 }

@@ -72,62 +72,62 @@ func TestTokenBucket_IsExpiredFunc(t *testing.T) {
 func TestNewRateLimitFilterFunc(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: true, Rate: 10, Burst: 20})
-	if f == nil {
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: true, Rate: 10, Burst: 20})
+	if rateLimiter == nil {
 		t.Fatal("expected non-nil filter")
 	}
-	defer f.Close()
+	defer rateLimiter.Close()
 
-	if f.config.Rate != 10 {
-		t.Errorf("expected rate 10, got %d", f.config.Rate)
+	if rateLimiter.config.Rate != 10 {
+		t.Errorf("expected rate 10, got %d", rateLimiter.config.Rate)
 	}
-	if f.config.Burst != 20 {
-		t.Errorf("expected burst 20, got %d", f.config.Burst)
+	if rateLimiter.config.Burst != 20 {
+		t.Errorf("expected burst 20, got %d", rateLimiter.config.Burst)
 	}
 }
 
 func TestNewRateLimitFilter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{})
-	if f == nil {
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{})
+	if rateLimiter == nil {
 		t.Fatal("expected non-nil filter")
 	}
-	defer f.Close()
+	defer rateLimiter.Close()
 
-	if f.config.Rate != 100 {
-		t.Errorf("expected default rate 100, got %d", f.config.Rate)
+	if rateLimiter.config.Rate != 100 {
+		t.Errorf("expected default rate 100, got %d", rateLimiter.config.Rate)
 	}
-	if f.config.Burst != 200 {
-		t.Errorf("expected default burst 200, got %d", f.config.Burst)
+	if rateLimiter.config.Burst != 200 {
+		t.Errorf("expected default burst 200, got %d", rateLimiter.config.Burst)
 	}
 }
 
 func TestRateLimitFilter_Close(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: true})
-	f.Close()
-	f.Close()
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: true})
+	rateLimiter.Close()
+	rateLimiter.Close()
 }
 
 func TestRateLimitFilter_DoFilter_TypeErrors(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: true})
-	defer f.Close()
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: true})
+	defer rateLimiter.Close()
 
-	err := f.DoFilter("notContext", nil, nil, &mockFilterChain{})
+	err := rateLimiter.DoFilter("notContext", nil, nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-context")
 	}
 
-	err = f.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
+	err = rateLimiter.DoFilter(context.Background(), "notReq", nil, &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-request")
 	}
 
-	err = f.DoFilter(context.Background(), newMockSecurityRequest("GET", "/", nil), "notResp", &mockFilterChain{})
+	err = rateLimiter.DoFilter(context.Background(), newMockSecurityRequest("GET", "/", nil), "notResp", &mockFilterChain{})
 	if err == nil {
 		t.Error("expected error for non-response")
 	}
@@ -136,15 +136,15 @@ func TestRateLimitFilter_DoFilter_TypeErrors(t *testing.T) {
 func TestRateLimitFilter_Disabled(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: false})
-	defer f.Close()
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: false})
+	defer rateLimiter.Close()
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("GET", "/", nil)
 	req.remoteAddr = "127.0.0.1:8080"
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := rateLimiter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,19 +156,19 @@ func TestRateLimitFilter_Disabled(t *testing.T) {
 func TestRateLimitFilter_ExcludedPath(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled:      true,
 		ExcludePaths: []string{"/health"},
 		Log:          &mockLogger{},
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 	chain := &mockFilterChain{}
 
 	req := newMockSecurityRequest("GET", "/health", nil)
 	req.remoteAddr = "127.0.0.1:8080"
 	resp := newMockSecurityResponse()
 
-	err := f.DoFilter(context.Background(), req, resp, chain)
+	err := rateLimiter.DoFilter(context.Background(), req, resp, chain)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,20 +180,20 @@ func TestRateLimitFilter_ExcludedPath(t *testing.T) {
 func TestRateLimitFilter_RateLimited(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled: true,
 		Rate:    1000,
 		Burst:   2,
 		Log:     &mockLogger{},
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 	chain := &mockFilterChain{}
 
 	for i := 0; i < 5; i++ {
 		req := newMockSecurityRequest("GET", "/api", nil)
 		req.remoteAddr = "127.0.0.1:8080"
 		resp := newMockSecurityResponse()
-		f.DoFilter(context.Background(), req, resp, chain)
+		rateLimiter.DoFilter(context.Background(), req, resp, chain)
 		if i >= 2 && resp.statusCode == 429 {
 			return
 		}
@@ -219,9 +219,9 @@ func TestParseRemoteIP(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := parseRemoteIP(tt.input)
-			if result != tt.expect {
-				t.Errorf("parseRemoteIP(%q) = %q, want %q", tt.input, result, tt.expect)
+			parsedIP := parseRemoteIP(tt.input)
+			if parsedIP != tt.expect {
+				t.Errorf("parseRemoteIP(%q) = %q, want %q", tt.input, parsedIP, tt.expect)
 			}
 		})
 	}
@@ -258,16 +258,16 @@ func TestIsTrustedProxyFunc(t *testing.T) {
 func TestRateLimitFilter_GetClientIPFunc(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled:           true,
 		TrustProxyHeaders: false,
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 
 	req := newMockSecurityRequest("GET", "/", nil)
 	req.remoteAddr = "192.168.1.1:9090"
 
-	ip := f.getClientIP(req)
+	ip := rateLimiter.getClientIP(req)
 	if ip != "192.168.1.1" {
 		t.Errorf("expected 192.168.1.1, got %s", ip)
 	}
@@ -276,13 +276,13 @@ func TestRateLimitFilter_GetClientIPFunc(t *testing.T) {
 func TestRateLimitFilter_GetClientIP_EmptyRemote(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: true})
-	defer f.Close()
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: true})
+	defer rateLimiter.Close()
 
 	req := newMockSecurityRequest("GET", "/", nil)
 	req.remoteAddr = ""
 
-	ip := f.getClientIP(req)
+	ip := rateLimiter.getClientIP(req)
 	if ip != "127.0.0.1" {
 		t.Errorf("expected 127.0.0.1, got %s", ip)
 	}
@@ -291,19 +291,19 @@ func TestRateLimitFilter_GetClientIP_EmptyRemote(t *testing.T) {
 func TestRateLimitFilter_GetClientIP_TrustedProxy(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled:           true,
 		TrustProxyHeaders: true,
 		TrustedProxies:    []string{"10.0.0.0/8"},
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 
 	req := newMockSecurityRequest("GET", "/", map[string]string{
 		"X-Forwarded-For": "203.0.113.1",
 	})
 	req.remoteAddr = "10.0.0.1:8080"
 
-	ip := f.getClientIP(req)
+	ip := rateLimiter.getClientIP(req)
 	if ip != "203.0.113.1" {
 		t.Errorf("expected 203.0.113.1, got %s", ip)
 	}
@@ -312,19 +312,19 @@ func TestRateLimitFilter_GetClientIP_TrustedProxy(t *testing.T) {
 func TestRateLimitFilter_GetClientIP_UntrustedProxy(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled:           true,
 		TrustProxyHeaders: true,
 		TrustedProxies:    []string{"10.0.0.0/8"},
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 
 	req := newMockSecurityRequest("GET", "/", map[string]string{
 		"X-Forwarded-For": "203.0.113.1",
 	})
 	req.remoteAddr = "192.168.1.1:8080"
 
-	ip := f.getClientIP(req)
+	ip := rateLimiter.getClientIP(req)
 	if ip != "192.168.1.1" {
 		t.Errorf("expected 192.168.1.1, got %s", ip)
 	}
@@ -333,29 +333,173 @@ func TestRateLimitFilter_GetClientIP_UntrustedProxy(t *testing.T) {
 func TestRateLimitFilter_OrderFunc(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{Enabled: true})
-	defer f.Close()
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{Enabled: true})
+	defer rateLimiter.Close()
 
-	if f.Order() != 0 {
-		t.Errorf("expected order 0, got %d", f.Order())
+	if rateLimiter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", rateLimiter.Order())
 	}
 }
 
 func TestRateLimitFilter_CleanupBucketsFunc(t *testing.T) {
 	t.Parallel()
 
-	f := NewRateLimitFilter(RateLimitConfig{
+	rateLimiter := NewRateLimitFilter(RateLimitConfig{
 		Enabled:           true,
 		BucketIdleTimeout: time.Nanosecond,
 	})
-	defer f.Close()
+	defer rateLimiter.Close()
 
-	f.buckets.Store("test", NewTokenBucket(10, 100))
+	rateLimiter.buckets.Store("test", NewTokenBucket(10, 100))
 	time.Sleep(10 * time.Millisecond)
-	f.cleanupBuckets()
+	rateLimiter.cleanupBuckets()
 
-	f.buckets.Range(func(key, value any) bool {
+	rateLimiter.buckets.Range(func(key, value any) bool {
 		t.Errorf("expected bucket to be cleaned up, found key: %v", key)
 		return true
 	})
+}
+
+// ==================== Enhanced Rate Limit Filter Tests ====================
+
+func TestEnhancedRateLimitFilter_Allow(t *testing.T) {
+	t.Parallel()
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter)
+
+	req := &mockSecurityRequest{
+		uri:    "/api/test",
+		method: "GET",
+		headers: map[string]string{
+			"X-Real-IP": "192.168.1.1",
+		},
+	}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := filter.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected chain to be called")
+	}
+}
+
+func TestEnhancedRateLimitFilter_ExcludePath(t *testing.T) {
+	t.Parallel()
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter,
+		WithExcludePaths("/health", "/metrics"),
+	)
+
+	req := &mockSecurityRequest{
+		uri:    "/health",
+		method: "GET",
+	}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := filter.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("expected excluded path to bypass rate limiting")
+	}
+}
+
+func TestEnhancedRateLimitFilter_RateLimited(t *testing.T) {
+	t.Parallel()
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter)
+
+	req := &mockSecurityRequest{
+		uri:    "/api/test",
+		method: "GET",
+		headers: map[string]string{
+			"X-Real-IP": "192.168.1.1",
+		},
+	}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := filter.DoFilter(context.Background(), req, resp, chain)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if resp.statusCode != 429 {
+		t.Errorf("expected status 429, got %d", resp.statusCode)
+	}
+	if chain.called {
+		t.Error("expected chain not to be called when rate limited")
+	}
+}
+
+func TestEnhancedRateLimitFilter_CustomCallback(t *testing.T) {
+	t.Parallel()
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	callbackCalled := false
+	filter := NewEnhancedRateLimitFilter(adapter,
+		WithOnRateLimit(func(ctx context.Context, request SecurityRequest, response SecurityResponse) {
+			callbackCalled = true
+			response.SetStatusCode(503)
+		}),
+	)
+
+	req := &mockSecurityRequest{
+		uri:    "/api/test",
+		method: "GET",
+	}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	_ = filter.DoFilter(context.Background(), req, resp, chain)
+
+	if !callbackCalled {
+		t.Error("expected custom callback to be called")
+	}
+	if resp.statusCode != 503 {
+		t.Errorf("expected status 503 from callback, got %d", resp.statusCode)
+	}
+}
+
+func TestEnhancedRateLimitFilter_WithTrustedProxies(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter,
+		WithTrustedProxies("10.0.0.0/8", "192.168.1.100"),
+	)
+
+	if !filter.trustProxyHeaders {
+		t.Error("expected trustProxyHeaders to be true")
+	}
+	if len(filter.trustedProxyNets) == 0 {
+		t.Error("expected trustedProxyNets to be populated")
+	}
+}
+
+func TestEnhancedRateLimitFilter_Order(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
+	adapter := NewStrategyRateLimiterAdapter(limiter)
+
+	filter := NewEnhancedRateLimitFilter(adapter)
+
+	// Order应该返回0
+	if filter.Order() != 0 {
+		t.Errorf("expected order 0, got %d", filter.Order())
+	}
 }

@@ -27,21 +27,21 @@ func (f *MessageQueueFactory) CreateInMemoryQueue(name string, opts ...QueueOpti
 
 // GetQueue 获取队列
 func (f *MessageQueueFactory) GetQueue(name string) (Queue, error) {
-	val, ok := f.queues.Load(name)
+	entry, ok := f.queues.Load(name)
 	if !ok {
 		return nil, fmt.Errorf("queue %s does not exist", name)
 	}
-	q, _ := val.(Queue)
+	q, _ := entry.(Queue)
 	return q, nil
 }
 
 // DeleteQueue 删除队列
 func (f *MessageQueueFactory) DeleteQueue(name string) error {
-	val, ok := f.queues.Load(name)
+	entry, ok := f.queues.Load(name)
 	if !ok {
 		return fmt.Errorf("queue %s does not exist", name)
 	}
-	queue, ok := val.(Queue)
+	queue, ok := entry.(Queue)
 	if !ok {
 		return fmt.Errorf("queue %s has invalid type", name)
 	}

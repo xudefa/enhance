@@ -92,9 +92,9 @@ func (e *bootError) Suggestions() []string {
 	if len(e.suggestions) == 0 {
 		return nil
 	}
-	result := make([]string, len(e.suggestions))
-	copy(result, e.suggestions)
-	return result
+	suggestionsCopy := make([]string, len(e.suggestions))
+	copy(suggestionsCopy, e.suggestions)
+	return suggestionsCopy
 }
 
 // NewBootErr 创建结构化启动错误（推荐使用）。

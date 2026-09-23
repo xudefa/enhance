@@ -24,7 +24,8 @@ var ginAutoConfig = &GinAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(ginAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(GinEnabled, ConditionTrue),
+			// 约定优于配置：当 gin.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(GinEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -158,16 +159,18 @@ func (c *GinAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
 
-	// 在后台启动服务器，避免阻塞
-	go func() {
-		if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(c.ctx, "Gin Web server error",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
-		}
-	}()
+	go c.runGinServer()
 
 	return nil
+}
+
+// runGinServer 在独立 goroutine 中运行 Gin 服务器。
+func (c *GinAutoConfiguration) runGinServer() {
+	if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		c.logger.Error(c.ctx, "Gin Web server error",
+			log.KeyValue{Key: "error", Value: err.Error()},
+		)
+	}
 }
 
 // Stop 停止 Gin Web 服务器。
@@ -192,7 +195,7 @@ func (c *GinAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *GinAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(GinEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(GinEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetEngine 从容器中获取 Gin 引擎实例。

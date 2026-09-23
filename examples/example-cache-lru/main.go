@@ -51,12 +51,12 @@ func main() {
 	c3 := cache.NewLRUCache(100)
 	_ = c3.Set(ctx, "temp", "value", 200*time.Millisecond)
 
-	val, err := c3.Get(ctx, "temp")
-	fmt.Printf("  Before expiry: temp=%v, err=%v\n", val, err)
+	cacheValue, err := c3.Get(ctx, "temp")
+	fmt.Printf("  Before expiry: temp=%v, err=%v\n", cacheValue, err)
 
 	time.Sleep(300 * time.Millisecond)
-	val, err = c3.Get(ctx, "temp")
-	fmt.Printf("  After expiry: temp=%v, err=%v\n", val, err)
+	cacheValue, err = c3.Get(ctx, "temp")
+	fmt.Printf("  After expiry: temp=%v, err=%v\n", cacheValue, err)
 
 	// TTL check
 	_ = c3.Set(ctx, "ttl-key", "test", 5*time.Minute)
@@ -81,7 +81,8 @@ func main() {
 	fmt.Println()
 	fmt.Println("--- 5. Cache Statistics ---")
 	c5 := cache.NewLRUCache(1000)
-	for i := 0; i < 50; i++ {
+	const warmupEntries = 50 // 预热缓存条目数
+	for i := 0; i < warmupEntries; i++ {
 		key := fmt.Sprintf("item-%d", i)
 		_ = c5.Set(ctx, key, i, 0)
 	}
@@ -95,33 +96,33 @@ func main() {
 		TTL(10 * time.Minute).
 		Build()
 	_ = c6.Set(ctx, "builder-key", "builder-value", 0)
-	val, _ = c6.Get(ctx, "builder-key")
-	fmt.Printf("  Builder cache: builder-key=%v\n", val)
+	cacheValue, _ = c6.Get(ctx, "builder-key")
+	fmt.Printf("  Builder cache: builder-key=%v\n", cacheValue)
 
 	// ---- 7. CacheHelper ----
 	fmt.Println()
 	fmt.Println("--- 7. CacheHelper (GetOrSet) ---")
 	helper := cache.NewCacheHelper(c6)
-	result, err := helper.GetOrSet(ctx, "expensive-data", func() (any, error) {
+	cacheResult, err := helper.GetOrSet(ctx, "expensive-data", func() (any, error) {
 		fmt.Println("  [loader] Computing expensive data...")
 		return "computed-value", nil
 	}, 0)
-	fmt.Printf("  GetOrSet result: %v\n", result)
+	fmt.Printf("  GetOrSet result: %v\n", cacheResult)
 
 	// Second call should hit cache
-	result, err = helper.GetOrSet(ctx, "expensive-data", func() (any, error) {
+	cacheResult, err = helper.GetOrSet(ctx, "expensive-data", func() (any, error) {
 		fmt.Println("  [loader] This should NOT print")
 		return "should-not-reach", nil
 	}, 0)
-	fmt.Printf("  GetOrSet cached: %v\n", result)
+	fmt.Printf("  GetOrSet cached: %v\n", cacheResult)
 
 	// ---- 8. CacheTemplate with key prefix ----
 	fmt.Println()
 	fmt.Println("--- 8. CacheTemplate ---")
 	tpl := cache.NewCacheTemplate(c6, "app")
 	_ = tpl.Set(ctx, "user:1", "Alice", 0)
-	val, _ = tpl.Get(ctx, "user:1")
-	fmt.Printf("  Template get user:1 = %v\n", val)
+	cacheValue, _ = tpl.Get(ctx, "user:1")
+	fmt.Printf("  Template get user:1 = %v\n", cacheValue)
 
 	// ---- 9. Concurrent access safety ----
 	fmt.Println()

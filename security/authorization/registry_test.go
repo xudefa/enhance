@@ -213,9 +213,9 @@ func TestJoinStringsFunc(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := joinStrings(tt.strs, tt.sep)
-			if result != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, result)
+			joinResult := joinStrings(tt.strs, tt.sep)
+			if joinResult != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, joinResult)
 			}
 		})
 	}

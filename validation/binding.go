@@ -57,7 +57,7 @@ func (b *DefaultBinder) bindJSON(req *http.Request, obj any) error {
 	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
 	err := decoder.Decode(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode JSON request body: %w", err)
 	}
 
 	// 验证绑定的对象
@@ -67,7 +67,7 @@ func (b *DefaultBinder) bindJSON(req *http.Request, obj any) error {
 // bindForm 从表单数据绑定到对象
 func (b *DefaultBinder) bindForm(req *http.Request, obj any) error {
 	if err := req.ParseForm(); err != nil {
-		return err
+		return fmt.Errorf("failed to parse form request: %w", err)
 	}
 
 	return b.bindQuery(req.Form, obj)
@@ -99,25 +99,25 @@ func setFieldValue(field reflect.Value, value string) error {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		intVal, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse int value: %w", err)
 		}
 		field.SetInt(intVal)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		uintVal, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse uint value: %w", err)
 		}
 		field.SetUint(uintVal)
 	case reflect.Float32, reflect.Float64:
 		floatVal, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse float value: %w", err)
 		}
 		field.SetFloat(floatVal)
 	case reflect.Bool:
 		boolVal, err := strconv.ParseBool(value)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse bool value: %w", err)
 		}
 		field.SetBool(boolVal)
 	default:
@@ -193,7 +193,7 @@ func (j *JSONBinder) BindJSON(req *http.Request, obj any) error {
 	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
 	err := decoder.Decode(obj)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode JSON request body: %w", err)
 	}
 
 	// 验证绑定的对象
@@ -218,7 +218,7 @@ func NewFormBinder(validator Validator) *FormBinder {
 // BindForm 仅从表单数据绑定
 func (f *FormBinder) BindForm(req *http.Request, obj any) error {
 	if err := req.ParseForm(); err != nil {
-		return err
+		return fmt.Errorf("failed to parse form request: %w", err)
 	}
 
 	return bindFieldsFromValues(req.Form, obj, f.Validator)

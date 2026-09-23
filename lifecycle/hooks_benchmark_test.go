@@ -110,9 +110,9 @@ func BenchmarkHookRegistry_ConcurrentMixed(b *testing.B) {
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			op := i % 4
+			op := seq % 4
 			switch op {
 			case 0:
 				registry.Register(OnStartFunc(func(ctx context.Context) error {
@@ -125,7 +125,7 @@ func BenchmarkHookRegistry_ConcurrentMixed(b *testing.B) {
 			case 3:
 				_ = registry.GetAll()
 			}
-			i++
+			seq++
 		}
 	})
 }

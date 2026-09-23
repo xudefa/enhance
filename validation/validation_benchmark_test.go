@@ -15,26 +15,26 @@ func BenchmarkTagValidator(b *testing.B) {
 	validator := NewTagValidator()
 
 	b.Run("Valid-Struct", func(b *testing.B) {
-		obj := &TestStruct{
+		input := &TestStruct{
 			Name:  "John Doe",
 			Email: "john@example.com",
 			Age:   30,
 		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = validator.Validate(obj)
+			_ = validator.Validate(input)
 		}
 	})
 
 	b.Run("Invalid-Struct", func(b *testing.B) {
-		obj := &TestStruct{
+		input := &TestStruct{
 			Name:  "Jo",
 			Email: "invalid-email",
 			Age:   200,
 		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = validator.Validate(obj)
+			_ = validator.Validate(input)
 		}
 	})
 }
@@ -47,14 +47,14 @@ func BenchmarkTagValidator_Concurrent(b *testing.B) {
 	}
 
 	validator := NewTagValidator()
-	obj := &TestStruct{
+	input := &TestStruct{
 		Name:  "John Doe",
 		Email: "john@example.com",
 	}
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_ = validator.Validate(obj)
+			_ = validator.Validate(input)
 		}
 	})
 }
@@ -76,15 +76,15 @@ func BenchmarkTagValidator_DifferentRules(b *testing.B) {
 	validator := NewTagValidator()
 
 	b.Run("Simple-Required", func(b *testing.B) {
-		obj := &SimpleStruct{Name: "Test"}
+		input := &SimpleStruct{Name: "Test"}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = validator.Validate(obj)
+			_ = validator.Validate(input)
 		}
 	})
 
 	b.Run("Complex-Multiple-Rules", func(b *testing.B) {
-		obj := &ComplexStruct{
+		input := &ComplexStruct{
 			Name:    "John Doe",
 			Email:   "john@example.com",
 			Age:     30,
@@ -93,7 +93,7 @@ func BenchmarkTagValidator_DifferentRules(b *testing.B) {
 		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = validator.Validate(obj)
+			_ = validator.Validate(input)
 		}
 	})
 }
@@ -132,7 +132,7 @@ func BenchmarkValidateStruct(b *testing.B) {
 		Age   int    `validate:"required,min=1,max=150"`
 	}
 
-	obj := &TestStruct{
+	input := &TestStruct{
 		Name:  "John Doe",
 		Email: "john@example.com",
 		Age:   30,
@@ -140,7 +140,7 @@ func BenchmarkValidateStruct(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = ValidateStruct(obj)
+		_ = ValidateStruct(input)
 	}
 }
 

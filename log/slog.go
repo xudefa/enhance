@@ -49,7 +49,7 @@ func WithOutput(output io.Writer) Option {
 // WithOutputPath 设置日志文件输出路径
 func WithOutputPath(path string) Option {
 	return func(l *SlogLogger) {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			return
 		}
@@ -57,8 +57,8 @@ func WithOutputPath(path string) Option {
 		if l.file != nil {
 			_ = l.file.Close()
 		}
-		l.output = f
-		l.file = f
+		l.output = file
+		l.file = file
 		// 重新创建 handler 和 logger 以使用新的输出
 		l.slogLevel = l.toSlogLevel(l.level)
 		handlerOptions := &slog.HandlerOptions{
@@ -94,7 +94,7 @@ func WithDevelopment(development bool) Option {
 
 // NewSlogLogger 创建 slog 日志适配器
 func NewSlogLogger(opts ...Option) *SlogLogger {
-	l := &SlogLogger{
+	logger := &SlogLogger{
 		level:     InfoLevel,
 		format:    "json",
 		addSource: false,
@@ -102,26 +102,26 @@ func NewSlogLogger(opts ...Option) *SlogLogger {
 	}
 
 	for _, opt := range opts {
-		opt(l)
+		opt(logger)
 	}
 
 	// 预计算 slog 级别
-	l.slogLevel = l.toSlogLevel(l.level)
+	logger.slogLevel = logger.toSlogLevel(logger.level)
 
 	var handler slog.Handler
 	handlerOptions := &slog.HandlerOptions{
-		Level:     l.slogLevel,
-		AddSource: l.addSource,
+		Level:     logger.slogLevel,
+		AddSource: logger.addSource,
 	}
 
-	if l.format == "text" {
-		handler = slog.NewTextHandler(l.output, handlerOptions)
+	if logger.format == "text" {
+		handler = slog.NewTextHandler(logger.output, handlerOptions)
 	} else {
-		handler = slog.NewJSONHandler(l.output, handlerOptions)
+		handler = slog.NewJSONHandler(logger.output, handlerOptions)
 	}
 
-	l.logger = slog.New(handler)
-	return l
+	logger.logger = slog.New(handler)
+	return logger
 }
 
 // 自定义 slog 级别，用于 panic/fatal（高于 slog.LevelError=8）

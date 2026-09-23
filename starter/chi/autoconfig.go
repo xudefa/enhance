@@ -25,7 +25,8 @@ var chiAutoConfig = &ChiAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(chiAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(ChiEnabled, ConditionTrue),
+			// 约定优于配置：当 chi.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ChiEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -144,16 +145,18 @@ func (c *ChiAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
 
-	// 在后台启动服务器，避免阻塞
-	go func() {
-		if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(ctx.Context(), "Chi HTTP server error",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
-		}
-	}()
+	go c.runHTTPServer(ctx)
 
 	return nil
+}
+
+// runHTTPServer 在独立 goroutine 中运行 HTTP 服务器。
+func (c *ChiAutoConfiguration) runHTTPServer(ctx boot.ApplicationContext) {
+	if err := c.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		c.logger.Error(ctx.Context(), "Chi HTTP server error",
+			log.KeyValue{Key: "error", Value: err.Error()},
+		)
+	}
 }
 
 // Stop 停止 HTTP 服务器。
@@ -178,7 +181,7 @@ func (c *ChiAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *ChiAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(ChiEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(ChiEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetRouter 从容器中获取 Chi 路由器实例。

@@ -12,6 +12,16 @@ func NewEventBusWithOrdering() *EventBusWithOrdering {
 	return &EventBusWithOrdering{}
 }
 
+// NewLegacyEventBusAdapter 创建适配器。
+func NewLegacyEventBusAdapter(bus *EventBusWithOrdering) *LegacyEventBusAdapter {
+	return &LegacyEventBusAdapter{bus: bus}
+}
+
+// NewListenerConfig 创建监听器配置
+func NewListenerConfig(handler EventListener) ListenerConfig {
+	return ListenerConfig{Handler: handler}
+}
+
 // Subscribe 订阅事件（向后兼容，等价于 Order=0 无条件的监听器）
 func (b *EventBusWithOrdering) Subscribe(eventType string, listener EventListener) {
 	b.SubscribeWithConfig(eventType, ListenerConfig{
@@ -38,6 +48,7 @@ func (b *EventBusWithOrdering) SubscribeWithConfig(eventType string, config List
 		newList[len(old.list)] = orderedListener{
 			config:    config,
 			original:  config.Handler,
+			funcPtr:   reflect.ValueOf(config.Handler).Pointer(),
 			wrapperID: id,
 		}
 		newSlice := &listenerSlice{list: newList}
@@ -71,6 +82,7 @@ func (b *EventBusWithOrdering) SubscribeOnce(eventType string, listener EventLis
 		newList[len(old.list)] = orderedListener{
 			config:    ListenerConfig{Handler: wrapper},
 			original:  listener,
+			funcPtr:   reflect.ValueOf(listener).Pointer(),
 			wrapperID: id,
 		}
 		newSlice := &listenerSlice{list: newList}
@@ -97,10 +109,10 @@ func (b *EventBusWithOrdering) Unsubscribe(eventType string, target EventListene
 		}
 		old, _ := oldValue.(*listenerSlice)
 
-		// 在锁外查找索引
+		// 性能优化：使用预存的 funcPtr 比较，避免循环内重复反射调用
 		found := -1
 		for i, ol := range old.list {
-			if reflect.ValueOf(ol.original).Pointer() == targetPtr {
+			if ol.funcPtr == targetPtr {
 				found = i
 				break
 			}
@@ -163,69 +175,80 @@ func (b *EventBusWithOrdering) unsubscribeByID(eventType string, id int) {
 //   - 使用预分配切片避免动态扩容
 //   - 快照后释放锁，减少锁持有时间
 func (b *EventBusWithOrdering) Publish(event ApplicationEvent) {
-	oldValue, ok := b.listeners.Load(event.Type())
-	if !ok {
+	snapshot := b.snapshotListeners(event.Type())
+	if len(snapshot) == 0 {
 		return
+	}
+	for i := range snapshot {
+		b.executeListenerOl(event, &snapshot[i])
+	}
+}
+
+// snapshotListeners 快照并排序当前事件类型的监听器列表。
+func (b *EventBusWithOrdering) snapshotListeners(eventType string) []orderedListener {
+	oldValue, ok := b.listeners.Load(eventType)
+	if !ok {
+		return nil
 	}
 	old, _ := oldValue.(*listenerSlice)
-	listeners := old.list
-
-	if len(listeners) == 0 {
-		return
-	}
-
-	// 预分配切片容量，避免动态扩容
-	snapshot := make([]orderedListener, len(listeners))
-	copy(snapshot, listeners)
-
+	snapshot := make([]orderedListener, len(old.list))
+	copy(snapshot, old.list)
 	sort.SliceStable(snapshot, func(i, j int) bool {
 		return snapshot[i].config.Order < snapshot[j].config.Order
 	})
+	return snapshot
+}
 
-	// 执行监听器
-	for i := range snapshot {
-		ol := &snapshot[i]
-		// 应用过滤条件
-		if ol.config.Condition != nil && !ol.config.Condition(event) {
-			continue
-		}
-
-		if ol.config.Async {
-			handler := ol.config.Handler
-			b.closeMu.Lock()
-			b.wg.Add(1)
-			b.closeMu.Unlock()
-			go func() {
-				defer b.wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("async event handler panic", "event", event.Type(), "recover", r)
-					}
-				}()
-
-				timer := time.NewTimer(30 * time.Second)
-				defer timer.Stop()
-
-				done := make(chan struct{}, 1)
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							slog.Error("async event handler panic", "event", event.Type(), "recover", r)
-						}
-						close(done)
-					}()
-					handler(event)
-				}()
-				select {
-				case <-done:
-				case <-timer.C:
-					slog.Error("async event handler timeout", "event", event.Type())
-				}
-			}()
-			continue
-		}
-		ol.config.Handler(event)
+// executeListenerOl 执行单个监听器：条件检查、同步/异步分发。
+func (b *EventBusWithOrdering) executeListenerOl(event ApplicationEvent, ol *orderedListener) {
+	if ol.config.Condition != nil && !ol.config.Condition(event) {
+		return
 	}
+	if ol.config.Async {
+		b.invokeAsyncHandler(event, ol.config.Handler)
+		return
+	}
+	ol.config.Handler(event)
+}
+
+// invokeAsyncHandler 在后台并发执行事件处理器，带 panic 恢复与超时保护。
+func (b *EventBusWithOrdering) invokeAsyncHandler(event ApplicationEvent, handler func(ApplicationEvent)) {
+	b.closeMu.Lock()
+	b.wg.Add(1)
+	b.closeMu.Unlock()
+	go b.runAsyncHandler(event, handler)
+}
+
+// runAsyncHandler 异步执行事件处理器（WaitGroup 保护）。
+func (b *EventBusWithOrdering) runAsyncHandler(event ApplicationEvent, handler func(ApplicationEvent)) {
+	defer b.wg.Done()
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("async event handler panic", "event", event.Type(), "recover", rec)
+		}
+	}()
+
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+
+	done := make(chan struct{}, 1)
+	go b.callHandlerWithDone(event, handler, done)
+	select {
+	case <-done:
+	case <-timer.C:
+		slog.Error("async event handler timeout", "event", event.Type())
+	}
+}
+
+// callHandlerWithDone 调用事件处理器并在完成后关闭 done 通道。
+func (b *EventBusWithOrdering) callHandlerWithDone(event ApplicationEvent, handler func(ApplicationEvent), done chan struct{}) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("async event handler panic", "event", event.Type(), "recover", rec)
+		}
+		close(done)
+	}()
+	handler(event)
 }
 
 // Listeners 返回指定事件类型的监听器数量
@@ -267,11 +290,6 @@ func (b *EventBusWithOrdering) ClearAll() {
 	})
 }
 
-// NewLegacyEventBusAdapter 创建适配器。
-func NewLegacyEventBusAdapter(bus *EventBusWithOrdering) *LegacyEventBusAdapter {
-	return &LegacyEventBusAdapter{bus: bus}
-}
-
 // Publish 转发到 EventBusWithOrdering
 func (a *LegacyEventBusAdapter) Publish(event ApplicationEvent) {
 	a.bus.Publish(event)
@@ -285,13 +303,6 @@ func (a *LegacyEventBusAdapter) Subscribe(eventType string, listener EventListen
 // Unsubscribe 转发到 EventBusWithOrdering
 func (a *LegacyEventBusAdapter) Unsubscribe(eventType string, target EventListener) {
 	a.bus.Unsubscribe(eventType, target)
-}
-
-// 便捷构造函数
-
-// NewListenerConfig 创建监听器配置
-func NewListenerConfig(handler EventListener) ListenerConfig {
-	return ListenerConfig{Handler: handler}
 }
 
 // WithOrder 设置优先级

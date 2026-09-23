@@ -7,6 +7,7 @@ import (
 )
 
 func TestCobraConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-cobra", environment.PriorityNormal, map[string]any{
 		"cobra.enabled": "true",
@@ -43,6 +44,7 @@ func TestCobraConfig_LoadConfig(t *testing.T) {
 }
 
 func TestCobraConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &CobraConfig{
 		Use:     DefaultCobraUse,
 		Short:   DefaultCobraShort,

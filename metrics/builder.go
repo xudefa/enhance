@@ -71,9 +71,9 @@ func flattenTags(tags map[string]string) []string {
 	if len(tags) == 0 {
 		return nil
 	}
-	result := make([]string, 0, len(tags)*2)
+	tagSlice := make([]string, 0, len(tags)*2)
 	for k, v := range tags {
-		result = append(result, k, v)
+		tagSlice = append(tagSlice, k, v)
 	}
-	return result
+	return tagSlice
 }

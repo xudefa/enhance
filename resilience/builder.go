@@ -203,6 +203,7 @@ func NewMemoryRegistry() *MemoryRegistry {
 	}
 }
 
+// Register 注册服务实例并通知订阅该服务的 watchers。
 func (r *MemoryRegistry) Register(ctx context.Context, info InstanceInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -220,6 +221,7 @@ func (r *MemoryRegistry) Register(ctx context.Context, info InstanceInfo) error 
 	return nil
 }
 
+// Deregister 注销服务实例并通知订阅该服务的 watchers。
 func (r *MemoryRegistry) Deregister(ctx context.Context, info InstanceInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -243,21 +245,23 @@ func (r *MemoryRegistry) Deregister(ctx context.Context, info InstanceInfo) erro
 	return nil
 }
 
+// Discover 发现服务的健康实例列表。
 func (r *MemoryRegistry) Discover(ctx context.Context, serviceName string) ([]InstanceInfo, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	instances := r.instances[serviceName]
-	result := make([]InstanceInfo, 0, len(instances))
+	healthyInstances := make([]InstanceInfo, 0, len(instances))
 	for _, inst := range instances {
 		if inst.Healthy {
-			result = append(result, inst)
+			healthyInstances = append(healthyInstances, inst)
 		}
 	}
 
-	return result, nil
+	return healthyInstances, nil
 }
 
+// Watch 订阅服务的实例变更，返回接收变更的只读通道。
 func (r *MemoryRegistry) Watch(ctx context.Context, serviceName string) (<-chan []InstanceInfo, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -265,20 +269,22 @@ func (r *MemoryRegistry) Watch(ctx context.Context, serviceName string) (<-chan 
 	ch := make(chan []InstanceInfo, 10)
 	r.watchers[serviceName] = append(r.watchers[serviceName], ch)
 
-	// 启动 goroutine 监听 context 取消，清理 watcher
-	go func() {
-		<-ctx.Done()
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		watchers := r.watchers[serviceName]
-		for i, w := range watchers {
-			if w == ch {
-				r.watchers[serviceName] = append(watchers[:i], watchers[i+1:]...)
-				break
-			}
-		}
-		close(ch)
-	}()
+	go r.watchContextCancel(ctx, serviceName, ch)
 
 	return ch, nil
+}
+
+// watchContextCancel 监听 context 取消，清理 watcher。
+func (r *MemoryRegistry) watchContextCancel(ctx context.Context, serviceName string, ch chan []InstanceInfo) {
+	<-ctx.Done()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	watchers := r.watchers[serviceName]
+	for i, w := range watchers {
+		if w == ch {
+			r.watchers[serviceName] = append(watchers[:i], watchers[i+1:]...)
+			break
+		}
+	}
+	close(ch)
 }

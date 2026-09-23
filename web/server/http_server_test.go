@@ -139,9 +139,9 @@ func TestHTTPServer_WrapHTTPHandler(t *testing.T) {
 	wrapped := server.wrapHTTPHandler(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	wrapped.ServeHTTP(w, req)
+	wrapped.ServeHTTP(rec, req)
 
 	if !middlewareCalled {
 		t.Error("wrapHTTPHandler should call middleware")
@@ -160,12 +160,12 @@ func TestHTTPServer_WrapRouter(t *testing.T) {
 	wrapped := server.wrapRouter(router)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	wrapped.ServeHTTP(w, req)
+	wrapped.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusOK)
+	if rec.Code != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
 
@@ -179,12 +179,12 @@ func TestHTTPServer_WrapRouter_UnsupportedType(t *testing.T) {
 	wrapped := server.wrapRouter(router)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	wrapped.ServeHTTP(w, req)
+	wrapped.ServeHTTP(rec, req)
 
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusInternalServerError)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
 

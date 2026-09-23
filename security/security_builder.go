@@ -132,6 +132,14 @@ type builtSecurityConfig struct {
 // 返回:
 //   - error: 配置过程中可能产生的错误
 func (c *builtSecurityConfig) Configure(http HttpSecurity) error {
+	c.applyAuthComponents(http)
+	c.applyFilters(http)
+	c.applyFeatures(http)
+	return nil
+}
+
+// applyAuthComponents 应用认证相关组件。
+func (c *builtSecurityConfig) applyAuthComponents(http HttpSecurity) {
 	if c.builder.authManager != nil {
 		http.AuthenticationManager(c.builder.authManager)
 	}
@@ -144,7 +152,10 @@ func (c *builtSecurityConfig) Configure(http HttpSecurity) error {
 	if c.builder.accessDecisionMgr != nil {
 		http.AccessDecisionManager(c.builder.accessDecisionMgr)
 	}
+}
 
+// applyFilters 应用构建器中的过滤器。
+func (c *builtSecurityConfig) applyFilters(http HttpSecurity) {
 	for _, entry := range c.builder.filters {
 		if entry.before != nil {
 			http.AddFilterBefore(entry.filter, entry.before)
@@ -156,7 +167,10 @@ func (c *builtSecurityConfig) Configure(http HttpSecurity) error {
 		}
 		http.AddFilter(entry.filter)
 	}
+}
 
+// applyFeatures 应用开关类特性（匿名、CSRF、表单登录、Basic、登出）。
+func (c *builtSecurityConfig) applyFeatures(http HttpSecurity) {
 	if c.builder.anonymous {
 		http.Anonymous()
 	}
@@ -180,6 +194,4 @@ func (c *builtSecurityConfig) Configure(http HttpSecurity) error {
 			http.Logout(c.builder.logoutConfig.url, c.builder.logoutConfig.successHandler)
 		}
 	}
-
-	return nil
 }

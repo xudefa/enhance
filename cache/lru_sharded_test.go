@@ -17,12 +17,12 @@ func TestShardedLRUCache_Basic(t *testing.T) {
 		t.Fatalf("Set failed: %v", err)
 	}
 
-	val, err := cache.Get(ctx, "key1")
+	value, err := cache.Get(ctx, "key1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
-	if val != "value1" {
-		t.Errorf("expected value1, got %v", val)
+	if value != "value1" {
+		t.Errorf("expected value1, got %v", value)
 	}
 }
 
@@ -48,12 +48,12 @@ func TestShardedLRUCache_TTL(t *testing.T) {
 	}
 
 	// 立即获取应该成功
-	val, err := cache.Get(ctx, "key1")
+	value, err := cache.Get(ctx, "key1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
-	if val != "value1" {
-		t.Errorf("expected value1, got %v", val)
+	if value != "value1" {
+		t.Errorf("expected value1, got %v", value)
 	}
 
 	// 等待过期
@@ -112,12 +112,12 @@ func TestShardedLRUCache_Del(t *testing.T) {
 	}
 
 	// key2 应该还在
-	val, err := cache.Get(ctx, "key2")
+	value, err := cache.Get(ctx, "key2")
 	if err != nil {
 		t.Fatalf("Get key2 failed: %v", err)
 	}
-	if val != "value2" {
-		t.Errorf("expected value2, got %v", val)
+	if value != "value2" {
+		t.Errorf("expected value2, got %v", value)
 	}
 }
 
@@ -195,9 +195,9 @@ func TestShardedLRUCache_EvictCallback(t *testing.T) {
 	_ = cache.Set(ctx, "key3", "value3", time.Minute) // 应该淘汰 key1
 
 	mu.Lock()
-	val, ok := evicted["key1"]
+	got, ok := evicted["key1"]
 	mu.Unlock()
-	if !ok || val != "value1" {
+	if !ok || got != "value1" {
 		t.Errorf("expected key1 to be evicted with value1")
 	}
 }
@@ -267,12 +267,12 @@ func TestShardedLRUCache_NeverExpire(t *testing.T) {
 	}
 
 	// Get 也应该能获取到
-	val, err := cache.Get(ctx, "key1")
+	value, err := cache.Get(ctx, "key1")
 	if err != nil {
 		t.Fatalf("Get failed for never-expire key: %v", err)
 	}
-	if val != "value1" {
-		t.Errorf("expected value1, got %v", val)
+	if value != "value1" {
+		t.Errorf("expected value1, got %v", value)
 	}
 }
 
@@ -303,12 +303,12 @@ func TestShardedLRUCache_DelMultipleKeys(t *testing.T) {
 	}
 
 	// key2 应该还在
-	val, err := cache.Get(ctx, "key2")
+	value, err := cache.Get(ctx, "key2")
 	if err != nil {
 		t.Fatalf("Get key2 failed: %v", err)
 	}
-	if val != "value2" {
-		t.Errorf("expected value2, got %v", val)
+	if value != "value2" {
+		t.Errorf("expected value2, got %v", value)
 	}
 }
 

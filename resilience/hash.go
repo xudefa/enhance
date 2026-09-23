@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -29,13 +30,13 @@ type ConsistentHash struct {
 
 // NewConsistentHash 创建一致性哈希负载均衡器。
 func NewConsistentHash(replicas ...int) *ConsistentHash {
-	r := 150
+	replicaCount := 150
 	if len(replicas) > 0 {
-		r = replicas[0]
+		replicaCount = replicas[0]
 	}
 
 	ch := &ConsistentHash{
-		replicas: r,
+		replicas: replicaCount,
 	}
 	ch.ringPtr.Store(&hashRing{
 		ring:    make([]uint32, 0),
@@ -79,7 +80,7 @@ func (ch *ConsistentHash) AddNode(nodeID string, weight int) {
 		newRing.nodes[hash] = nodeID
 	}
 
-	sort.Slice(newRing.ring, func(i, j int) bool { return newRing.ring[i] < newRing.ring[j] })
+	slices.Sort(newRing.ring)
 
 	// 原子替换 ring
 	ch.ringPtr.Store(newRing)
@@ -189,7 +190,7 @@ func (ch *ConsistentHash) addNodeTo(ring *hashRing, nodeID string, weight int) {
 		ring.ring = append(ring.ring, hash)
 		ring.nodes[hash] = nodeID
 	}
-	sort.Slice(ring.ring, func(i, j int) bool { return ring.ring[i] < ring.ring[j] })
+	slices.Sort(ring.ring)
 }
 
 // hashKey 使用 MD5 生成 32-bit 哈希值。

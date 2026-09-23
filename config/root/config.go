@@ -24,11 +24,11 @@ func NewConfig(env *environment.Environment) Config {
 
 // GetProperty 获取指定配置属性的字符串值。
 func (c *configImpl) GetProperty(key string) string {
-	val, ok := c.env.GetProperty(key)
+	propertyVal, ok := c.env.GetProperty(key)
 	if !ok {
 		return ""
 	}
-	if s, ok := val.(string); ok {
+	if s, ok := propertyVal.(string); ok {
 		return s
 	}
 	return ""
@@ -46,11 +46,11 @@ func (c *configImpl) ContainsProperty(key string) bool {
 
 // GetRequiredProperty 获取必需的配置属性值，如果不存在返回错误。
 func (c *configImpl) GetRequiredProperty(key string) (string, error) {
-	val, err := c.env.GetRequiredProperty(key)
+	propertyVal, err := c.env.GetRequiredProperty(key)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get required property: %w", err)
 	}
-	if s, ok := val.(string); ok {
+	if s, ok := propertyVal.(string); ok {
 		return s, nil
 	}
 	return "", fmt.Errorf("property %q is not a string type", key)

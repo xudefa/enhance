@@ -121,14 +121,14 @@ func TestRSASignVerify(t *testing.T) {
 		t.Fatalf("RSAGenerateKey() error = %v", err)
 	}
 
-	data := []byte("data to sign")
+	payload := []byte("data to sign")
 
-	signature, err := RSASign(privateKey, data)
+	signature, err := RSASign(privateKey, payload)
 	if err != nil {
 		t.Fatalf("RSASign() error = %v", err)
 	}
 
-	if err := RSAVerify(&privateKey.PublicKey, data, signature); err != nil {
+	if err := RSAVerify(&privateKey.PublicKey, payload, signature); err != nil {
 		t.Errorf("RSAVerify() error = %v", err)
 	}
 
@@ -181,10 +181,10 @@ func TestMarshalParseRSAPublicKey(t *testing.T) {
 
 func TestPKCS7PadUnpad(t *testing.T) {
 	t.Parallel()
-	data := []byte("hello")
+	sampleData := []byte("hello")
 	blockSize := 16
 
-	padded := pkcs7Pad(data, blockSize)
+	padded := pkcs7Pad(sampleData, blockSize)
 	if len(padded) != 16 {
 		t.Errorf("padded length = %d, want 16", len(padded))
 	}
@@ -194,17 +194,17 @@ func TestPKCS7PadUnpad(t *testing.T) {
 		t.Fatalf("pkcs7Unpad() error = %v", err)
 	}
 
-	if !bytes.Equal(unpadded, data) {
-		t.Errorf("unpadded = %s, want %s", unpadded, data)
+	if !bytes.Equal(unpadded, sampleData) {
+		t.Errorf("unpadded = %s, want %s", unpadded, sampleData)
 	}
 }
 
 func TestPKCS7PadFullBlock(t *testing.T) {
 	t.Parallel()
-	data := make([]byte, 16)
-	_, _ = rand.Read(data)
+	fullBlock := make([]byte, 16)
+	_, _ = rand.Read(fullBlock)
 
-	padded := pkcs7Pad(data, 16)
+	padded := pkcs7Pad(fullBlock, 16)
 	if len(padded) != 32 {
 		t.Errorf("full block padded length = %d, want 32", len(padded))
 	}

@@ -47,9 +47,9 @@ func TestSetFieldValue_ConverterReturnsNil(t *testing.T) {
 	}
 	binder := &defaultBinder{converter: conv}
 	target := &Target{}
-	val := reflect.ValueOf(target).Elem().FieldByName("Val")
+	fieldValue := reflect.ValueOf(target).Elem().FieldByName("Val")
 
-	err := binder.setFieldValue(val, "42", reflect.TypeOf(0))
+	err := binder.setFieldValue(fieldValue, "42", reflect.TypeOf(0))
 	if err == nil {
 		t.Error("expected error when converter returns nil")
 	}
@@ -67,9 +67,9 @@ func TestSetFieldValue_ConverterReturnsIncompatibleType(t *testing.T) {
 	}
 	binder := &defaultBinder{converter: conv}
 	target := &Target{}
-	val := reflect.ValueOf(target).Elem().FieldByName("Val")
+	fieldValue := reflect.ValueOf(target).Elem().FieldByName("Val")
 
-	err := binder.setFieldValue(val, "42", reflect.TypeOf(0))
+	err := binder.setFieldValue(fieldValue, "42", reflect.TypeOf(0))
 	if err == nil {
 		t.Error("expected error for incompatible converter return type")
 	}
@@ -82,9 +82,9 @@ func TestSetFieldValue_IntOverflow(t *testing.T) {
 	}
 	binder := &defaultBinder{}
 	target := &Target{}
-	val := reflect.ValueOf(target).Elem().FieldByName("Val")
+	fieldValue := reflect.ValueOf(target).Elem().FieldByName("Val")
 
-	err := binder.setFieldValue(val, "200", reflect.TypeOf(int8(0)))
+	err := binder.setFieldValue(fieldValue, "200", reflect.TypeOf(int8(0)))
 	if err == nil {
 		t.Error("expected overflow error for int8")
 	}
@@ -97,9 +97,9 @@ func TestSetFieldValue_UintOverflow(t *testing.T) {
 	}
 	binder := &defaultBinder{}
 	target := &Target{}
-	val := reflect.ValueOf(target).Elem().FieldByName("Val")
+	fieldValue := reflect.ValueOf(target).Elem().FieldByName("Val")
 
-	err := binder.setFieldValue(val, "300", reflect.TypeOf(uint8(0)))
+	err := binder.setFieldValue(fieldValue, "300", reflect.TypeOf(uint8(0)))
 	if err == nil {
 		t.Error("expected overflow error for uint8")
 	}
@@ -157,9 +157,9 @@ func TestSetFieldValue_DurationTypes(t *testing.T) {
 	}
 	binder := &defaultBinder{}
 	target := &Target{}
-	val := reflect.ValueOf(target).Elem().FieldByName("Timeout")
+	fieldValue := reflect.ValueOf(target).Elem().FieldByName("Timeout")
 
-	err := binder.setFieldValue(val, "30s", reflect.TypeOf(time.Duration(0)))
+	err := binder.setFieldValue(fieldValue, "30s", reflect.TypeOf(time.Duration(0)))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,8 +195,8 @@ func TestSetFieldValue_AllPrimitiveTypes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			target := &Target{}
-			val := reflect.ValueOf(target).Elem().FieldByName(tt.fieldName)
-			err := binder.setFieldValue(val, tt.value, val.Type())
+			fieldValue := reflect.ValueOf(target).Elem().FieldByName(tt.fieldName)
+			err := binder.setFieldValue(fieldValue, tt.value, fieldValue.Type())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

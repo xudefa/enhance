@@ -220,20 +220,10 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	if h.securityMetadataSource == nil {
 		h.securityMetadataSource = NewExpressionBasedFilterInvocationSecurityMetadataSource()
 	}
-
-	if source, ok := h.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource); ok {
-		for _, rule := range h.authorizeRules {
-			for _, pattern := range rule.patterns {
-				source.AddMapping(pattern, rule.attrs)
-			}
-		}
-	}
+	h.applyHttpAuthorizeRules()
 
 	if h.accessDecisionManager == nil {
-		webExpressionVoter := NewWebExpressionVoter()
-		authenticatedVoter := NewAuthenticatedVoter()
-		roleVoter := NewRoleVoter()
-		h.accessDecisionManager = NewAffirmativeBased(webExpressionVoter, authenticatedVoter, roleVoter)
+		h.accessDecisionManager = newDefaultAccessDecisionManager()
 	}
 
 	h.authContextFilter = NewAuthContextFilter()
@@ -249,11 +239,40 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	)
 
 	if h.exceptionTranslationFilter == nil {
-		accessDeniedHandler := NewHttp403ForbiddenAccessDeniedHandler()
-		unauthorizedEntryPoint := NewHttp401UnauthorizedEntryPoint()
-		h.exceptionTranslationFilter = NewExceptionTranslationFilter(accessDeniedHandler, unauthorizedEntryPoint)
+		h.exceptionTranslationFilter = newDefaultExceptionTranslationFilter()
 	}
 
+	defaultFilters, err := h.buildHttpSecurityFilters()
+	if err != nil {
+		return nil, fmt.Errorf("build http security filters: %w", err)
+	}
+
+	allFilters := make([]SecurityFilter, 0, len(defaultFilters)+len(h.filters))
+	allFilters = append(allFilters, defaultFilters...)
+	allFilters = append(allFilters, h.filters...)
+	sort.SliceStable(allFilters, func(i, j int) bool {
+		return allFilters[i].Order() < allFilters[j].Order()
+	})
+
+	proxy := newFilterChainProxy(allFilters, &DefaultSecurityFilterChain{})
+	return &securityFilterChainAdapter{proxy: proxy}, nil
+}
+
+// applyHttpAuthorizeRules 将授权规则写入安全元数据源。
+func (h *httpSecurity) applyHttpAuthorizeRules() {
+	source, ok := h.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
+	if !ok {
+		return
+	}
+	for _, rule := range h.authorizeRules {
+		for _, pattern := range rule.patterns {
+			source.AddMapping(pattern, rule.attrs)
+		}
+	}
+}
+
+// buildHttpSecurityFilters 构建默认安全过滤器（含 CSRF、登出、表单登录、Basic 认证）。
+func (h *httpSecurity) buildHttpSecurityFilters() ([]SecurityFilter, error) {
 	defaultFilters := []SecurityFilter{
 		h.authContextFilter,
 		h.anonymousFilter,
@@ -281,10 +300,10 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	if h.formLoginEnabled {
 		formLoginFilter := NewUsernamePasswordAuthenticationFilterWithDefaults(
 			h.loginProcessingUrl,
-			h.defaultSuccessUrl,
-			h.failureUrl,
 			h.authenticationManager,
 			log.Build(),
+			WithDefaultSuccessURL(h.defaultSuccessUrl),
+			WithFailureURL(h.failureUrl),
 		)
 		defaultFilters = append(defaultFilters, formLoginFilter)
 	}
@@ -297,15 +316,7 @@ func (h *httpSecurity) Build() (SecurityFilterChain, error) {
 	defaultFilters = append(defaultFilters, h.exceptionTranslationFilter)
 	defaultFilters = append(defaultFilters, h.filterSecurityInterceptor)
 
-	allFilters := make([]SecurityFilter, 0, len(defaultFilters)+len(h.filters))
-	allFilters = append(allFilters, defaultFilters...)
-	allFilters = append(allFilters, h.filters...)
-	sort.SliceStable(allFilters, func(i, j int) bool {
-		return allFilters[i].Order() < allFilters[j].Order()
-	})
-
-	proxy := newFilterChainProxy(allFilters, &DefaultSecurityFilterChain{})
-	return &securityFilterChainAdapter{proxy: proxy}, nil
+	return defaultFilters, nil
 }
 
 // DefaultSecurityFilterChain 默认安全过滤器链

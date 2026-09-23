@@ -1,154 +1,412 @@
 package mq
 
 import (
-	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
-func BenchmarkMessageQueueFactory_CreateQueue(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-}
+// ============================================================================
+// MessageQueueFactory 测试
+// ============================================================================
 
-func BenchmarkMessageQueueFactory_GetQueue(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	for i := 0; i < 100; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", i%100))
-	}
-}
-
-func BenchmarkMessageQueueFactory_DeleteQueue(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		factory := NewMessageQueueFactory()
-		for j := 0; j < 10; j++ {
-			factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", j))
-		}
-		_ = factory.DeleteQueue("queue-5")
-	}
-}
-
-func BenchmarkMessageQueueFactory_ListQueues(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	for i := 0; i < 100; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = factory.ListQueues()
-	}
-}
-
-func BenchmarkMessageQueueFactory_ConcurrentCreate(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-			i++
-		}
-	})
-}
-
-func BenchmarkMessageQueueFactory_ConcurrentGet(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	for i := 0; i < 100; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", i%100))
-			i++
-		}
-	})
-}
-
-func BenchmarkMessageQueueFactory_ConcurrentMixed(b *testing.B) {
-	factory := NewMessageQueueFactory()
-	for i := 0; i < 50; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		i := 0
-		for pb.Next() {
-			op := i % 3
-			switch op {
-			case 0:
-				factory.CreateInMemoryQueue(fmt.Sprintf("queue-new-%d", i))
-			case 1:
-				_, _ = factory.GetQueue(fmt.Sprintf("queue-%d", i%50))
-			case 2:
-				_ = factory.ListQueues()
-			}
-			i++
-		}
-	})
-}
-
-func TestMessageQueueFactory_ConcurrentCreateGet(t *testing.T) {
+func TestMessageQueueFactory_CreateInMemoryQueue(t *testing.T) {
 	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+	queue := factory.CreateInMemoryQueue("test-queue")
+
+	if queue == nil {
+		t.Fatal("CreateInMemoryQueue() returned nil")
+	}
+	if queue.Name() != "test-queue" {
+		t.Errorf("expected queue name 'test-queue', got %v", queue.Name())
+	}
+}
+
+func TestMessageQueueFactory_GetQueue(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+	factory.CreateInMemoryQueue("test-queue")
+
+	queue, err := factory.GetQueue("test-queue")
+	if err != nil {
+		t.Fatalf("GetQueue() error = %v", err)
+	}
+	if queue.Name() != "test-queue" {
+		t.Errorf("expected queue name 'test-queue', got %v", queue.Name())
+	}
+}
+
+func TestMessageQueueFactory_GetQueue_NotFound(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+
+	_, err := factory.GetQueue("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent queue")
+	}
+}
+
+func TestMessageQueueFactory_DeleteQueue(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+	factory.CreateInMemoryQueue("test-queue")
+
+	err := factory.DeleteQueue("test-queue")
+	if err != nil {
+		t.Fatalf("DeleteQueue() error = %v", err)
+	}
+
+	_, err = factory.GetQueue("test-queue")
+	if err == nil {
+		t.Fatal("queue should be deleted")
+	}
+}
+
+func TestMessageQueueFactory_DeleteQueue_NotFound(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+
+	err := factory.DeleteQueue("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent queue")
+	}
+}
+
+func TestMessageQueueFactory_ListQueues(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+	factory.CreateInMemoryQueue("queue-1")
+	factory.CreateInMemoryQueue("queue-2")
+	factory.CreateInMemoryQueue("queue-3")
+
+	names := factory.ListQueues()
+	if len(names) != 3 {
+		t.Errorf("expected 3 queues, got %d", len(names))
+	}
+}
+
+func TestMessageQueueFactory_ListQueues_Empty(t *testing.T) {
+	t.Parallel()
+
+	factory := NewMessageQueueFactory()
+
+	names := factory.ListQueues()
+	if len(names) != 0 {
+		t.Errorf("expected 0 queues, got %d", len(names))
+	}
+}
+
+func TestMessageQueueFactory_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	factory := NewMessageQueueFactory()
 	var wg sync.WaitGroup
-	const goroutines = 50
 
-	for g := 0; g < goroutines; g++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		go func(gid int) {
+		go func(id int) {
 			defer wg.Done()
-			for i := 0; i < 100; i++ {
-				queueName := fmt.Sprintf("queue-%d-%d", gid, i)
-				factory.CreateInMemoryQueue(queueName)
-				q, err := factory.GetQueue(queueName)
-				if err != nil {
-					t.Errorf("failed to get queue %s: %v", queueName, err)
-				}
-				if q.Name() != queueName {
-					t.Errorf("expected queue name %s, got %s", queueName, q.Name())
-				}
-			}
-		}(g)
-	}
-
-	wg.Wait()
-
-	queues := factory.ListQueues()
-	if len(queues) != goroutines*100 {
-		t.Errorf("expected %d queues, got %d", goroutines*100, len(queues))
-	}
-}
-
-func TestMessageQueueFactory_ConcurrentDelete(t *testing.T) {
-	t.Parallel()
-	factory := NewMessageQueueFactory()
-	const queues = 100
-
-	for i := 0; i < queues; i++ {
-		factory.CreateInMemoryQueue(fmt.Sprintf("queue-%d", i))
-	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < queues; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			_ = factory.DeleteQueue(fmt.Sprintf("queue-%d", idx))
+			factory.CreateInMemoryQueue("queue-" + string(rune('0'+id)))
 		}(i)
 	}
 
 	wg.Wait()
 
-	queuesLeft := factory.ListQueues()
-	if len(queuesLeft) != 0 {
-		t.Errorf("expected 0 queues after deletion, got %d", len(queuesLeft))
+	names := factory.ListQueues()
+	if len(names) != 10 {
+		t.Errorf("expected 10 queues, got %d", len(names))
+	}
+}
+
+// ============================================================================
+// MessagePublisher 测试
+// ============================================================================
+
+func TestMessagePublisher_Publish(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	publisher := NewMessagePublisher(queue)
+
+	err := publisher.Publish([]byte("hello"), map[string]string{"key": "value"})
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if queue.Size() != 1 {
+		t.Errorf("expected queue size 1, got %d", queue.Size())
+	}
+}
+
+func TestMessagePublisher_PublishJSON(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	publisher := NewMessagePublisher(queue)
+
+	err := publisher.PublishJSON([]byte(`{"key":"value"}`))
+	if err != nil {
+		t.Fatalf("PublishJSON() error = %v", err)
+	}
+
+	msg, err := queue.Receive()
+	if err != nil {
+		t.Fatalf("Receive() error = %v", err)
+	}
+
+	if msg.GetHeader("content-type") != "application/json" {
+		t.Errorf("expected content-type 'application/json', got %v", msg.GetHeader("content-type"))
+	}
+}
+
+// ============================================================================
+// MessageConsumer 测试
+// ============================================================================
+
+func TestMessageConsumer_StartStop(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	received := make(chan bool, 1)
+
+	consumer := NewMessageConsumer(queue, func(msg *Message) error {
+		received <- true
+		return nil
+	})
+
+	err := consumer.Start()
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	queue.Send(&Message{Body: []byte("test")})
+
+	select {
+	case <-received:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("message not received within timeout")
+	}
+
+	consumer.Stop()
+}
+
+// ============================================================================
+// MessageTemplate 测试
+// ============================================================================
+
+func TestMessageTemplate_Send(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	err := template.Send([]byte("hello"))
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+
+	if queue.Size() != 1 {
+		t.Errorf("expected queue size 1, got %d", queue.Size())
+	}
+}
+
+func TestMessageTemplate_SendWithHeaders(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	headers := map[string]string{"key": "value"}
+	err := template.SendWithHeaders([]byte("hello"), headers)
+	if err != nil {
+		t.Fatalf("SendWithHeaders() error = %v", err)
+	}
+
+	msg, err := queue.Receive()
+	if err != nil {
+		t.Fatalf("Receive() error = %v", err)
+	}
+
+	if msg.GetHeader("key") != "value" {
+		t.Errorf("expected header 'value', got %v", msg.GetHeader("key"))
+	}
+}
+
+func TestMessageTemplate_Receive(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	queue.Send(&Message{Body: []byte("test")})
+
+	msg, err := template.Receive()
+	if err != nil {
+		t.Fatalf("Receive() error = %v", err)
+	}
+
+	if string(msg.Body) != "test" {
+		t.Errorf("expected body 'test', got %v", string(msg.Body))
+	}
+}
+
+func TestMessageTemplate_ReceiveWithTimeout(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	queue.Send(&Message{Body: []byte("test")})
+
+	msg, err := template.ReceiveWithTimeout(100 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("ReceiveWithTimeout() error = %v", err)
+	}
+
+	if string(msg.Body) != "test" {
+		t.Errorf("expected body 'test', got %v", string(msg.Body))
+	}
+}
+
+func TestMessageTemplate_Purge(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	queue.Send(&Message{Body: []byte("test")})
+
+	err := template.Purge()
+	if err != nil {
+		t.Fatalf("Purge() error = %v", err)
+	}
+
+	if queue.Size() != 0 {
+		t.Errorf("expected queue size 0 after purge, got %d", queue.Size())
+	}
+}
+
+func TestMessageTemplate_Size(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test")
+	template := NewMessageTemplate(queue)
+
+	queue.Send(&Message{Body: []byte("test")})
+
+	if template.Size() != 1 {
+		t.Errorf("expected size 1, got %d", template.Size())
+	}
+}
+
+// ============================================================================
+// Message 测试
+// ============================================================================
+
+func TestAcquireAndReleaseMessage(t *testing.T) {
+	t.Parallel()
+
+	msg := AcquireMessage()
+	if msg == nil {
+		t.Fatal("AcquireMessage() returned nil")
+	}
+
+	if msg.Headers == nil {
+		t.Error("expected Headers to be initialized")
+	}
+	if msg.RetryCount != 0 {
+		t.Errorf("expected RetryCount 0, got %d", msg.RetryCount)
+	}
+	if msg.MaxRetries != DefaultMaxRetries {
+		t.Errorf("expected MaxRetries %d, got %d", DefaultMaxRetries, msg.MaxRetries)
+	}
+
+	msg.Body = []byte("test body")
+	msg.ID = "test-id"
+
+	ReleaseMessage(msg)
+
+	msg2 := AcquireMessage()
+	if msg2.Body != nil {
+		t.Error("expected Body to be nil after release")
+	}
+	if msg2.ID != "" {
+		t.Error("expected ID to be empty after release")
+	}
+}
+
+func TestMessage_IsAcknowledged(t *testing.T) {
+	t.Parallel()
+
+	msg := &Message{}
+
+	if msg.IsAcknowledged() {
+		t.Error("expected message to not be acknowledged initially")
+	}
+
+	msg.Ack()
+
+	if !msg.IsAcknowledged() {
+		t.Error("expected message to be acknowledged after Ack()")
+	}
+}
+
+func TestMessage_SetHeader(t *testing.T) {
+	t.Parallel()
+
+	msg := &Message{}
+
+	msg.SetHeader("key1", "value1")
+
+	if msg.GetHeader("key1") != "value1" {
+		t.Errorf("expected header value 'value1', got %s", msg.GetHeader("key1"))
+	}
+
+	msg2 := &Message{}
+	msg2.SetHeader("key2", "value2")
+	if msg2.GetHeader("key2") != "value2" {
+		t.Errorf("expected header value 'value2', got %s", msg2.GetHeader("key2"))
+	}
+}
+
+func TestMessage_GetHeader_NilHeaders(t *testing.T) {
+	t.Parallel()
+
+	msg := &Message{}
+
+	if msg.GetHeader("key") != "" {
+		t.Errorf("expected empty string for nil Headers, got %s", msg.GetHeader("key"))
+	}
+}
+
+// ============================================================================
+// Queue Options 测试
+// ============================================================================
+
+func TestWithMaxRetries(t *testing.T) {
+	t.Parallel()
+
+	queue := NewInMemoryQueue("test", WithMaxRetries(5))
+
+	if queue.maxRetries != 5 {
+		t.Errorf("expected maxRetries 5, got %d", queue.maxRetries)
+	}
+}
+
+func TestWithDeadLetterQueue(t *testing.T) {
+	t.Parallel()
+
+	dlq := NewInMemoryQueue("dead-letter")
+	queue := NewInMemoryQueue("test", WithDeadLetterQueue(dlq))
+
+	if queue.deadLetterQueue != dlq {
+		t.Error("expected deadLetterQueue to be set")
 	}
 }

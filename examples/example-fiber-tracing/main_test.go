@@ -16,6 +16,7 @@ import (
 )
 
 func TestFiberTracingIntegration(t *testing.T) {
+	tt.Parallel()
 	fiberApp := fiber.New()
 
 	app, err := boot.NewApplication(
@@ -132,6 +133,7 @@ func TestFiberTracingIntegration(t *testing.T) {
 }
 
 func TestFiberTracingHTTP(t *testing.T) {
+	tt.Parallel()
 	fiberApp := fiber.New()
 
 	app, err := boot.NewApplication(
@@ -255,6 +257,7 @@ func TestFiberTracingHTTP(t *testing.T) {
 }
 
 func TestFiberActuatorEndpointsWithTracing(t *testing.T) {
+	tt.Parallel()
 	fiberApp := fiber.New()
 
 	app, err := boot.NewApplication(
@@ -350,6 +353,7 @@ func TestFiberActuatorEndpointsWithTracing(t *testing.T) {
 }
 
 func TestFiberActuatorEndpointsTracingContextPropagation(t *testing.T) {
+	tt.Parallel()
 	fiberApp := fiber.New()
 
 	app, err := boot.NewApplication(

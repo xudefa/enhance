@@ -265,10 +265,12 @@ func (b *ConditionBuilder) buildMixed(conditions []Condition, operators []string
 // alwaysTrueCondition 永远为 true 的条件
 type alwaysTrueCondition struct{}
 
+// Matches 恒为 true，用于无条件放行的场景。
 func (a *alwaysTrueCondition) Matches(ctx ConditionContext) bool {
 	return true
 }
 
+// String 返回永真条件的固定描述。
 func (a *alwaysTrueCondition) String() string {
 	return "AlwaysTrue"
 }

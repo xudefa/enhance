@@ -21,13 +21,13 @@ type ResponseTimeWeighted struct {
 
 // NewResponseTimeWeighted 创建响应时间加权负载均衡器
 func NewResponseTimeWeighted(decay ...float64) *ResponseTimeWeighted {
-	d := 0.9
+	decayFactor := 0.9
 	if len(decay) > 0 {
-		d = decay[0]
+		decayFactor = decay[0]
 	}
 
 	return &ResponseTimeWeighted{
-		decay: d,
+		decay: decayFactor,
 	}
 }
 
@@ -49,9 +49,9 @@ func (rtw *ResponseTimeWeighted) Next(backends []*ServiceInstance) (*ServiceInst
 	for _, b := range backends {
 		avgTime := 1.0
 		if value, ok := rtw.avgResponseTimes.Load(b.URL); ok {
-			v, _ := value.(*backendResponseTime)
-			if v != nil {
-				avgTime = v.avgTime
+			record, _ := value.(*backendResponseTime)
+			if record != nil {
+				avgTime = record.avgTime
 			}
 			if avgTime <= 0 {
 				avgTime = 1
@@ -126,9 +126,9 @@ func (rtw *ResponseTimeWeighted) RecordResponseTime(backendURL string, responseT
 // GetAvgResponseTime 获取后端平均响应时间
 func (rtw *ResponseTimeWeighted) GetAvgResponseTime(backendURL string) (float64, bool) {
 	if value, ok := rtw.avgResponseTimes.Load(backendURL); ok {
-		v, _ := value.(*backendResponseTime)
-		if v != nil {
-			return v.avgTime, true
+		record, _ := value.(*backendResponseTime)
+		if record != nil {
+			return record.avgTime, true
 		}
 	}
 	return 0, false

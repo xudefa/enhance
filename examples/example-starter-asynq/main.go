@@ -25,8 +25,10 @@ import (
 )
 
 const (
+	// TaskEmailDelivery 邮件投递任务类型。
 	TaskEmailDelivery = "email:delivery"
-	TaskImageResize   = "image:resize"
+	// TaskImageResize 图片缩放任务类型。
+	TaskImageResize = "image:resize"
 )
 
 func main() {
@@ -62,7 +64,7 @@ func main() {
 	// Demo 1: Enqueue a simple task
 	fmt.Println("--- Demo 1: Enqueue Simple Task ---")
 	task := asynq.NewTask(TaskEmailDelivery, []byte(`{"user_id": 123, "subject": "Welcome!"}`))
-	info, err := client.Enqueue(task,
+	taskInfo, err := client.Enqueue(task,
 		asynq.Queue("email"),
 		asynq.MaxRetry(3),
 		asynq.Timeout(5*time.Minute),
@@ -71,7 +73,7 @@ func main() {
 		fmt.Printf("Failed to enqueue task: %v\n", err)
 		return
 	}
-	fmt.Printf("Task enqueued: ID=%s, Queue=%s\n", info.ID, info.Queue)
+	fmt.Printf("Task enqueued: ID=%s, Queue=%s\n", taskInfo.ID, taskInfo.Queue)
 
 	// Demo 2: Enqueue a task with delay
 	fmt.Println("\n--- Demo 2: Enqueue Delayed Task ---")
@@ -102,14 +104,14 @@ func main() {
 	fmt.Println("\n--- Demo 4: Enqueue Multiple Tasks ---")
 	for i := 0; i < 5; i++ {
 		task := asynq.NewTask(TaskImageResize, []byte(fmt.Sprintf(`{"image_id": %d, "width": 800, "height": 600}`, i)))
-		info, err := client.Enqueue(task,
+		taskInfo, err := client.Enqueue(task,
 			asynq.Queue("images"),
 		)
 		if err != nil {
 			fmt.Printf("Failed to enqueue task %d: %v\n", i, err)
 			continue
 		}
-		fmt.Printf("Task %d enqueued: ID=%s\n", i, info.ID)
+		fmt.Printf("Task %d enqueued: ID=%s\n", i, taskInfo.ID)
 	}
 
 	fmt.Println("\n=== Example completed successfully ===")

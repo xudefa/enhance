@@ -7,6 +7,7 @@ import (
 )
 
 func TestElasticsearchConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-elasticsearch", environment.PriorityNormal, map[string]any{
 		"elasticsearch.enabled":        "true",
@@ -42,6 +43,7 @@ func TestElasticsearchConfig_LoadConfig(t *testing.T) {
 }
 
 func TestElasticsearchConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &ElasticsearchConfig{
 		Timeout:      DefaultTimeout,
 		MaxIdleConns: DefaultMaxIdleConns,

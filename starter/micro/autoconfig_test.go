@@ -7,6 +7,7 @@ import (
 )
 
 func TestMicroConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-micro", environment.PriorityNormal, map[string]any{
 		"micro.enabled":       "true",
@@ -40,6 +41,7 @@ func TestMicroConfig_LoadConfig(t *testing.T) {
 }
 
 func TestMicroConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &MicroConfig{
 		ServiceName: DefaultServiceName,
 		Version:     DefaultVersion,

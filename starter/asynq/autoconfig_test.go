@@ -7,6 +7,7 @@ import (
 )
 
 func TestAsynqConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-asynq", environment.PriorityNormal, map[string]any{
 		"asynq.enabled":          "true",
@@ -46,6 +47,7 @@ func TestAsynqConfig_LoadConfig(t *testing.T) {
 }
 
 func TestAsynqConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &AsynqConfig{
 		Host:            DefaultAsynqHost,
 		Port:            DefaultAsynqPort,

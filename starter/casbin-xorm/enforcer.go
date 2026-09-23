@@ -2,6 +2,7 @@ package casbinxorm
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/casbin/casbin/v2"
 	xormadapter "github.com/casbin/xorm-adapter/v2"
@@ -25,13 +26,19 @@ func (e *XormCasbinEnforcer) Enforce(ctx context.Context, subject, object, actio
 // AddPolicy 添加策略。
 func (e *XormCasbinEnforcer) AddPolicy(ctx context.Context, sub, obj, act string) error {
 	_, err := e.Enforcer.AddPolicy(sub, obj, act)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to add policy: %w", err)
+	}
+	return nil
 }
 
 // RemovePolicy 移除策略。
 func (e *XormCasbinEnforcer) RemovePolicy(ctx context.Context, sub, obj, act string) error {
 	_, err := e.Enforcer.RemovePolicy(sub, obj, act)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to remove policy: %w", err)
+	}
+	return nil
 }
 
 // GetPolicy 获取所有策略。

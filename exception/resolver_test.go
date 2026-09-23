@@ -41,7 +41,7 @@ func TestResolverChain_Resolve(t *testing.T) {
 		order:    2,
 		supports: func(err error) bool { return errors.Is(err, ErrNotFound) },
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(404, "Custom not found", "", "", nil)
+			return NewErrorResponse(404, "Custom not found")
 		},
 	}
 

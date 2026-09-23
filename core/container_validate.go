@@ -26,12 +26,12 @@ func (c *defaultContainer) Validate() error {
 
 	// 1. 检查所有Bean的依赖是否已注册
 	if err := c.validateDependencies(types, parent); err != nil {
-		return err
+		return fmt.Errorf("validate dependencies: %w", err)
 	}
 
 	// 2. 检测循环依赖
 	if err := c.detectCircularDependencies(types); err != nil {
-		return err
+		return fmt.Errorf("detect circular dependencies: %w", err)
 	}
 
 	return nil
@@ -47,7 +47,7 @@ func (c *defaultContainer) validateDependencies(types []reflect.Type, parent Con
 
 	for _, typ := range types {
 		if err := c.validateTypeDependencies(typ, typeSet, parent); err != nil {
-			return err
+			return fmt.Errorf("validate type dependencies: %w", err)
 		}
 	}
 
@@ -76,38 +76,41 @@ func (c *defaultContainer) validateTypeDependencies(typ reflect.Type, typeSet ma
 			continue
 		}
 
-		fieldType := field.Type
-		if typeSet[fieldType] {
-			continue
-		}
-
-		if parent == nil {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		ext, ok := parent.(ContainerExt)
-		if !ok {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
-		}
-
-		parentTypes := ext.Types()
-		found := false
-		for _, pt := range parentTypes {
-			if pt == fieldType {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
-				field.Name, typ.String(), fieldType.String())
+		if err := c.validateFieldDependency(field, typeSet, parent, typ); err != nil {
+			return fmt.Errorf("validate field dependency: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// validateFieldDependency 校验单个注入字段的依赖是否在类型集合或父容器中已注册。
+func (c *defaultContainer) validateFieldDependency(field reflect.StructField, typeSet map[reflect.Type]bool, parent Container, ownerType reflect.Type) error {
+	fieldType := field.Type
+	if typeSet[fieldType] {
+		return nil
+	}
+
+	if parent == nil {
+		return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+			field.Name, ownerType.String(), fieldType.String())
+	}
+
+	ext, ok := parent.(ContainerExt)
+	if !ok {
+		return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+			field.Name, ownerType.String(), fieldType.String())
+	}
+
+	parentTypes := ext.Types()
+	for _, pt := range parentTypes {
+		if pt == fieldType {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("dependency not found: field '%s' of type '%s' requires '%s'",
+		field.Name, ownerType.String(), fieldType.String())
 }
 
 // detectCircularDependencies 检测循环依赖。
@@ -122,7 +125,7 @@ func (c *defaultContainer) detectCircularDependencies(types []reflect.Type) erro
 		key := toPtrType(typ)
 		if !visited[key] {
 			if err := c.detectCircularDFS(key, visited, recStack, []string{}); err != nil {
-				return err
+				return fmt.Errorf("detect circular dependencies: %w", err)
 			}
 		}
 	}
@@ -142,6 +145,7 @@ func toPtrType(typ reflect.Type) reflect.Type {
 func (c *defaultContainer) detectCircularDFS(key reflect.Type, visited, recStack map[reflect.Type]bool, path []string) error {
 	visited[key] = true
 	recStack[key] = true
+	pathLen := len(path)
 	path = append(path, key.String())
 
 	actualType := key
@@ -160,19 +164,22 @@ func (c *defaultContainer) detectCircularDFS(key reflect.Type, visited, recStack
 				fieldKey := toPtrType(field.Type)
 
 				if recStack[fieldKey] {
-					path = append(path, fieldKey.String())
-					return fmt.Errorf("circular dependency detected: %s", strings.Join(path, " -> "))
+					cycle := make([]string, 0, len(path)+1)
+					cycle = append(cycle, path...)
+					cycle = append(cycle, fieldKey.String())
+					return fmt.Errorf("circular dependency detected: %s", strings.Join(cycle, " -> "))
 				}
 
 				if !visited[fieldKey] {
 					if err := c.detectCircularDFS(fieldKey, visited, recStack, path); err != nil {
-						return err
+						return fmt.Errorf("detect circular dependencies: %w", err)
 					}
 				}
 			}
 		}
 	}
 
+	path = path[:pathLen]
 	recStack[key] = false
 	return nil
 }

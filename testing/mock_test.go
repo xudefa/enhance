@@ -10,19 +10,19 @@ func TestMock_ExpectAndCall(t *testing.T) {
 	mock := NewMock()
 	mock.Expect("GetUser", []any{"user123"}, "user data", nil)
 
-	result, err := mock.Call("GetUser", "user123")
+	got, err := mock.Call("GetUser", "user123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "user data" {
-		t.Errorf("expected 'user data', got %v", result)
+	if got != "user data" {
+		t.Errorf("expected 'user data', got %v", got)
 	}
 }
 
 func TestMock_ExpectTimes_FullCalls(t *testing.T) {
 	t.Parallel()
 	mock := NewMock()
-	mock.ExpectTimes("GetUser", []any{"user123"}, "user data", nil, 3)
+	mock.ExpectTimes(ExpectationRequest{Method: "GetUser", Args: []any{"user123"}, Result: "user data", Times: 3})
 
 	for i := 0; i < 3; i++ {
 		_, err := mock.Call("GetUser", "user123")

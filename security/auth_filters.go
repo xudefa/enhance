@@ -18,17 +18,45 @@ type UsernamePasswordAuthenticationFilter struct {
 	logger                log.Logger
 }
 
+// AuthFilterOption 用户名密码认证过滤器的可选参数。
+type AuthFilterOption func(*usernamePasswordFilterOptions)
+
+// usernamePasswordFilterOptions 保存用户名密码认证过滤器的可选参数。
+type usernamePasswordFilterOptions struct {
+	defaultSuccessURL string
+	failureURL        string
+}
+
+// WithDefaultSuccessURL 设置认证成功后的默认跳转地址。
+func WithDefaultSuccessURL(url string) AuthFilterOption {
+	return func(o *usernamePasswordFilterOptions) {
+		o.defaultSuccessURL = url
+	}
+}
+
+// WithFailureURL 设置认证失败后的跳转地址。
+func WithFailureURL(url string) AuthFilterOption {
+	return func(o *usernamePasswordFilterOptions) {
+		o.failureURL = url
+	}
+}
+
+// NewUsernamePasswordAuthenticationFilterWithDefaults 创建带默认配置的用户名密码认证过滤器。
 func NewUsernamePasswordAuthenticationFilterWithDefaults(
-	loginProcessingURL,
-	defaultSuccessURL,
-	failureURL string,
+	loginProcessingURL string,
 	authManager AuthenticationManager,
 	logger log.Logger,
+	opts ...AuthFilterOption,
 ) *UsernamePasswordAuthenticationFilter {
+	options := &usernamePasswordFilterOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return &UsernamePasswordAuthenticationFilter{
 		loginProcessingURL:    loginProcessingURL,
-		defaultSuccessURL:     defaultSuccessURL,
-		failureURL:            failureURL,
+		defaultSuccessURL:     options.defaultSuccessURL,
+		failureURL:            options.failureURL,
 		authenticationManager: authManager,
 		logger:                logger,
 	}
@@ -109,6 +137,7 @@ type BasicAuthenticationEntryPointWithRealm struct {
 	logger    log.Logger
 }
 
+// NewBasicAuthenticationEntryPointWithRealm 创建带 Realm 名称的 Basic 认证入口点。
 func NewBasicAuthenticationEntryPointWithRealm(realmName string, logger log.Logger) *BasicAuthenticationEntryPointWithRealm {
 	return &BasicAuthenticationEntryPointWithRealm{
 		realmName: realmName,
@@ -127,7 +156,7 @@ func (e *BasicAuthenticationEntryPointWithRealm) Commence(ctx context.Context, r
 	if err == nil {
 		return ErrBadCredentials
 	}
-	return err
+	return fmt.Errorf("authenticate: %w", err)
 }
 
 // BasicAuthenticationFilterWithRealm 带Realm的Basic认证过滤器
@@ -137,6 +166,7 @@ type BasicAuthenticationFilterWithRealm struct {
 	logger                log.Logger
 }
 
+// NewBasicAuthenticationFilterWithRealm 创建带 Realm 名称的 Basic 认证过滤器。
 func NewBasicAuthenticationFilterWithRealm(authManager AuthenticationManager, realmName string, logger log.Logger) *BasicAuthenticationFilterWithRealm {
 	entryPoint := NewBasicAuthenticationEntryPointWithRealm(realmName, logger)
 	return &BasicAuthenticationFilterWithRealm{
@@ -183,22 +213,11 @@ func (f *BasicAuthenticationFilterWithRealm) doFilter(ctx context.Context, reque
 		return f.entryPoint.Commence(ctx, request, response, ErrBadCredentials)
 	}
 
-	credentials := string(decoded)
-	sepIndex := -1
-	for i, c := range credentials {
-		if c == ':' {
-			sepIndex = i
-			break
-		}
-	}
-
-	if sepIndex == -1 {
+	username, password, ok := splitBasicCredentials(string(decoded))
+	if !ok {
 		f.logger.Warn(ctx, "Basic 认证凭据格式错误，缺少分隔符")
 		return f.entryPoint.Commence(ctx, request, response, ErrBadCredentials)
 	}
-
-	username := credentials[:sepIndex]
-	password := credentials[sepIndex+1:]
 
 	f.logger.Debug(ctx, "尝试 Basic 认证", log.KeyValue{Key: "username", Value: username})
 	authToken := NewUsernamePasswordAuthenticationToken(username, password)
@@ -214,6 +233,22 @@ func (f *BasicAuthenticationFilterWithRealm) doFilter(ctx context.Context, reque
 	request.SetAttribute("security.currentAuthentication", authenticated)
 
 	return chain.DoFilter(ctx, request, response)
+}
+
+// splitBasicCredentials 从解码后的凭据中分离用户名与密码，缺少分隔符时返回 false。
+func splitBasicCredentials(decoded string) (username string, password string, ok bool) {
+	sepIndex := -1
+	for i, c := range decoded {
+		if c == ':' {
+			sepIndex = i
+			break
+		}
+	}
+
+	if sepIndex == -1 {
+		return "", "", false
+	}
+	return decoded[:sepIndex], decoded[sepIndex+1:], true
 }
 
 // Order 实现 filter.Filter 接口

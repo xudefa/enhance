@@ -61,7 +61,7 @@ type CasbinXormConfig struct {
 	AutoLoadInterval int    `json:"auto-load-interval" mapstructure:"auto-load-interval"`
 }
 
-// Configure configures Casbin XORM integration.
+// Configure 配置 Casbin XORM 集成。
 //
 // Called during the auto-configuration phase, responsible for:
 //  1. Getting *xorm.Engine instance from container
@@ -98,12 +98,12 @@ func (c *CasbinXormAutoConfiguration) Configure(ctx boot.ApplicationContext) err
 
 	adapter, err := c.createAdapter(ctx.Context(), engine, cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Casbin XORM adapter: %w", err)
 	}
 
 	enforcer, err := c.createEnforcer(adapter, cfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Casbin Enforcer: %w", err)
 	}
 
 	enforcer.EnableAutoSave(true)
@@ -223,40 +223,43 @@ func (c *CasbinXormAutoConfiguration) startAutoReload(enforcer *XormCasbinEnforc
 		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%dmin", interval)},
 	)
 
-	go func() {
-		defer recoverLog("casbin-xorm policy auto-reload", c.ctx, c.logger)
-		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := enforcer.LoadPolicy(c.ctx); err != nil {
-					c.logger.Warn(c.ctx, "Casbin XORM policy auto-reload failed",
-						log.KeyValue{Key: "error", Value: err.Error()},
-					)
-				} else {
-					c.logger.Info(c.ctx, "Casbin XORM policy auto-reloaded")
-				}
-			case <-c.ctx.Done():
-				return
-			}
-		}
-	}()
+	go c.policyReloadLoop(enforcer, interval)
 }
 
-// Close stops auto-reload timer and releases goroutine resources.
+// Close 停止自动重载定时器并释放 goroutine 资源。
 func (c *CasbinXormAutoConfiguration) Close() {
 	if c.cancel != nil {
 		c.cancel()
 	}
 }
 
+// policyReloadLoop 定时重载策略的循环。
+func (c *CasbinXormAutoConfiguration) policyReloadLoop(enforcer *XormCasbinEnforcer, interval int) {
+	defer recoverLog("casbin-xorm policy auto-reload", c.ctx, c.logger)
+	ticker := time.NewTicker(time.Duration(interval) * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := enforcer.LoadPolicy(c.ctx); err != nil {
+				c.logger.Warn(c.ctx, "Casbin XORM policy auto-reload failed",
+					log.KeyValue{Key: "error", Value: err.Error()},
+				)
+			} else {
+				c.logger.Info(c.ctx, "Casbin XORM policy auto-reloaded")
+			}
+		case <-c.ctx.Done():
+			return
+		}
+	}
+}
+
 // recoverLog recovers from panic and logs the error.
 func recoverLog(component string, ctx context.Context, logger log.Logger) {
-	if r := recover(); r != nil {
+	if panicVal := recover(); panicVal != nil {
 		logger.Error(ctx, fmt.Sprintf("%s panic recovered", component),
-			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", panicVal)},
 		)
 	}
 }

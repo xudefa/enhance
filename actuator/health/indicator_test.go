@@ -99,9 +99,9 @@ func TestAggregate_BoundedGoroutines(t *testing.T) {
 	before := runtime.NumGoroutine()
 
 	for range 20 {
-		h := aggregator.aggregateWithTimeout(context.Background(), &hungIndicator{}, 10*time.Millisecond)
-		if h.Status != StatusDown {
-			t.Fatalf("expected StatusDown (timeout), got %v", h.Status)
+		healthResult := aggregator.aggregateWithTimeout(context.Background(), &hungIndicator{}, 10*time.Millisecond)
+		if healthResult.Status != StatusDown {
+			t.Fatalf("expected StatusDown (timeout), got %v", healthResult.Status)
 		}
 	}
 
@@ -115,13 +115,13 @@ func TestAggregate_BoundedGoroutines(t *testing.T) {
 func TestHealthIndicator(t *testing.T) {
 	t.Parallel()
 	indicator := &testIndicator{}
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 
-	if h.Status != StatusUp {
-		t.Fatalf("expected StatusUp, got %v", h.Status)
+	if healthResult.Status != StatusUp {
+		t.Fatalf("expected StatusUp, got %v", healthResult.Status)
 	}
-	if h.Details["version"] != "1.0.0" {
-		t.Fatalf("expected version 1.0.0, got %v", h.Details["version"])
+	if healthResult.Details["version"] != "1.0.0" {
+		t.Fatalf("expected version 1.0.0, got %v", healthResult.Details["version"])
 	}
 }
 

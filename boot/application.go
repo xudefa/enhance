@@ -62,7 +62,7 @@ func NewApplication(opts ...BootOption) (*Boot, error) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	for _, p := range cfg.Profiles {
 		appCtx.Environment().AddActiveProfile(p)

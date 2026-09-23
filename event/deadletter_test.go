@@ -11,13 +11,33 @@ import (
 
 func TestRetryPolicy_CalculateDelay(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name     string
-		policy   RetryPolicy
-		attempt  int
-		minDelay time.Duration
-		maxDelay time.Duration
-	}{
+	tests := testRetryPolicyCalculateDelayCases()
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			delay := tt.policy.CalculateDelay(tt.attempt)
+			if delay < tt.minDelay {
+				t.Errorf("expected delay >= %v, got %v", tt.minDelay, delay)
+			}
+			if tt.maxDelay > 0 && delay > tt.maxDelay {
+				t.Errorf("expected delay <= %v, got %v", tt.maxDelay, delay)
+			}
+		})
+	}
+}
+
+type retryPolicyDelayCase struct {
+	name     string
+	policy   RetryPolicy
+	attempt  int
+	minDelay time.Duration
+	maxDelay time.Duration
+}
+
+func testRetryPolicyCalculateDelayCases() []retryPolicyDelayCase {
+	return []retryPolicyDelayCase{
 		{
 			name:     "no backoff",
 			policy:   RetryPolicy{MaxRetries: 3, Strategy: BackoffNone},
@@ -53,18 +73,6 @@ func TestRetryPolicy_CalculateDelay(t *testing.T) {
 			minDelay: 0,
 			maxDelay: 5 * time.Second,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			delay := tt.policy.CalculateDelay(tt.attempt)
-			if delay < tt.minDelay {
-				t.Errorf("expected delay >= %v, got %v", tt.minDelay, delay)
-			}
-			if tt.maxDelay > 0 && delay > tt.maxDelay {
-				t.Errorf("expected delay <= %v, got %v", tt.maxDelay, delay)
-			}
-		})
 	}
 }
 
@@ -330,8 +338,8 @@ func TestEventBusWithDeadLetter_RetryDeadLetter(t *testing.T) {
 	bus.dlq.Add(fe)
 
 	done = make(chan struct{})
-	result := bus.RetryDeadLetter()
-	if !result {
+	retried := bus.RetryDeadLetter()
+	if !retried {
 		t.Error("expected retry to succeed")
 	}
 
@@ -374,63 +382,6 @@ func TestEventBusWithDeadLetter_RetryAllDeadLetters(t *testing.T) {
 	count := bus.RetryAllDeadLetters()
 	if count != 3 {
 		t.Errorf("expected 3 retries, got %d", count)
-	}
-}
-
-func TestRetryDeadLetter_EmptyQueue(t *testing.T) {
-	t.Parallel()
-	bus := NewEventBusWithDeadLetter(context.Background())
-
-	result := bus.RetryDeadLetter()
-	if result {
-		t.Error("expected retry to return false for empty queue")
-	}
-}
-
-func TestEventBusWithDeadLetter_ConcurrentAccess(t *testing.T) {
-	t.Parallel()
-	bus := NewEventBusWithDeadLetter(context.Background(),
-		WithMaxRetries(0),
-	)
-
-	var wg sync.WaitGroup
-	for i := range 10 {
-		wg.Add(1)
-		go func(n int) {
-			defer wg.Done()
-			bus.PublishWithRecovery(&BaseEvent{EventType: "concurrent.event"})
-		}(i)
-	}
-	wg.Wait()
-
-	// 不应该 panic
-}
-
-func TestRetryPolicy_DefaultAndNoRetry(t *testing.T) {
-	t.Parallel()
-	defaultPolicy := DefaultRetryPolicy()
-	if defaultPolicy.MaxRetries != 3 {
-		t.Errorf("expected default max retries 3, got %d", defaultPolicy.MaxRetries)
-	}
-
-	noRetry := NoRetryPolicy()
-	if noRetry.MaxRetries != 0 {
-		t.Errorf("expected no retry max retries 0, got %d", noRetry.MaxRetries)
-	}
-}
-
-func TestFailedEvent_Error(t *testing.T) {
-	t.Parallel()
-	testErr := errors.New("test error")
-	fe := FailedEvent{
-		Event:      &BaseEvent{EventType: "test"},
-		Err:        testErr,
-		RetryCount: 1,
-		MaxRetries: 3,
-	}
-
-	if fe.Err.Error() != testErr.Error() {
-		t.Errorf("expected error %v, got %v", testErr, fe.Err)
 	}
 }
 
@@ -564,4 +515,61 @@ func TestDeadLetterQueue_Stats_Empty(t *testing.T) {
 	if len(stats.EventTypeCount) != 0 {
 		t.Errorf("expected 0 event types, got %d", len(stats.EventTypeCount))
 	}
+}
+
+func TestRetryPolicy_DefaultAndNoRetry(t *testing.T) {
+	t.Parallel()
+	defaultPolicy := DefaultRetryPolicy()
+	if defaultPolicy.MaxRetries != 3 {
+		t.Errorf("expected default max retries 3, got %d", defaultPolicy.MaxRetries)
+	}
+
+	noRetry := NoRetryPolicy()
+	if noRetry.MaxRetries != 0 {
+		t.Errorf("expected no retry max retries 0, got %d", noRetry.MaxRetries)
+	}
+}
+
+func TestFailedEvent_Error(t *testing.T) {
+	t.Parallel()
+	testErr := errors.New("test error")
+	fe := FailedEvent{
+		Event:      &BaseEvent{EventType: "test"},
+		Err:        testErr,
+		RetryCount: 1,
+		MaxRetries: 3,
+	}
+
+	if fe.Err.Error() != testErr.Error() {
+		t.Errorf("expected error %v, got %v", testErr, fe.Err)
+	}
+}
+
+func TestRetryDeadLetter_EmptyQueue(t *testing.T) {
+	t.Parallel()
+	bus := NewEventBusWithDeadLetter(context.Background())
+
+	retried := bus.RetryDeadLetter()
+	if retried {
+		t.Error("expected retry to return false for empty queue")
+	}
+}
+
+func TestEventBusWithDeadLetter_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+	bus := NewEventBusWithDeadLetter(context.Background(),
+		WithMaxRetries(0),
+	)
+
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			bus.PublishWithRecovery(&BaseEvent{EventType: "concurrent.event"})
+		}(i)
+	}
+	wg.Wait()
+
+	// 不应该 panic
 }

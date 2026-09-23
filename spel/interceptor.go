@@ -58,18 +58,22 @@ func (c *interceptorChainImpl) Invoke(invocation MethodInvocation) (any, error) 
 	return c.Proceed()
 }
 
+// GetMethod 返回方法调用的方法名。
 func (m *simpleMethodInvocationImpl) GetMethod() string {
 	return m.method
 }
 
+// GetArguments 返回方法调用的参数列表。
 func (m *simpleMethodInvocationImpl) GetArguments() []any {
 	return m.args
 }
 
+// GetTarget 返回方法调用的目标对象。
 func (m *simpleMethodInvocationImpl) GetTarget() any {
 	return m.target
 }
 
+// Proceed 执行方法调用，未设置处理函数时返回错误。
 func (m *simpleMethodInvocationImpl) Proceed() (any, error) {
 	if m.handler == nil {
 		return nil, fmt.Errorf("no proceed function defined")
@@ -77,19 +81,20 @@ func (m *simpleMethodInvocationImpl) Proceed() (any, error) {
 	return m.handler()
 }
 
+// Invoke 执行日志拦截器的记录逻辑并委托后续调用。
 func (l *loggingInterceptorImpl) Invoke(invocation MethodInvocation) (any, error) {
 	method := invocation.GetMethod()
 	args := invocation.GetArguments()
 
 	fmt.Printf("[LOG] Calling %s with args: %v\n", method, args)
 
-	result, err := invocation.Proceed()
+	invokeResult, err := invocation.Proceed()
 
 	if err != nil {
 		fmt.Printf("[LOG] %s returned error: %v\n", method, err)
-		return result, err
+		return invokeResult, fmt.Errorf("proceed invocation: %w", err)
 	}
-	fmt.Printf("[LOG] %s returned: %v\n", method, result)
+	fmt.Printf("[LOG] %s returned: %v\n", method, invokeResult)
 
-	return result, err
+	return invokeResult, nil
 }

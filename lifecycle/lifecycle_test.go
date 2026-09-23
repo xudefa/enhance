@@ -93,7 +93,7 @@ func TestLifecycleManager_Listener(t *testing.T) {
 		mgr.AddListener(&errorListener{err: expectedErr})
 
 		err := mgr.SetPhase(PhaseRunning)
-		if err != expectedErr {
+		if !errors.Is(err, expectedErr) {
 			t.Errorf("error = %v, want %v", err, expectedErr)
 		}
 	})

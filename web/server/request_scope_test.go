@@ -18,9 +18,9 @@ func TestRequestScope_Set_Get(t *testing.T) {
 	scope := NewRequestScope()
 
 	scope.Set("key", "value")
-	val := scope.Get("key", func() any { return "default" })
-	if val != "value" {
-		t.Errorf("expected value, got %v", val)
+	fetched := scope.Get("key", func() any { return "default" })
+	if fetched != "value" {
+		t.Errorf("expected value, got %v", fetched)
 	}
 }
 
@@ -28,9 +28,9 @@ func TestRequestScope_GetDefault(t *testing.T) {
 	t.Parallel()
 	scope := NewRequestScope()
 
-	val := scope.Get("missing", func() any { return "default" })
-	if val != "default" {
-		t.Errorf("expected default, got %v", val)
+	fetched := scope.Get("missing", func() any { return "default" })
+	if fetched != "default" {
+		t.Errorf("expected default, got %v", fetched)
 	}
 }
 
@@ -39,9 +39,9 @@ func TestRequestScope_Overwrite(t *testing.T) {
 	scope := NewRequestScope()
 
 	scope.Set("key", "first")
-	val := scope.Get("key", func() any { return "second" })
-	if val != "first" {
-		t.Errorf("expected first, got %v", val)
+	fetched := scope.Get("key", func() any { return "second" })
+	if fetched != "first" {
+		t.Errorf("expected first, got %v", fetched)
 	}
 }
 
@@ -52,9 +52,9 @@ func TestRequestScope_ClearV2(t *testing.T) {
 	scope.Set("key", "value")
 	scope.Clear()
 
-	val := scope.Get("key", func() any { return "default" })
-	if val != "default" {
-		t.Errorf("after Clear, expected default, got %v", val)
+	fetched := scope.Get("key", func() any { return "default" })
+	if fetched != "default" {
+		t.Errorf("after Clear, expected default, got %v", fetched)
 	}
 }
 

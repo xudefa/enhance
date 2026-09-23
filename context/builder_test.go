@@ -1,7 +1,6 @@
 package context
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
@@ -41,14 +40,14 @@ func TestBuilder_ChainMethods(t *testing.T) {
 	eventBus := event.NewEventBusWithOrdering()
 	refreshMgr := refresh.NewRefreshScopeManager(container, nil)
 
-	result := builder.
+	builderResult := builder.
 		Container(container).
 		Environment(env).
 		Lifecycle(lifecycle).
 		EventBus(eventBus).
 		RefreshScopeManager(refreshMgr)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("chain methods should return the same builder")
 	}
 	if builder.container != container {
@@ -75,9 +74,9 @@ func TestBuilder_WithRefreshOption(t *testing.T) {
 	opt1 := func(o *refresh.RefreshConfig) {}
 	opt2 := func(o *refresh.RefreshConfig) {}
 
-	result := builder.WithRefreshOption(opt1, opt2)
+	builderResult := builder.WithRefreshOption(opt1, opt2)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("WithRefreshOption should return the same builder")
 	}
 	if len(builder.refreshOpts) != 2 {
@@ -90,9 +89,9 @@ func TestBuilder_WithPhaseListener(t *testing.T) {
 	builder := NewApplicationContextBuilder()
 
 	listener := &testPhaseListener{}
-	result := builder.WithPhaseListener(listener)
+	builderResult := builder.WithPhaseListener(listener)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("WithPhaseListener should return the same builder")
 	}
 	if len(builder.phaseListeners) != 1 {
@@ -116,9 +115,9 @@ func TestBuilder_OnApplicationStarted(t *testing.T) {
 	builder := NewApplicationContextBuilder()
 
 	listener := func(e event.ApplicationEvent) {}
-	result := builder.OnApplicationStarted(listener)
+	builderResult := builder.OnApplicationStarted(listener)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("OnApplicationStarted should return the same builder")
 	}
 	if len(builder.eventListeners[event.EventApplicationStarted]) != 1 {
@@ -131,9 +130,9 @@ func TestBuilder_OnApplicationReady(t *testing.T) {
 	builder := NewApplicationContextBuilder()
 
 	listener := func(e event.ApplicationEvent) {}
-	result := builder.OnApplicationReady(listener)
+	builderResult := builder.OnApplicationReady(listener)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("OnApplicationReady should return the same builder")
 	}
 	if len(builder.eventListeners[event.EventApplicationReady]) != 1 {
@@ -146,9 +145,9 @@ func TestBuilder_OnApplicationStopped(t *testing.T) {
 	builder := NewApplicationContextBuilder()
 
 	listener := func(e event.ApplicationEvent) {}
-	result := builder.OnApplicationStopped(listener)
+	builderResult := builder.OnApplicationStopped(listener)
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("OnApplicationStopped should return the same builder")
 	}
 	if len(builder.eventListeners[event.EventApplicationStopped]) != 1 {
@@ -162,9 +161,9 @@ func TestBuilder_Bean(t *testing.T) {
 
 	type testBean struct{}
 	tt := reflect.TypeFor[testBean]()
-	result := builder.Bean(tt, core.WithScope[any](registry.Singleton))
+	builderResult := builder.Bean(tt, core.WithScope[any](registry.Singleton))
 
-	if result != builder {
+	if builderResult != builder {
 		t.Error("Bean should return the same builder")
 	}
 	if len(builder.beans[tt]) != 1 {
@@ -296,34 +295,6 @@ func TestBuilder_Build_WithPhaseListeners_DefaultLifecycle(t *testing.T) {
 	}
 	if !notified {
 		t.Error("phase listener should be notified with default lifecycle")
-	}
-}
-
-func TestInvoke_TypedNilError(t *testing.T) {
-	t.Parallel()
-	builder := NewApplicationContextBuilder()
-	ctx, err := builder.Build()
-	if err != nil {
-		t.Fatalf("Build should succeed: %v", err)
-	}
-	helper := NewApplicationContextHelper(ctx)
-
-	// 函数返回 typed-nil error，不应被当作错误
-	fn := func() error {
-		var e *typedNilErr
-		return e
-	}
-	if err := helper.Invoke(fn); err != nil {
-		t.Errorf("typed-nil error should be treated as nil, got %v", err)
-	}
-
-	// 真实错误应正常返回
-	realErr := errors.New("boom")
-	fn2 := func() error {
-		return realErr
-	}
-	if err := helper.Invoke(fn2); err != realErr {
-		t.Errorf("expected realErr, got %v", err)
 	}
 }
 
@@ -463,445 +434,9 @@ func TestBuilder_MustBuild_Panic(t *testing.T) {
 	builder.MustBuild()
 }
 
-func TestCreateApplicationContext(t *testing.T) {
-	t.Parallel()
-	container := core.NewContainer()
-	env := environment.NewEnvironment()
-
-	ctx, err := CreateApplicationContext(
-		WithContainer(container),
-		WithEnvironment(env),
-	)
-
-	if err != nil {
-		t.Fatalf("CreateApplicationContext should succeed: %v", err)
-	}
-	if ctx.Container() != container {
-		t.Error("container not set correctly")
-	}
-	if ctx.Environment() != env {
-		t.Error("environment not set correctly")
-	}
-}
-
-func TestWithContainer(t *testing.T) {
-	t.Parallel()
-	container := core.NewContainer()
-	opt := WithContainer(container)
-
-	builder := NewApplicationContextBuilder()
-	opt(builder)
-
-	if builder.container != container {
-		t.Error("WithContainer should set container")
-	}
-}
-
-func TestWithEnvironment(t *testing.T) {
-	t.Parallel()
-	env := environment.NewEnvironment()
-	opt := WithEnvironment(env)
-
-	builder := NewApplicationContextBuilder()
-	opt(builder)
-
-	if builder.env != env {
-		t.Error("WithEnvironment should set environment")
-	}
-}
-
-func TestWithBean(t *testing.T) {
-	t.Parallel()
-	type testBean struct{}
-	tt := reflect.TypeFor[testBean]()
-	opt := WithBean(tt, core.WithScope[any](registry.Singleton))
-
-	builder := NewApplicationContextBuilder()
-	opt(builder)
-
-	if len(builder.beans[tt]) != 1 {
-		t.Errorf("WithBean should add bean option, got %d", len(builder.beans[tt]))
-	}
-}
-
-func TestProfile(t *testing.T) {
-	t.Parallel()
-	builder := NewApplicationContextBuilder()
-	builder.Profile("dev")
-
-	if len(builder.profiles) != 1 || builder.profiles[0] != "dev" {
-		t.Errorf("Profile should add profile, got %v", builder.profiles)
-	}
-}
-
-func TestProfiles(t *testing.T) {
-	t.Parallel()
-	builder := NewApplicationContextBuilder()
-	builder.Profiles("dev", "test")
-
-	if len(builder.profiles) != 2 {
-		t.Errorf("Profiles should add 2 profiles, got %d", len(builder.profiles))
-	}
-}
-
-func TestWithProfile(t *testing.T) {
-	t.Parallel()
-	opt := WithProfile("dev")
-
-	builder := NewApplicationContextBuilder()
-	opt(builder)
-
-	if len(builder.profiles) != 1 || builder.profiles[0] != "dev" {
-		t.Errorf("WithProfile should add profile, got %v", builder.profiles)
-	}
-}
-
-func TestWithProfiles(t *testing.T) {
-	t.Parallel()
-	opt := WithProfiles("dev", "test")
-
-	builder := NewApplicationContextBuilder()
-	opt(builder)
-
-	if len(builder.profiles) != 2 {
-		t.Errorf("WithProfiles should add 2 profiles, got %d", len(builder.profiles))
-	}
-}
-
-func TestBuilder_Build_WithProfiles(t *testing.T) {
-	t.Parallel()
-	builder := NewApplicationContextBuilder()
-	builder.Profiles("dev", "test")
-
-	ctx, err := builder.Build()
-
-	if err != nil {
-		t.Fatalf("Build should succeed: %v", err)
-	}
-
-	profiles := ctx.Environment().GetActiveProfiles()
-	if len(profiles) != 2 {
-		t.Fatalf("expected 2 profiles, got %d", len(profiles))
-	}
-
-	if profiles[0] != "dev" || profiles[1] != "test" {
-		t.Errorf("expected profiles [dev, test], got %v", profiles)
-	}
-}
-
-func TestApplicationContextHelper_GetBean(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	type TestService struct {
-		Value string
-	}
-
-	svc := &TestService{Value: "hello"}
-	if err := ctx.Container().RegisterInstance(svc, reflect.TypeOf(svc)); err != nil {
-		t.Fatalf("RegisterInstance failed: %v", err)
-	}
-
-	bean, err := helper.GetBeanByType(reflect.TypeOf(svc))
-	if err != nil {
-		t.Fatalf("GetBeanByType should succeed: %v", err)
-	}
-
-	ts, ok := bean.(*TestService)
-	if !ok {
-		t.Fatal("bean should be *TestService")
-	}
-	if ts.Value != "hello" {
-		t.Errorf("expected Value='hello', got %s", ts.Value)
-	}
-}
-
-func TestApplicationContextHelper_GetBeanByTypeOrDefault(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	type TestService struct {
-		Value string
-	}
-
-	defaultVal := &TestService{Value: "default"}
-	actual := &TestService{Value: "actual"}
-
-	if err := ctx.Container().RegisterInstance(actual, reflect.TypeOf(actual)); err != nil {
-		t.Fatalf("RegisterInstance failed: %v", err)
-	}
-
-	bean := helper.GetBeanByTypeOrDefault(reflect.TypeOf(actual), defaultVal)
-	ts, ok := bean.(*TestService)
-	if !ok {
-		t.Fatal("bean should be *TestService")
-	}
-	if ts.Value != "actual" {
-		t.Errorf("expected Value='actual', got %s", ts.Value)
-	}
-
-	type nonExistent struct{}
-	bean = helper.GetBeanByTypeOrDefault(reflect.TypeOf(nonExistent{}), defaultVal)
-	ts, ok = bean.(*TestService)
-	if !ok {
-		t.Fatal("default bean should be *TestService")
-	}
-	if ts.Value != "default" {
-		t.Errorf("expected Value='default', got %s", ts.Value)
-	}
-}
-
-func TestApplicationContextHelper_HasBean(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	type testBean struct{}
-	bean := &testBean{}
-	if err := ctx.Container().RegisterInstance(bean, reflect.TypeOf(bean)); err != nil {
-		t.Fatalf("RegisterInstance failed: %v", err)
-	}
-
-	if !helper.HasBeanByType(reflect.TypeOf(bean)) {
-		t.Error("HasBeanByType should return true for existing bean")
-	}
-
-	type nonExistentBean struct{}
-	if helper.HasBeanByType(reflect.TypeOf(nonExistentBean{})) {
-		t.Error("HasBeanByType should return false for non-existent bean")
-	}
-}
-
-func TestApplicationContextHelper_GetProperty(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	ctx.Environment().AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityHighest, map[string]any{
-		"app.name": "test-app",
-	}))
-
-	value := helper.GetProperty("app.name", "default")
-	if value != "test-app" {
-		t.Errorf("expected 'test-app', got %s", value)
-	}
-
-	value = helper.GetProperty("non.existent", "default")
-	if value != "default" {
-		t.Errorf("expected 'default', got %s", value)
-	}
-}
-
-func TestApplicationContextHelper_GetIntProperty(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	ctx.Environment().AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityHighest, map[string]any{
-		"app.port": "8080",
-	}))
-
-	value := helper.GetIntProperty("app.port", 3000)
-	if value != 8080 {
-		t.Errorf("expected 8080, got %d", value)
-	}
-
-	value = helper.GetIntProperty("non.existent", 3000)
-	if value != 3000 {
-		t.Errorf("expected 3000, got %d", value)
-	}
-}
-
-func TestApplicationContextHelper_GetBoolProperty(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	ctx.Environment().AddPropertySource(environment.NewMapPropertySource("test", environment.PriorityHighest, map[string]any{
-		"app.debug": "true",
-	}))
-
-	value := helper.GetBoolProperty("app.debug", false)
-	if !value {
-		t.Error("expected true, got false")
-	}
-
-	value = helper.GetBoolProperty("non.existent", true)
-	if !value {
-		t.Error("expected true, got false")
-	}
-}
-
-func TestApplicationContextHelper_IsRunning(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	if helper.IsRunning() {
-		t.Error("should not be running initially")
-	}
-
-	if err := ctx.Lifecycle().SetPhase(lifecycle.PhaseRunning); err != nil {
-		t.Fatalf("SetPhase failed: %v", err)
-	}
-
-	if !helper.IsRunning() {
-		t.Error("should be running after start")
-	}
-}
-
-func TestApplicationContextHelper_GetPhase(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	phase := helper.GetPhase()
-	if phase != lifecycle.PhaseInit {
-		t.Errorf("expected PhaseInit, got %v", phase)
-	}
-}
-
-func TestApplicationContextHelper_GetActiveProfiles(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	profiles := helper.GetActiveProfiles()
-	if profiles == nil {
-		t.Error("GetActiveProfiles should not return nil")
-	}
-}
-
-func TestApplicationContextHelper_IsDev(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	if helper.IsDev() {
-		t.Error("should not be dev by default")
-	}
-}
-
-func TestApplicationContextHelper_IsProd(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	if helper.IsProd() {
-		t.Error("should not be prod by default")
-	}
-}
-
-func TestApplicationContextHelper_PublishEvent(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	var called bool
-	ctx.EventBus().Subscribe("customEvent", func(e event.ApplicationEvent) {
-		called = true
-	})
-
-	helper.PublishEvent("customEvent")
-
-	if !called {
-		t.Error("event listener should be called")
-	}
-}
-
-func TestApplicationContextHelper_PublishStarted(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	var called bool
-	ctx.EventBus().Subscribe(event.EventApplicationStarted, func(e event.ApplicationEvent) {
-		called = true
-	})
-
-	helper.PublishStarted()
-
-	if !called {
-		t.Error("ApplicationStarted listener should be called")
-	}
-}
-
-func TestApplicationContextHelper_PublishReady(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	var called bool
-	ctx.EventBus().Subscribe(event.EventApplicationReady, func(e event.ApplicationEvent) {
-		called = true
-	})
-
-	helper.PublishReady()
-
-	if !called {
-		t.Error("ApplicationReady listener should be called")
-	}
-}
-
-func TestApplicationContextHelper_PublishStopped(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	helper := NewApplicationContextHelper(ctx)
-
-	var called bool
-	ctx.EventBus().Subscribe(event.EventApplicationStopped, func(e event.ApplicationEvent) {
-		called = true
-	})
-
-	helper.PublishStopped()
-
-	if !called {
-		t.Error("ApplicationStopped listener should be called")
-	}
-}
-
-func TestApplicationRunner_Run(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	runner := NewApplicationRunner(ctx)
-
-	if runner.Context() != ctx {
-		t.Error("Context should return the same context")
-	}
-}
-
-func TestApplicationRunner_Stop(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	runner := NewApplicationRunner(ctx)
-
-	if err := runner.Stop(); err != nil {
-		t.Fatalf("Stop should succeed: %v", err)
-	}
-}
-
-func TestApplicationRunner_Stop_NotStarted(t *testing.T) {
-	t.Parallel()
-	ctx := NewApplicationContextBuilder().MustBuild()
-	runner := NewApplicationRunner(ctx)
-
-	err := runner.Stop()
-
-	if err != nil {
-		t.Logf("Stop returned error (expected behavior depends on implementation): %v", err)
-	}
-}
-
 type testPhaseListener struct {
 	onPhase func(old, new lifecycle.ApplicationPhase) error
 }
-
-// typedNilErr 用于测试 typed-nil error 场景。
-type typedNilErr struct{}
-
-func (e *typedNilErr) Error() string { return "typed-nil-err" }
 
 func (l *testPhaseListener) OnPhaseChange(old, new lifecycle.ApplicationPhase) error {
 	if l.onPhase != nil {

@@ -61,19 +61,19 @@ func WithPasswordFromEnv() SenderOption {
 // 注意：密码在构造时从环境变量读取一次并缓存，后续环境变量变更不会自动更新。
 // 如需动态读取密码，请使用 WithPasswordFromEnv 选项或 WithAuth 选项。
 func NewSender(opts ...SenderOption) Sender {
-	s := &smtpSender{
+	sender := &smtpSender{
 		host:     DefaultSMTPHost,
 		port:     DefaultSMTPPort,
 		username: DefaultFrom,
 	}
 
-	s.password = os.Getenv(EnvPasswordKey)
+	sender.password = os.Getenv(EnvPasswordKey)
 
 	for _, opt := range opts {
-		opt(s)
+		opt(sender)
 	}
 
-	return s
+	return sender
 }
 
 // buildAuth 构建 SMTP 认证信息。

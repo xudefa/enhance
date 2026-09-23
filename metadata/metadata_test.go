@@ -456,9 +456,9 @@ func TestMetadataGenerator_ExtractGroupName(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := gen.extractGroupName(tt.structName)
-		if result != tt.expected {
-			t.Errorf("extractGroupName(%q) = %q, expected %q", tt.structName, result, tt.expected)
+		groupName := gen.extractGroupName(tt.structName)
+		if groupName != tt.expected {
+			t.Errorf("extractGroupName(%q) = %q, expected %q", tt.structName, groupName, tt.expected)
 		}
 	}
 }
@@ -480,9 +480,9 @@ func TestMetadataGenerator_MapType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := gen.mapType(tt.goType)
-		if result != tt.expected {
-			t.Errorf("mapType(%v) = %q, expected %q", tt.goType, result, tt.expected)
+		javaType := gen.mapType(tt.goType)
+		if javaType != tt.expected {
+			t.Errorf("mapType(%v) = %q, expected %q", tt.goType, javaType, tt.expected)
 		}
 	}
 }
@@ -501,12 +501,12 @@ func TestSplitAttributes(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := splitAttributes(tt.input)
-		if len(result) != len(tt.expected) {
-			t.Errorf("splitAttributes(%q) = %v, expected %v", tt.input, result, tt.expected)
+		parts := splitAttributes(tt.input)
+		if len(parts) != len(tt.expected) {
+			t.Errorf("splitAttributes(%q) = %v, expected %v", tt.input, parts, tt.expected)
 			continue
 		}
-		for i, v := range result {
+		for i, v := range parts {
 			if v != tt.expected[i] {
 				t.Errorf("splitAttributes(%q)[%d] = %q, expected %q", tt.input, i, v, tt.expected[i])
 			}
@@ -654,20 +654,20 @@ func TestGetStringAttribute(t *testing.T) {
 		},
 	}
 
-	val, ok := GetStringAttribute(ann, "key1")
+	value, ok := GetStringAttribute(ann, "key1")
 	if !ok {
 		t.Error("expected attribute to exist")
 	}
-	if val != "value1" {
-		t.Errorf("expected 'value1', got %s", val)
+	if value != "value1" {
+		t.Errorf("expected 'value1', got %s", value)
 	}
 
-	val, ok = GetStringAttribute(ann, "key2")
+	value, ok = GetStringAttribute(ann, "key2")
 	if !ok {
 		t.Error("expected attribute to exist")
 	}
-	if val != "123" {
-		t.Errorf("expected '123', got %s", val)
+	if value != "123" {
+		t.Errorf("expected '123', got %s", value)
 	}
 
 	_, ok = GetStringAttribute(ann, "nonexistent")
@@ -688,25 +688,25 @@ func TestGetIntAttribute(t *testing.T) {
 		},
 	}
 
-	val, ok := GetIntAttribute(ann, "intKey")
+	value, ok := GetIntAttribute(ann, "intKey")
 	if !ok {
 		t.Error("expected attribute to exist")
 	}
-	if val != 42 {
-		t.Errorf("expected 42, got %d", val)
+	if value != 42 {
+		t.Errorf("expected 42, got %d", value)
 	}
 
-	val, ok = GetIntAttribute(ann, "strKey")
+	value, ok = GetIntAttribute(ann, "strKey")
 	if ok {
 		t.Error("expected string to not convert to int")
 	}
 
-	val, ok = GetIntAttribute(ann, "floatKey")
+	value, ok = GetIntAttribute(ann, "floatKey")
 	if !ok {
 		t.Error("expected attribute to exist")
 	}
-	if val != 3 {
-		t.Errorf("expected 3, got %d", val)
+	if value != 3 {
+		t.Errorf("expected 3, got %d", value)
 	}
 
 	_, ok = GetIntAttribute(ann, "nonexistent")
@@ -727,11 +727,11 @@ func TestGetBoolAttribute(t *testing.T) {
 		},
 	}
 
-	val, ok := GetBoolAttribute(ann, "boolKey")
+	value, ok := GetBoolAttribute(ann, "boolKey")
 	if !ok {
 		t.Error("expected attribute to exist")
 	}
-	if !val {
+	if !value {
 		t.Error("expected true")
 	}
 

@@ -18,14 +18,14 @@ func TestInMemoryRegistry_Register(t *testing.T) {
 	reg := NewInMemoryRegistry()
 	ctx := context.Background()
 
-	info := InstanceInfo{
+	instanceInfo := InstanceInfo{
 		ID:          "inst1",
 		ServiceName: "test-service",
 		Host:        "localhost",
 		Port:        8080,
 	}
 
-	err := reg.Register(ctx, info)
+	err := reg.Register(ctx, instanceInfo)
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -36,16 +36,16 @@ func TestInMemoryRegistry_Deregister(t *testing.T) {
 	reg := NewInMemoryRegistry()
 	ctx := context.Background()
 
-	info := InstanceInfo{
+	instanceInfo := InstanceInfo{
 		ID:          "inst1",
 		ServiceName: "test-service",
 		Host:        "localhost",
 		Port:        8080,
 	}
 
-	_ = reg.Register(ctx, info)
+	_ = reg.Register(ctx, instanceInfo)
 
-	err := reg.Deregister(ctx, info)
+	err := reg.Deregister(ctx, instanceInfo)
 	if err != nil {
 		t.Fatalf("Deregister failed: %v", err)
 	}
@@ -64,12 +64,12 @@ func TestInMemoryRegistry_Deregister_NotFound(t *testing.T) {
 	reg := NewInMemoryRegistry()
 	ctx := context.Background()
 
-	info := InstanceInfo{
+	instanceInfo := InstanceInfo{
 		ID:          "inst1",
 		ServiceName: "test-service",
 	}
 
-	err := reg.Deregister(ctx, info)
+	err := reg.Deregister(ctx, instanceInfo)
 	if err != nil {
 		t.Fatalf("Deregister for non-existent instance failed: %v", err)
 	}
@@ -124,13 +124,13 @@ func TestInMemoryRegistry_Watch(t *testing.T) {
 	reg := NewInMemoryRegistry()
 	ctx := context.Background()
 
-	info := InstanceInfo{
+	instanceInfo := InstanceInfo{
 		ID:          "inst1",
 		ServiceName: "test-service",
 		Host:        "localhost",
 		Port:        8080,
 	}
-	_ = reg.Register(ctx, info)
+	_ = reg.Register(ctx, instanceInfo)
 
 	ch, err := reg.Watch(ctx, "test-service")
 	if err != nil {

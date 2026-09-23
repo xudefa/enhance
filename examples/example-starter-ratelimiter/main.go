@@ -59,10 +59,11 @@ func main() {
 	var count int
 	rateLimit := 10
 	burstLimit := 20
+	const totalRequests = 30 // 模拟请求总数
 
 	// Simulate incoming requests
 	fmt.Println("--- Sending Requests ---")
-	for i := 0; i < 30; i++ {
+	for i := 0; i < totalRequests; i++ {
 		mu.Lock()
 		count++
 		currentCount := count
@@ -90,8 +91,8 @@ func main() {
 	fmt.Println("\n--- Different Rate Limiting Strategies ---")
 
 	strategies := []struct {
-		name string
-		rate int
+		name  string
+		rate  int
 		burst int
 	}{
 		{"Conservative", 5, 10},

@@ -20,7 +20,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&NacosAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(NacosEnabled, ConditionTrue),
+			// 约定优于配置：当 nacos.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(NacosEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)
@@ -32,7 +33,7 @@ type NacosAutoConfiguration struct {
 	configClient config_client.IConfigClient
 }
 
-// Configure configures Nacos configuration center client.
+// Configure 配置 Nacos 配置中心客户端。
 func (c *NacosAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	env := ctx.Environment()
 

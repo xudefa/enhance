@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// ParseExpression 解析并分类表达式，返回适合的表达式实现。
 func (p *spelParserImpl) ParseExpression(expression string) (Expression, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
@@ -64,9 +65,10 @@ func isSimpleProperty(expr string) bool {
 	return !allDigits
 }
 
+// GetValue 求值属性表达式，优先读取变量，其次读取根对象属性。
 func (e *propertyExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
-	if val, ok := ctx.GetVariable(e.property); ok {
-		return val, nil
+	if variableValue, ok := ctx.GetVariable(e.property); ok {
+		return variableValue, nil
 	}
 
 	root := ctx.GetRootObject()
@@ -77,6 +79,7 @@ func (e *propertyExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
 	return ctx.GetPropertyAccessor().GetProperty(root, e.property)
 }
 
+// SetValue 将值写入根对象的指定属性。
 func (e *propertyExpressionImpl) SetValue(ctx EvaluationContext, value any) error {
 	root := ctx.GetRootObject()
 	if root == nil {
@@ -86,10 +89,12 @@ func (e *propertyExpressionImpl) SetValue(ctx EvaluationContext, value any) erro
 	return ctx.GetPropertyAccessor().SetProperty(root, e.property, value)
 }
 
+// String 返回属性表达式的属性名。
 func (e *propertyExpressionImpl) String() string {
 	return e.property
 }
 
+// GetValue 求值复杂表达式，按三元、逻辑、比较、算术等语法分派。
 func (e *complexExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
 	expr := e.raw
 
@@ -124,10 +129,12 @@ func (e *complexExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
 	return e.evaluateLiteral(expr)
 }
 
+// SetValue 复杂表达式不支持赋值，直接返回错误。
 func (e *complexExpressionImpl) SetValue(ctx EvaluationContext, value any) error {
 	return fmt.Errorf("cannot set value on complex expression")
 }
 
+// String 返回复杂表达式的原文。
 func (e *complexExpressionImpl) String() string {
 	return e.raw
 }
@@ -146,7 +153,7 @@ func (e *complexExpressionImpl) evaluateTernary(expr string, ctx EvaluationConte
 
 	condVal, err := e.evaluate(condition, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值三元条件 %s 失败: %w", condition, err)
 	}
 
 	if isTruthy(condVal) {
@@ -174,21 +181,21 @@ func (e *complexExpressionImpl) evaluateLogical(expr string, ctx EvaluationConte
 
 	leftVal, err := e.evaluate(left, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值逻辑左操作数 %s 失败: %w", left, err)
 	}
 
 	rightVal, err := e.evaluate(right, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值逻辑右操作数 %s 失败: %w", right, err)
 	}
 
-	l := isTruthy(leftVal)
-	r := isTruthy(rightVal)
+	leftTruthy := isTruthy(leftVal)
+	rightTruthy := isTruthy(rightVal)
 
 	if op == "&&" {
-		return l && r, nil
+		return leftTruthy && rightTruthy, nil
 	}
-	return l || r, nil
+	return leftTruthy || rightTruthy, nil
 }
 
 func (e *complexExpressionImpl) evaluateComparison(expr, op string, ctx EvaluationContext) (any, error) {
@@ -198,12 +205,12 @@ func (e *complexExpressionImpl) evaluateComparison(expr, op string, ctx Evaluati
 
 	leftVal, err := e.evaluate(left, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值比较左操作数 %s 失败: %w", left, err)
 	}
 
 	rightVal, err := e.evaluate(right, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值比较右操作数 %s 失败: %w", right, err)
 	}
 
 	return compareValues(leftVal, rightVal, op)
@@ -215,12 +222,12 @@ func (e *complexExpressionImpl) evaluateArithmetic(expr, op string, idx int, ctx
 
 	leftVal, err := e.evaluate(left, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值算术左操作数 %s 失败: %w", left, err)
 	}
 
 	rightVal, err := e.evaluate(right, ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("求值算术右操作数 %s 失败: %w", right, err)
 	}
 
 	return arithmetic(leftVal, rightVal, op)
@@ -238,7 +245,7 @@ func ParseExpression(expression string) (Expression, error) {
 func Evaluate(expression string, root any) (any, error) {
 	expr, err := ParseExpression(expression)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("解析表达式 %q 失败: %w", expression, err)
 	}
 	ctx := NewStandardEvaluationContext(root)
 	return expr.GetValue(ctx)

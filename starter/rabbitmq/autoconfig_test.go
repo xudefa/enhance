@@ -7,6 +7,7 @@ import (
 )
 
 func TestRabbitMQConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-rabbitmq", environment.PriorityNormal, map[string]any{
 		"rabbitmq.enabled":    "true",
@@ -48,6 +49,7 @@ func TestRabbitMQConfig_LoadConfig(t *testing.T) {
 }
 
 func TestRabbitMQConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &RabbitMQConfig{
 		Host:       DefaultRabbitMQHost,
 		Port:       DefaultRabbitMQPort,
@@ -73,6 +75,7 @@ func TestRabbitMQConfig_DefaultValues(t *testing.T) {
 }
 
 func TestRabbitMQConfig_BuildURL(t *testing.T) {
+	tt.Parallel()
 	cfg := &RabbitMQConfig{
 		Host:     "localhost",
 		Port:     5672,

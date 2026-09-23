@@ -45,11 +45,11 @@ func TestRequestScope_Set(t *testing.T) {
 	scope := NewRequestScope()
 	scope.Set("user", "testuser")
 
-	val := scope.Get("user", func() any {
+	fetched := scope.Get("user", func() any {
 		return "factory_user"
 	})
-	if val != "testuser" {
-		t.Errorf("expected 'testuser', got %v", val)
+	if fetched != "testuser" {
+		t.Errorf("expected 'testuser', got %v", fetched)
 	}
 }
 
@@ -60,11 +60,11 @@ func TestRequestScope_Clear(t *testing.T) {
 	scope.Set("user", "testuser")
 	scope.Clear()
 
-	val := scope.Get("user", func() any {
+	fetched := scope.Get("user", func() any {
 		return "new_user"
 	})
-	if val != "new_user" {
-		t.Errorf("expected 'new_user' after clear, got %v", val)
+	if fetched != "new_user" {
+		t.Errorf("expected 'new_user' after clear, got %v", fetched)
 	}
 }
 
@@ -138,8 +138,8 @@ func TestMustGetRequestScope(t *testing.T) {
 		scope := NewRequestScope()
 		ctx := context.WithValue(context.Background(), ScopeContextKey{}, scope)
 
-		result := MustGetRequestScope(ctx)
-		if result != scope {
+		retrievedScope := MustGetRequestScope(ctx)
+		if retrievedScope != scope {
 			t.Error("expected same scope")
 		}
 	})

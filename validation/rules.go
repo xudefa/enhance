@@ -219,35 +219,27 @@ func (v *TagValidator) isOneOfValid(field reflect.Value, optionsStr string) bool
 		options[i] = strings.TrimSpace(opt)
 	}
 
+	optionSet := make(map[string]struct{}, len(options))
+	for _, opt := range options {
+		optionSet[opt] = struct{}{}
+	}
+
 	switch field.Kind() {
 	case reflect.String:
-		value := field.String()
-		for _, opt := range options {
-			if value == opt {
-				return true
-			}
-		}
+		_, ok := optionSet[field.String()]
+		return ok
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		value := field.Int()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseInt(opt, 10, 64); err == nil && value == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatInt(field.Int(), 10)
+		_, ok := optionSet[key]
+		return ok
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		value := field.Uint()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseUint(opt, 10, 64); err == nil && value == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatUint(field.Uint(), 10)
+		_, ok := optionSet[key]
+		return ok
 	case reflect.Float32, reflect.Float64:
-		value := field.Float()
-		for _, opt := range options {
-			if optNum, err := strconv.ParseFloat(opt, 64); err == nil && value == optNum {
-				return true
-			}
-		}
+		key := strconv.FormatFloat(field.Float(), 'f', -1, 64)
+		_, ok := optionSet[key]
+		return ok
 	}
 
 	return false

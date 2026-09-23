@@ -63,9 +63,9 @@ func (r *starterRegistryImpl) Get(name string) Starter {
 func (r *starterRegistryImpl) GetAll() []Starter {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]Starter, len(r.starters))
-	copy(result, r.starters)
-	return result
+	copied := make([]Starter, len(r.starters))
+	copy(copied, r.starters)
+	return copied
 }
 
 // GetOrdered 按依赖关系拓扑排序获取启动器。
@@ -81,11 +81,31 @@ func (r *starterRegistryImpl) GetOrdered() []Starter {
 	copy(starters, r.starters)
 	r.mu.RUnlock()
 
+	nameMap := buildStarterNameMap(starters)
+
+	inDegree, depMap := buildStarterDependencyGraph(starters, nameMap)
+
+	// 使用 Kahn 算法进行拓扑排序
+	ordered := topoSortStarters(nameMap, inDegree, depMap)
+
+	if len(ordered) != len(starters) {
+		return starters
+	}
+
+	return ordered
+}
+
+// buildStarterNameMap 构建启动器名称到实例的映射。
+func buildStarterNameMap(starters []Starter) map[string]Starter {
 	nameMap := make(map[string]Starter, len(starters))
 	for _, s := range starters {
 		nameMap[s.Name()] = s
 	}
+	return nameMap
+}
 
+// buildStarterDependencyGraph 构建启动器依赖关系图和入度表。
+func buildStarterDependencyGraph(starters []Starter, nameMap map[string]Starter) (map[string]int, map[string][]string) {
 	inDegree := make(map[string]int)
 	depMap := make(map[string][]string)
 	for _, s := range starters {
@@ -100,7 +120,11 @@ func (r *starterRegistryImpl) GetOrdered() []Starter {
 			}
 		}
 	}
+	return inDegree, depMap
+}
 
+// topoSortStarters 使用 Kahn 算法对启动器进行拓扑排序。
+func topoSortStarters(nameMap map[string]Starter, inDegree map[string]int, depMap map[string][]string) []Starter {
 	queue := make([]string, 0)
 	for name, deg := range inDegree {
 		if deg == 0 {
@@ -108,11 +132,11 @@ func (r *starterRegistryImpl) GetOrdered() []Starter {
 		}
 	}
 
-	result := make([]Starter, 0, len(starters))
+	ordered := make([]Starter, 0, len(nameMap))
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
-		result = append(result, nameMap[name])
+		ordered = append(ordered, nameMap[name])
 		for _, dep := range depMap[name] {
 			inDegree[dep]--
 			if inDegree[dep] == 0 {
@@ -121,11 +145,7 @@ func (r *starterRegistryImpl) GetOrdered() []Starter {
 		}
 	}
 
-	if len(result) != len(starters) {
-		return starters
-	}
-
-	return result
+	return ordered
 }
 
 // RegisterStarter 注册启动器到全局注册表。

@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&EntAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(EntEnabled, ConditionTrue),
+			// 约定优于配置：当 ent.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(EntEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)),
 	)

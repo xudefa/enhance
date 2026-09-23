@@ -287,9 +287,9 @@ func (r *AutoConfigRegistry) Add(entry AutoConfigEntry) {
 func (r *AutoConfigRegistry) GetAll() []AutoConfigEntry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]AutoConfigEntry, len(r.entries))
-	copy(result, r.entries)
-	return result
+	entries := make([]AutoConfigEntry, len(r.entries))
+	copy(entries, r.entries)
+	return entries
 }
 
 // GetMatching 获取匹配条件的自动配置（按 Order 排序，支持覆盖机制和 Before/After 排序）
@@ -364,14 +364,43 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 	}
 
 	// 构建配置类型名到索引的映射
+	typeNameToIndex := buildTypeNameIndex(entries)
+
+	// 构建依赖图：如果 A 应该在 B 之前，则 A -> B
+	inDegree, adjList := buildDependencyGraph(entries, typeNameToIndex)
+
+	// Kahn 算法拓扑排序
+	sortedIndices, complete := topologicalSort(entries, inDegree, adjList)
+
+	// 如果存在循环依赖，回退到按 Order 排序
+	if !complete {
+		sort.SliceStable(entries, func(i, j int) bool {
+			return entries[i].Order < entries[j].Order
+		})
+		return
+	}
+
+	// 根据拓扑排序结果重新排列 entries
+	sorted := make([]AutoConfigEntry, len(entries))
+	for i, idx := range sortedIndices {
+		sorted[i] = entries[idx]
+	}
+	copy(entries, sorted)
+}
+
+// buildTypeNameIndex 构建配置类型名到索引的映射。
+func buildTypeNameIndex(entries []AutoConfigEntry) map[string]int {
 	typeNameToIndex := make(map[string]int)
 	for i, entry := range entries {
 		typeName := stripPackagePath(reflect.TypeOf(entry.Config).String())
 		typeNameToIndex[typeName] = i
 	}
+	return typeNameToIndex
+}
 
-	// 构建依赖图：如果 A 应该在 B 之前，则 A -> B
-	// inDegree[B]++ 表示 B 依赖 A
+// buildDependencyGraph 构建依赖图：如果 A 应该在 B 之前，则 A -> B。
+// inDegree[B]++ 表示 B 依赖 A。
+func buildDependencyGraph(entries []AutoConfigEntry, typeNameToIndex map[string]int) (map[int]int, map[int][]int) {
 	inDegree := make(map[int]int)
 	adjList := make(map[int][]int)
 
@@ -396,9 +425,13 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 			}
 		}
 	}
+	return inDegree, adjList
+}
 
-	// Kahn 算法拓扑排序
-	// 使用优先队列，当有多个节点入度为0时，按 Order 排序（Order 小的优先）
+// topologicalSort 使用 Kahn 算法进行拓扑排序。
+// 当有多个节点入度为 0 时，按 Order 排序（Order 小的优先）。
+// 返回排序后的索引列表及是否存在循环依赖。
+func topologicalSort(entries []AutoConfigEntry, inDegree map[int]int, adjList map[int][]int) ([]int, bool) {
 	queue := make([]int, 0)
 	for i := range entries {
 		if inDegree[i] == 0 {
@@ -407,16 +440,14 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 	}
 
 	// 对初始队列按 Order 排序
-	sort.SliceStable(queue, func(i, j int) bool {
-		return entries[queue[i]].Order < entries[queue[j]].Order
-	})
+	sortByOrder(entries, queue)
 
-	result := make([]int, 0, len(entries))
+	sortedIndices := make([]int, 0, len(entries))
 	for len(queue) > 0 {
 		// 从队列中取出节点
 		node := queue[0]
 		queue = queue[1:]
-		result = append(result, node)
+		sortedIndices = append(sortedIndices, node)
 
 		// 减少相邻节点的入度
 		newReady := make([]int, 0)
@@ -429,27 +460,19 @@ func (r *AutoConfigRegistry) sortWithDependencies(entries []AutoConfigEntry) {
 
 		// 对新就绪的节点按 Order 排序并加入队列
 		if len(newReady) > 0 {
-			sort.SliceStable(newReady, func(i, j int) bool {
-				return entries[newReady[i]].Order < entries[newReady[j]].Order
-			})
+			sortByOrder(entries, newReady)
 			queue = append(queue, newReady...)
 		}
 	}
 
-	// 如果存在循环依赖，回退到按 Order 排序
-	if len(result) != len(entries) {
-		sort.SliceStable(entries, func(i, j int) bool {
-			return entries[i].Order < entries[j].Order
-		})
-		return
-	}
+	return sortedIndices, len(sortedIndices) == len(entries)
+}
 
-	// 根据拓扑排序结果重新排列 entries
-	sorted := make([]AutoConfigEntry, len(entries))
-	for i, idx := range result {
-		sorted[i] = entries[idx]
-	}
-	copy(entries, sorted)
+// sortByOrder 按 Order 稳定排序索引列表（Order 小的优先）。
+func sortByOrder(entries []AutoConfigEntry, indices []int) {
+	sort.SliceStable(indices, func(i, j int) bool {
+		return entries[indices[i]].Order < entries[indices[j]].Order
+	})
 }
 
 func (r *AutoConfigRegistry) matchesAll(ctx condition.ConditionContext, conditions []condition.Condition) bool {

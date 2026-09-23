@@ -44,9 +44,9 @@ func (m *securityFilterChainManagerImpl) GetSecurityFilterChains() []SecurityFil
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make([]SecurityFilterChain, len(m.chains))
-	copy(result, m.chains)
-	return result
+	chainsCopy := make([]SecurityFilterChain, len(m.chains))
+	copy(chainsCopy, m.chains)
+	return chainsCopy
 }
 
 // simpleSecurityFilterChain 简单安全过滤器链实现。

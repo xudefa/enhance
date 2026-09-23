@@ -68,41 +68,59 @@ package zerolog
 // ==================== 配置键常量 ====================
 
 const (
-	// ZeroLog 配置
-	ZeroLogEnabled    = "log.zerolog.enabled"
-	ZeroLogLevel      = "log.zerolog.level"
-	ZeroLogFormat     = "log.zerolog.format"
+	// ZeroLogEnabled 是否启用 Zerolog。
+	ZeroLogEnabled = "log.zerolog.enabled"
+	// ZeroLogLevel 日志级别。
+	ZeroLogLevel = "log.zerolog.level"
+	// ZeroLogFormat 输出格式。
+	ZeroLogFormat = "log.zerolog.format"
+	// ZeroLogTimeFormat 时间格式。
 	ZeroLogTimeFormat = "log.zerolog.time-format"
-	ZeroLogAddSource  = "log.zerolog.add-source"
+	// ZeroLogAddSource 是否添加源码位置。
+	ZeroLogAddSource = "log.zerolog.add-source"
+	// ZeroLogOutputPath 日志文件输出路径。
 	ZeroLogOutputPath = "log.zerolog.output-path"
 
 	// 日志级别常量
-	LogLevelDebug   = "debug"
-	LogLevelInfo    = "info"
-	LogLevelWarn    = "warn"
+	LogLevelDebug = "debug"
+	// LogLevelInfo 信息级别。
+	LogLevelInfo = "info"
+	// LogLevelWarn 警告级别。
+	LogLevelWarn = "warn"
+	// LogLevelWarning 警告级别（别名）。
 	LogLevelWarning = "warning"
-	LogLevelError   = "error"
-	LogLevelFatal   = "fatal"
-	LogLevelPanic   = "panic"
+	// LogLevelError 错误级别。
+	LogLevelError = "error"
+	// LogLevelFatal 致命级别。
+	LogLevelFatal = "fatal"
+	// LogLevelPanic 恐慌级别。
+	LogLevelPanic = "panic"
 
 	// 日志格式常量
 	LogFormatConsole = "console"
-	LogFormatJSON    = "json"
+	// LogFormatJSON JSON 格式。
+	LogFormatJSON = "json"
 
 	// 日志字段常量
-	LogFieldLevel  = "level"
+	LogFieldLevel = "level"
+	// LogFieldFormat 日志字段：格式。
 	LogFieldFormat = "format"
+	// LogFieldOutput 日志字段：输出路径。
 	LogFieldOutput = "output-path"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	// ZeroLog 默认值
-	DefaultZeroLogLevel      = "info"
-	DefaultZeroLogFormat     = "json"
+	// DefaultZeroLogLevel 默认日志级别。
+	DefaultZeroLogLevel = "info"
+	// DefaultZeroLogFormat 默认输出格式。
+	DefaultZeroLogFormat = "json"
+	// DefaultZeroLogTimeFormat 默认时间格式。
 	DefaultZeroLogTimeFormat = "2006-01-02 15:04:05"
-	DefaultZeroLogAddSource  = false
+	// DefaultZeroLogAddSource 默认是否添加源码位置。
+	DefaultZeroLogAddSource = false
+	// DefaultZeroLogOutputPath 默认日志文件输出路径。
 	DefaultZeroLogOutputPath = ""
 
 	// 条件值常量

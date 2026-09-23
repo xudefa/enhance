@@ -28,19 +28,19 @@ type TLSClientBuilder struct {
 // 返回值:
 //   - *NetClient: 配置好的 HTTPS 客户端实例
 func NewTLSClient(baseURL string, opts ...TLSClientOption) *NetClient {
-	b := &TLSClientBuilder{
+	builder := &TLSClientBuilder{
 		baseURL: baseURL,
 		timeout: DefaultTimeout,
 	}
 
 	for _, opt := range opts {
-		opt(b)
+		opt(builder)
 	}
 
-	transport := b.transport
+	transport := builder.transport
 	if transport == nil {
 		transport = &http.Transport{
-			TLSClientConfig: b.tlsConfig,
+			TLSClientConfig: builder.tlsConfig,
 			DialContext: (&goNet.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
@@ -53,12 +53,12 @@ func NewTLSClient(baseURL string, opts ...TLSClientOption) *NetClient {
 	}
 
 	header := make(http.Header)
-	for k, v := range b.headers {
+	for k, v := range builder.headers {
 		header.Set(k, v)
 	}
 
 	return NewClient(baseURL,
-		WithClientTimeout(b.timeout),
+		WithClientTimeout(builder.timeout),
 		WithHeaders(header),
 		func(c *NetClient) {
 			c.httpClient.Transport = transport

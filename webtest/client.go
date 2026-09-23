@@ -146,6 +146,11 @@ func (r *ResponseSpec) Status(expected int) *ResponseSpec {
 	return r
 }
 
+// StatusCode 获取响应状态码。
+func (r *ResponseSpec) StatusCode() int {
+	return r.recorder.Code
+}
+
 // StatusIsOk 断言 200 状态码。
 func (r *ResponseSpec) StatusIsOk() *ResponseSpec {
 	return r.Status(http.StatusOK)

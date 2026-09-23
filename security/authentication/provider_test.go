@@ -2,6 +2,7 @@ package authentication
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/xudefa/enhance/log"
@@ -159,7 +160,7 @@ func TestDaoAuthenticationProvider_DisabledUser(t *testing.T) {
 
 	token := NewUsernamePasswordToken("admin", "pass")
 	_, err := provider.Authenticate(context.Background(), token)
-	if err == nil || err.Error() != "user is disabled" {
+	if err == nil || !strings.Contains(err.Error(), "user is disabled") {
 		t.Errorf("expected 'user is disabled', got %v", err)
 	}
 }
@@ -175,7 +176,7 @@ func TestDaoAuthenticationProvider_LockedUser(t *testing.T) {
 
 	token := NewUsernamePasswordToken("admin", "pass")
 	_, err := provider.Authenticate(context.Background(), token)
-	if err == nil || err.Error() != "user account is locked" {
+	if err == nil || !strings.Contains(err.Error(), "user account is locked") {
 		t.Errorf("expected 'user account is locked', got %v", err)
 	}
 }
@@ -184,15 +185,15 @@ func TestAnonymousAuthenticationProvider_NilToken(t *testing.T) {
 	t.Parallel()
 
 	provider := NewAnonymousAuthenticationProvider()
-	result, err := provider.Authenticate(context.Background(), nil)
+	authenticated, err := provider.Authenticate(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
+	if authenticated == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if result.Principal() != "anonymousUser" {
-		t.Errorf("expected principal 'anonymousUser', got %v", result.Principal())
+	if authenticated.Principal() != "anonymousUser" {
+		t.Errorf("expected principal 'anonymousUser', got %v", authenticated.Principal())
 	}
 }
 
@@ -201,11 +202,11 @@ func TestAnonymousAuthenticationProvider_UnauthenticatedToken(t *testing.T) {
 
 	provider := NewAnonymousAuthenticationProvider()
 	token := NewUsernamePasswordToken("user", nil)
-	result, err := provider.Authenticate(context.Background(), token)
+	authenticated, err := provider.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
+	if authenticated == nil {
 		t.Fatal("expected non-nil result")
 	}
 }
@@ -215,11 +216,11 @@ func TestAnonymousAuthenticationProvider_AuthenticatedToken(t *testing.T) {
 
 	provider := NewAnonymousAuthenticationProvider()
 	token := NewAuthenticatedUsernamePasswordToken("admin", nil, []string{"ROLE_ADMIN"})
-	result, err := provider.Authenticate(context.Background(), token)
+	authenticated, err := provider.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
+	if authenticated != nil {
 		t.Error("expected nil for already authenticated token")
 	}
 }
@@ -229,11 +230,11 @@ func TestAnonymousAuthenticationProvider_TokenWithCredentials(t *testing.T) {
 
 	provider := NewAnonymousAuthenticationProvider()
 	token := NewUsernamePasswordToken("user", "pass")
-	result, err := provider.Authenticate(context.Background(), token)
+	authenticated, err := provider.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
+	if authenticated != nil {
 		t.Error("expected nil for token with credentials")
 	}
 }

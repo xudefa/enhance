@@ -44,15 +44,15 @@ var validationErrorsPool = sync.Pool{
 
 // acquireValidationErrors 从池中获取 ValidationError 切片
 func acquireValidationErrors() *[]ValidationError {
-	p, _ := validationErrorsPool.Get().(*[]ValidationError)
-	*p = (*p)[:0]
-	return p
+	errorPool, _ := validationErrorsPool.Get().(*[]ValidationError)
+	*errorPool = (*errorPool)[:0]
+	return errorPool
 }
 
 // releaseValidationErrors 归还 ValidationError 切片到池中
-func releaseValidationErrors(p *[]ValidationError) {
-	for i := range *p {
-		(*p)[i] = ValidationError{}
+func releaseValidationErrors(errorPool *[]ValidationError) {
+	for i := range *errorPool {
+		(*errorPool)[i] = ValidationError{}
 	}
-	validationErrorsPool.Put(p)
+	validationErrorsPool.Put(errorPool)
 }

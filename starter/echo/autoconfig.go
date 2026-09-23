@@ -24,7 +24,8 @@ var echoAutoConfig = &EchoAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(echoAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(EchoEnabled, ConditionTrue),
+			// 约定优于配置：当 echo.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(EchoEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -135,16 +136,18 @@ func (c *EchoAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
-	// 在后台启动服务器，避免阻塞
-	go func() {
-		if err := c.server.Start(addr); err != nil && err != http.ErrServerClosed {
-			c.logger.Error(ctx.Context(), "Echo Web server error",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
-		}
-	}()
+	go c.runEchoServer(addr, ctx)
 
 	return nil
+}
+
+// runEchoServer 在独立 goroutine 中运行 Echo 服务器。
+func (c *EchoAutoConfiguration) runEchoServer(addr string, ctx boot.ApplicationContext) {
+	if err := c.server.Start(addr); err != nil && err != http.ErrServerClosed {
+		c.logger.Error(ctx.Context(), "Echo Web server error",
+			log.KeyValue{Key: "error", Value: err.Error()},
+		)
+	}
 }
 
 // Stop 停止 Echo Web 服务器。
@@ -169,7 +172,7 @@ func (c *EchoAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *EchoAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(EchoEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(EchoEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetServer 从容器中获取 Echo 服务器实例。

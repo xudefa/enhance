@@ -24,14 +24,14 @@ type JSONPropertySource struct {
 // filePath 是 JSON 文件的完整路径。
 // 如果文件不存在或解析失败，返回空配置源。
 func NewJSONPropertySource(name, filePath string) (*JSONPropertySource, error) {
-	data, err := loadJSONFile(filePath)
+	loadedData, err := loadJSONFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load JSON config from %s: %w", filePath, err)
 	}
 
 	return &JSONPropertySource{
 		name:     name,
-		data:     data,
+		data:     loadedData,
 		priority: PriorityLowest,
 		filePath: filePath,
 	}, nil
@@ -42,7 +42,7 @@ func NewJSONPropertySource(name, filePath string) (*JSONPropertySource, error) {
 // filePath 是 JSON 文件的完整路径。
 // 如果文件不存在或解析失败，返回空配置源但不报错。
 func NewJSONPropertySourceOrDefault(name, filePath string) *JSONPropertySource {
-	data, err := loadJSONFile(filePath)
+	loadedData, err := loadJSONFile(filePath)
 	if err != nil {
 		return &JSONPropertySource{
 			name:     name,
@@ -54,7 +54,7 @@ func NewJSONPropertySourceOrDefault(name, filePath string) *JSONPropertySource {
 
 	return &JSONPropertySource{
 		name:     name,
-		data:     data,
+		data:     loadedData,
 		priority: PriorityLowest,
 		filePath: filePath,
 	}
@@ -88,10 +88,10 @@ func (j *JSONPropertySource) GetProperty(key string) (any, bool) {
 	var current any = j.data
 
 	for _, part := range parts {
-		switch v := current.(type) {
+		switch nestedMap := current.(type) {
 		case map[string]any:
-			if val, ok := v[part]; ok {
-				current = val
+			if nestedVal, ok := nestedMap[part]; ok {
+				current = nestedVal
 			} else {
 				return nil, false
 			}
@@ -120,7 +120,7 @@ func loadJSONFile(filePath string) (map[string]any, error) {
 		if os.IsNotExist(err) {
 			return make(map[string]any), nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("打开配置文件 %s 失败: %w", filePath, err)
 	}
 	defer func() {
 		if closeErr := file.Close(); closeErr != nil {
@@ -128,16 +128,16 @@ func loadJSONFile(filePath string) (map[string]any, error) {
 		}
 	}()
 
-	var data map[string]any
-	if err := json.NewDecoder(file).Decode(&data); err != nil {
-		return nil, err
+	var decoded map[string]any
+	if err := json.NewDecoder(file).Decode(&decoded); err != nil {
+		return nil, fmt.Errorf("解析配置文件 %s 失败: %w", filePath, err)
 	}
 
-	if data == nil {
+	if decoded == nil {
 		return make(map[string]any), nil
 	}
 
-	return data, nil
+	return decoded, nil
 }
 
 // flattenKeys 将嵌套的 map 扁平化为点分隔的键名

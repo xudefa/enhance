@@ -21,6 +21,7 @@ type leakyBucket struct {
 	lastLeak time.Time
 }
 
+// NewLeakyBucketRateLimiter 创建漏桶限流器，自动补齐默认参数并启动后台清理。
 func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRateLimiter {
 	if capacity <= 0 {
 		capacity = 100
@@ -28,34 +29,36 @@ func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRat
 	if rate <= 0 {
 		rate = 100 * time.Millisecond
 	}
-	l := &LeakyBucketRateLimiter{
+	limiter := &LeakyBucketRateLimiter{
 		capacity: capacity,
 		rate:     rate,
 		buckets:  make(map[string]*leakyBucket),
 		done:     make(chan struct{}),
 	}
-	newLeakyBucketCleanup(l)
-	return l
+	newLeakyBucketCleanup(limiter)
+	return limiter
 }
 
-func newLeakyBucketCleanup(l *LeakyBucketRateLimiter) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] leaky bucket cleanup panic: %v\n", r)
-			}
-		}()
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				l.Cleanup()
-			case <-l.done:
-				return
-			}
+func newLeakyBucketCleanup(limiter *LeakyBucketRateLimiter) {
+	go limiter.leakyBucketCleanupLoop()
+}
+
+func (r *LeakyBucketRateLimiter) leakyBucketCleanupLoop() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			fmt.Printf("[rate_limit] leaky bucket cleanup panic: %v\n", rec)
 		}
 	}()
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			r.Cleanup()
+		case <-r.done:
+			return
+		}
+	}
 }
 
 // Allow 检查指定 key 的请求是否允许通过（漏桶算法）。
@@ -131,6 +134,7 @@ type fixedWindowCounter struct {
 	windowStart time.Time
 }
 
+// NewFixedWindowCounterRateLimiter 创建固定窗口计数器限流器，自动补齐默认参数并启动后台清理。
 func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int) *FixedWindowCounterRateLimiter {
 	if windowSize <= 0 {
 		windowSize = 1 * time.Minute
@@ -138,34 +142,36 @@ func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int)
 	if maxRequests <= 0 {
 		maxRequests = 100
 	}
-	l := &FixedWindowCounterRateLimiter{
+	limiter := &FixedWindowCounterRateLimiter{
 		windowSize:  windowSize,
 		maxRequests: maxRequests,
 		counters:    make(map[string]*fixedWindowCounter),
 		done:        make(chan struct{}),
 	}
-	newFixedWindowCleanup(l)
-	return l
+	newFixedWindowCleanup(limiter)
+	return limiter
 }
 
-func newFixedWindowCleanup(l *FixedWindowCounterRateLimiter) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] fixed window cleanup panic: %v\n", r)
-			}
-		}()
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				l.Cleanup()
-			case <-l.done:
-				return
-			}
+func newFixedWindowCleanup(limiter *FixedWindowCounterRateLimiter) {
+	go limiter.fixedWindowCleanupLoop()
+}
+
+func (r *FixedWindowCounterRateLimiter) fixedWindowCleanupLoop() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			fmt.Printf("[rate_limit] fixed window cleanup panic: %v\n", rec)
 		}
 	}()
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			r.Cleanup()
+		case <-r.done:
+			return
+		}
+	}
 }
 
 // Allow 检查指定 key 的请求是否允许通过（固定窗口计数算法）。

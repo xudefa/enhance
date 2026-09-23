@@ -17,11 +17,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/xudefa/enhance/boot"
+	"github.com/xudefa/enhance/core"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/xudefa/enhance/boot"
-	"github.com/xudefa/enhance/core"
 
 	_ "github.com/xudefa/enhance/starter/mongodb"
 )
@@ -77,12 +77,12 @@ func main() {
 		Age:   30,
 	}
 
-	result, err := collection.InsertOne(ctx, user)
+	insertResult, err := collection.InsertOne(ctx, user)
 	if err != nil {
 		fmt.Printf("Failed to insert document: %v\n", err)
 		return
 	}
-	fmt.Printf("Inserted document with ID: %v\n", result.InsertedID)
+	fmt.Printf("Inserted document with ID: %v\n", insertResult.InsertedID)
 
 	// Demo 2: Insert multiple documents
 	fmt.Println("\n--- Demo 2: Insert Multiple Documents ---")
@@ -92,12 +92,12 @@ func main() {
 		User{Name: "Alice Johnson", Email: "alice@example.com", Age: 28},
 	}
 
-	insertResult, err := collection.InsertMany(ctx, users)
+	insertManyResult, err := collection.InsertMany(ctx, users)
 	if err != nil {
 		fmt.Printf("Failed to insert documents: %v\n", err)
 		return
 	}
-	fmt.Printf("Inserted %d documents\n", len(insertResult.InsertedIDs))
+	fmt.Printf("Inserted %d documents with IDs: %v\n", len(insertManyResult.InsertedIDs), insertManyResult.InsertedIDs)
 
 	// Demo 3: Find a document
 	fmt.Println("\n--- Demo 3: Find Document ---")

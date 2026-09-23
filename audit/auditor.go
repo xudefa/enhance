@@ -81,6 +81,7 @@ func WithAsync() AuditorOption {
 	}
 }
 
+// Log 记录一条审计事件，自动补齐时间戳、ID 和默认级别。
 func (a *auditorImpl) Log(event Event) {
 	if a.IsClosed() {
 		return
@@ -117,6 +118,7 @@ func (a *auditorImpl) Log(event Event) {
 	}
 }
 
+// Close 关闭审计器，等待异步事件处理完成并关闭底层写入器。
 func (a *auditorImpl) Close() error {
 	a.mu.Lock()
 	if a.closed {
@@ -135,6 +137,7 @@ func (a *auditorImpl) Close() error {
 	return a.writer.Close()
 }
 
+// IsClosed 返回审计器是否已关闭。
 func (a *auditorImpl) IsClosed() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -145,8 +148,8 @@ func (a *auditorImpl) IsClosed() bool {
 func (a *auditorImpl) processEvents() {
 	defer a.wg.Done()
 	defer func() {
-		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "panic in audit event processor: %v\n", r)
+		if rec := recover(); rec != nil {
+			fmt.Fprintf(os.Stderr, "panic in audit event processor: %v\n", rec)
 		}
 	}()
 

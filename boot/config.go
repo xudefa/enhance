@@ -49,6 +49,9 @@ type BootConfig struct {
 	// 显式模块（Go 风格组合，替代全局 init() 注册）
 	Modules []Module // 用户显式传入的模块列表
 
+	// 插件（比 Starter 更高级的抽象，提供独立生命周期和依赖管理）
+	Plugins []Plugin // 用户显式传入的插件列表
+
 	// 生命周期钩子（Go 风格 3 阶段：OnInit/OnStart/OnStop）
 	Hooks []lifecycle.Hook // 用户注册的生命周期钩子
 }
@@ -257,5 +260,29 @@ func WithHook(hook lifecycle.Hook) BootOption {
 func WithHookFunc(onInit, onStart, onStop func(context.Context) error) BootOption {
 	return func(cfg *BootConfig) {
 		cfg.Hooks = append(cfg.Hooks, lifecycle.NewHookFunc(onInit, onStart, onStop))
+	}
+}
+
+// WithoutStartupReport 禁用启动报告
+//
+// 默认情况下，应用启动时会打印友好的启动报告，包含：
+//   - 应用名称和版本
+//   - 启动耗时
+//   - 已注册的 Bean 数量
+//   - 已启用的自动配置
+//   - 已启动的 Starter
+//   - 已安装的模块
+//
+// 如果不需要此报告，可以使用此选项禁用。
+//
+// 示例:
+//
+//	boot.Run(
+//	    boot.WithAppName("my-app"),
+//	    boot.WithoutStartupReport(),
+//	)
+func WithoutStartupReport() BootOption {
+	return func(cfg *BootConfig) {
+		GetStartupReport().Disable()
 	}
 }

@@ -48,7 +48,8 @@ var cronAutoConfig = &CronAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(cronAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(CronEnabled, ConditionTrue),
+			// 约定优于配置：当 cron.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(CronEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityTaskLayer)),
 	)
@@ -163,7 +164,7 @@ func (c *CronAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *CronAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(CronEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(CronEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetCron 获取 Cron 实例。

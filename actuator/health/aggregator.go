@@ -7,11 +7,15 @@ import (
 	"time"
 )
 
-func (s Status) String() string {
-	if name, ok := statusNames[s]; ok {
-		return name
-	}
-	return "UNKNOWN"
+// defaultMaxConcurrentChecks 同时运行的指标健康检查数量上限。
+const defaultMaxConcurrentChecks = 8
+
+// DefaultIndicatorTimeout 每个指标的默认超时时间。
+const DefaultIndicatorTimeout = 5 * time.Second
+
+type healthCheckResult struct {
+	health Health
+	done   chan struct{}
 }
 
 var statusNames = map[Status]string{
@@ -29,8 +33,13 @@ func NewAggregator() *Aggregator {
 	}
 }
 
-// defaultMaxConcurrentChecks 同时运行的指标健康检查数量上限。
-const defaultMaxConcurrentChecks = 8
+// String 返回状态的字符串表示
+func (s Status) String() string {
+	if name, ok := statusNames[s]; ok {
+		return name
+	}
+	return "UNKNOWN"
+}
 
 // AddIndicator 添加健康指标
 func (a *Aggregator) AddIndicator(indicator Indicator) {
@@ -43,13 +52,10 @@ func (a *Aggregator) AddIndicator(indicator Indicator) {
 func (a *Aggregator) Indicators() []Indicator {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	result := make([]Indicator, len(a.indicators))
-	copy(result, a.indicators)
-	return result
+	indicatorList := make([]Indicator, len(a.indicators))
+	copy(indicatorList, a.indicators)
+	return indicatorList
 }
-
-// DefaultIndicatorTimeout 每个指标的默认超时时间。
-const DefaultIndicatorTimeout = 5 * time.Second
 
 // Aggregate 聚合所有指标的健康状态。
 // 每个指标调用都有独立的超时保护，防止慢指标阻塞整个健康检查。
@@ -60,16 +66,16 @@ func (a *Aggregator) Aggregate(ctx context.Context) Health {
 	details := make(map[string]any)
 
 	for _, ind := range indicators {
-		h := a.aggregateWithTimeout(ctx, ind, DefaultIndicatorTimeout)
-		d := map[string]any{
-			"status": h.Status.String(),
-			"detail": h.Details,
+		indicatorHealth := a.aggregateWithTimeout(ctx, ind, DefaultIndicatorTimeout)
+		detail := map[string]any{
+			"status": indicatorHealth.Status.String(),
+			"detail": indicatorHealth.Details,
 		}
-		if h.Error != nil {
-			d["error"] = h.Error.Error()
+		if indicatorHealth.Error != nil {
+			detail["error"] = indicatorHealth.Error.Error()
 		}
-		details[ind.Name()] = d
-		switch h.Status {
+		details[ind.Name()] = detail
+		switch indicatorHealth.Status {
 		case StatusOutage:
 			overall = StatusOutage
 		case StatusDown:
@@ -95,11 +101,6 @@ func (a *Aggregator) Aggregate(ctx context.Context) Health {
 // 通过信号量限制同时运行的健康检查数量，即使某个指标忽略 context 卡死不返回，
 // 泄漏的 goroutine 数量也被限制在 defaultMaxConcurrentChecks 以内。
 func (a *Aggregator) aggregateWithTimeout(ctx context.Context, ind Indicator, timeout time.Duration) Health {
-	type result struct {
-		health Health
-		done   chan struct{}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -113,21 +114,12 @@ func (a *Aggregator) aggregateWithTimeout(ctx context.Context, ind Indicator, ti
 		}
 	}
 
-	r := result{done: make(chan struct{}, 1)}
-	go func() {
-		defer func() { <-a.workers }()
-		defer func() {
-			if p := recover(); p != nil {
-				r.health = Health{Status: StatusDown, Error: fmt.Errorf("panic: %v", p)}
-			}
-			close(r.done)
-		}()
-		r.health = ind.Health(ctx)
-	}()
+	checkResult := healthCheckResult{done: make(chan struct{}, 1)}
+	go a.runHealthCheck(ind, ctx, &checkResult)
 
 	select {
-	case <-r.done:
-		return r.health
+	case <-checkResult.done:
+		return checkResult.health
 	case <-ctx.Done():
 		return Health{
 			Status:  StatusDown,
@@ -135,4 +127,16 @@ func (a *Aggregator) aggregateWithTimeout(ctx context.Context, ind Indicator, ti
 			Details: map[string]any{"error": "timeout"},
 		}
 	}
+}
+
+// runHealthCheck 在独立 goroutine 中执行健康检查（信号量保护）。
+func (a *Aggregator) runHealthCheck(ind Indicator, ctx context.Context, r *healthCheckResult) {
+	defer func() { <-a.workers }()
+	defer func() {
+		if panicValue := recover(); panicValue != nil {
+			r.health = Health{Status: StatusDown, Error: fmt.Errorf("panic: %v", panicValue)}
+		}
+		close(r.done)
+	}()
+	r.health = ind.Health(ctx)
 }

@@ -24,7 +24,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ElasticsearchAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ElasticsearchEnabled, ConditionTrue),
+			// 约定优于配置：当 elasticsearch.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ElasticsearchEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)),
 	)
@@ -105,7 +106,7 @@ func (c *ElasticsearchAutoConfiguration) GetClient() *elasticsearch.Client {
 // Index 索引文档。
 func (c *ElasticsearchAutoConfiguration) Index(ctx context.Context, index string, doc map[string]interface{}, id string) error {
 	// 使用 JSON 序列化文档
-	data, err := json.Marshal(doc)
+	jsonData, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("failed to serialize document as JSON: %w", err)
 	}
@@ -113,7 +114,7 @@ func (c *ElasticsearchAutoConfiguration) Index(ctx context.Context, index string
 	req := esapi.IndexRequest{
 		Index:      index,
 		DocumentID: id,
-		Body:       bytes.NewReader(data),
+		Body:       bytes.NewReader(jsonData),
 	}
 
 	res, err := req.Do(ctx, c.client)

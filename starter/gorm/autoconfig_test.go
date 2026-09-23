@@ -7,6 +7,7 @@ import (
 )
 
 func TestGormConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-gorm", environment.PriorityNormal, map[string]any{
 		"db.gorm.enabled":           "true",
@@ -59,6 +60,7 @@ func TestGormConfig_LoadConfig(t *testing.T) {
 }
 
 func TestGormConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &GormConfig{
 		Host:            DefaultGORMHost,
 		Port:            DefaultGORMPort,
@@ -89,6 +91,7 @@ func TestGormConfig_DefaultValues(t *testing.T) {
 }
 
 func TestGormConfig_BuildDSN(t *testing.T) {
+	tt.Parallel()
 	cfg := &GormConfig{
 		Driver:   "mysql",
 		Host:     "localhost",

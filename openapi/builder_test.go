@@ -235,11 +235,11 @@ func TestDocumentBuilder_ToJSON_Builder(t *testing.T) {
 func TestDocumentBuilder_ToJSONBytes(t *testing.T) {
 	t.Parallel()
 	b := NewDocument()
-	data, err := b.ToJSONBytes()
+	jsonBytes, err := b.ToJSONBytes()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(data) == 0 {
+	if len(jsonBytes) == 0 {
 		t.Error("expected non-empty JSON bytes")
 	}
 }
@@ -286,9 +286,9 @@ func TestDocumentBuilder_extractBasePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := b.extractBasePath(stringToType(tt.typeName))
-			if result != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, result)
+			basePath := b.extractBasePath(stringToType(tt.typeName))
+			if basePath != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, basePath)
 			}
 		})
 	}
@@ -320,9 +320,9 @@ func TestDocumentBuilder_extractHTTPMethod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := b.extractHTTPMethod(stringToMethod(tt.method))
-			if result != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, result)
+			httpMethod := b.extractHTTPMethod(stringToMethod(tt.method))
+			if httpMethod != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, httpMethod)
 			}
 		})
 	}
@@ -330,10 +330,10 @@ func TestDocumentBuilder_extractHTTPMethod(t *testing.T) {
 
 func TestContains(t *testing.T) {
 	t.Parallel()
-	if !contains([]string{"a", "b"}, "a") {
+	if !containsPart([]string{"a", "b"}, "a") {
 		t.Error("expected slice to contain 'a'")
 	}
-	if contains([]string{"a", "b"}, "c") {
+	if containsPart([]string{"a", "b"}, "c") {
 		t.Error("expected slice to not contain 'c'")
 	}
 }
@@ -359,19 +359,19 @@ func stringToType(name string) reflect.Type {
 func stringToMethod(name string) reflect.Method {
 	type TestController struct{}
 
-	m := map[string]func(){}
-	m["GetUsers"] = func() {}
-	m["FindUser"] = func() {}
-	m["ListUsers"] = func() {}
-	m["PostUser"] = func() {}
-	m["CreateUser"] = func() {}
-	m["AddUser"] = func() {}
-	m["PutUser"] = func() {}
-	m["UpdateUser"] = func() {}
-	m["DeleteUser"] = func() {}
-	m["RemoveUser"] = func() {}
-	m["PatchUser"] = func() {}
-	m["Unknown"] = func() {}
+	methodMap := map[string]func(){}
+	methodMap["GetUsers"] = func() {}
+	methodMap["FindUser"] = func() {}
+	methodMap["ListUsers"] = func() {}
+	methodMap["PostUser"] = func() {}
+	methodMap["CreateUser"] = func() {}
+	methodMap["AddUser"] = func() {}
+	methodMap["PutUser"] = func() {}
+	methodMap["UpdateUser"] = func() {}
+	methodMap["DeleteUser"] = func() {}
+	methodMap["RemoveUser"] = func() {}
+	methodMap["PatchUser"] = func() {}
+	methodMap["Unknown"] = func() {}
 
 	t := reflect.TypeOf(TestController{})
 	for i := 0; i < t.NumMethod(); i++ {
@@ -382,7 +382,7 @@ func stringToMethod(name string) reflect.Method {
 	}
 
 	// Fallback: create a method with the given name
-	if fn, ok := m[name]; ok {
+	if fn, ok := methodMap[name]; ok {
 		return reflect.Method{
 			Name:    name,
 			PkgPath: "",

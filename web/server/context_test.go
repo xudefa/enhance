@@ -122,12 +122,12 @@ func TestContext_BindJSON(t *testing.T) {
 func TestContext_BindJSON_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "/test", bytes.NewReader([]byte("invalid json")))
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 
-	var result map[string]string
-	if err := ctx.BindJSON(&result); err == nil {
+	var payload map[string]string
+	if err := ctx.BindJSON(&payload); err == nil {
 		t.Error("BindJSON() expected error for invalid JSON, got nil")
 	}
 }
@@ -135,25 +135,25 @@ func TestContext_BindJSON_InvalidJSON(t *testing.T) {
 func TestContext_SetStatusCode(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 	ctx.SetStatusCode(http.StatusCreated)
 
-	if w.Code != http.StatusCreated {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusCreated)
+	if rec.Code != http.StatusCreated {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusCreated)
 	}
 }
 
 func TestContext_SetHeader(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 	ctx.SetHeader("X-Custom", "test-value")
 
-	if got := w.Header().Get("X-Custom"); got != "test-value" {
+	if got := rec.Header().Get("X-Custom"); got != "test-value" {
 		t.Errorf("Header(X-Custom) = %s, want test-value", got)
 	}
 }
@@ -161,76 +161,76 @@ func TestContext_SetHeader(t *testing.T) {
 func TestContext_JSON(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
-	data := map[string]string{"message": "hello"}
+	ctx := NewContext(rec, req)
+	payload := map[string]string{"message": "hello"}
 
-	if err := ctx.JSON(http.StatusOK, data); err != nil {
+	if err := ctx.JSON(http.StatusOK, payload); err != nil {
 		t.Fatalf("JSON() error = %v", err)
 	}
 
-	if w.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %s, want application/json", w.Header().Get("Content-Type"))
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Content-Type = %s, want application/json", rec.Header().Get("Content-Type"))
 	}
 
-	var result map[string]string
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+	var responseBody map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &responseBody); err != nil {
 		t.Fatalf("Failed to parse response body: %v", err)
 	}
-	if result["message"] != "hello" {
-		t.Errorf("response message = %s, want hello", result["message"])
+	if responseBody["message"] != "hello" {
+		t.Errorf("response message = %s, want hello", responseBody["message"])
 	}
 }
 
 func TestContext_String(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 	ctx.String(http.StatusOK, "Hello %s", "World")
 
-	if w.Body.String() != "Hello World" {
-		t.Errorf("Body = %s, want Hello World", w.Body.String())
+	if rec.Body.String() != "Hello World" {
+		t.Errorf("Body = %s, want Hello World", rec.Body.String())
 	}
-	if w.Header().Get("Content-Type") != "text/plain" {
-		t.Errorf("Content-Type = %s, want text/plain", w.Header().Get("Content-Type"))
+	if rec.Header().Get("Content-Type") != "text/plain" {
+		t.Errorf("Content-Type = %s, want text/plain", rec.Header().Get("Content-Type"))
 	}
 }
 
 func TestContext_AbortWithStatus(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 	ctx.AbortWithStatus(http.StatusUnauthorized)
 
 	if !ctx.IsAborted() {
 		t.Error("IsAborted() = false, want true")
 	}
-	if w.Code != http.StatusUnauthorized {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusUnauthorized)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
 
 func TestContext_AbortWithStatusJSON(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	ctx := NewContext(w, req)
+	ctx := NewContext(rec, req)
 	ctx.AbortWithStatusJSON(http.StatusBadRequest, map[string]string{"error": "bad request"})
 
 	if !ctx.IsAborted() {
 		t.Error("IsAborted() = false, want true")
 	}
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("StatusCode = %d, want %d", w.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("StatusCode = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if w.Header().Get("Content-Type") != "application/json" {
-		t.Errorf("Content-Type = %s, want application/json", w.Header().Get("Content-Type"))
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Content-Type = %s, want application/json", rec.Header().Get("Content-Type"))
 	}
 }
 
@@ -341,9 +341,9 @@ func TestContext_WithMiddleware(t *testing.T) {
 	handler := func(ctx core.Context) {}
 	middlewares := []core.MiddlewareFunc{func(ctx core.Context) {}}
 
-	result := ctx.WithMiddleware(middlewares, handler)
+	returnedCtx := ctx.WithMiddleware(middlewares, handler)
 
-	if result != ctx {
+	if returnedCtx != ctx {
 		t.Error("WithMiddleware should return the context for chaining")
 	}
 }
@@ -356,9 +356,9 @@ func TestContext_WithParams(t *testing.T) {
 	ctx := NewContext(w, req)
 
 	params := map[string]string{"id": "123"}
-	result := ctx.WithParams(params)
+	returnedCtx := ctx.WithParams(params)
 
-	if result != ctx {
+	if returnedCtx != ctx {
 		t.Error("WithParams should return the context for chaining")
 	}
 	if ctx.PathParam("id") != "123" {

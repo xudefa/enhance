@@ -26,7 +26,7 @@ type FormBinder struct {
 // BinderOption 配置表单绑定器。
 type BinderOption func(*FormBinder)
 
-// WithTagName sets the struct tag name (default: "form").
+// WithTagName 设置结构体标签名（默认 "form"）。
 func WithTagName(tagName string) BinderOption {
 	return func(b *FormBinder) {
 		b.tagName = tagName
@@ -42,14 +42,14 @@ func WithMaxBodySize(size int64) BinderOption {
 
 // NewFormBinder 创建一个新的表单绑定器。
 func NewFormBinder(opts ...BinderOption) *FormBinder {
-	b := &FormBinder{
+	binder := &FormBinder{
 		tagName:     "form",
 		maxBodySize: defaultMaxJSONBodySize,
 	}
 	for _, opt := range opts {
-		opt(b)
+		opt(binder)
 	}
-	return b
+	return binder
 }
 
 // Bind 将 HTTP 请求表单数据绑定到结构体。
@@ -93,19 +93,19 @@ func (b *FormBinder) BindJSON(req *http.Request, target any) error {
 }
 
 func (b *FormBinder) bindForm(values map[string][]string, target any) error {
-	val := reflect.ValueOf(target)
-	if val.Kind() != reflect.Ptr {
+	targetValue := reflect.ValueOf(target)
+	if targetValue.Kind() != reflect.Ptr {
 		return ErrNotPointer
 	}
 
-	val = val.Elem()
-	if val.Kind() != reflect.Struct {
+	targetValue = targetValue.Elem()
+	if targetValue.Kind() != reflect.Struct {
 		return ErrNotStruct
 	}
 
-	typ := val.Type()
-	for i := range val.NumField() {
-		field := val.Field(i)
+	typ := targetValue.Type()
+	for i := range targetValue.NumField() {
+		field := targetValue.Field(i)
 		fieldType := typ.Field(i)
 
 		if !field.CanSet() {
@@ -113,20 +113,9 @@ func (b *FormBinder) bindForm(values map[string][]string, target any) error {
 		}
 
 		tag := fieldType.Tag.Get(b.tagName)
-		if tag == "" || tag == "-" {
+		fieldName, required := parseFormTag(tag)
+		if fieldName == "" {
 			continue
-		}
-
-		// 解析标签选项
-		parts := strings.Split(tag, ",")
-		fieldName := parts[0]
-
-		required := false
-		for _, part := range parts[1:] {
-			if part == "required" {
-				required = true
-				break
-			}
 		}
 
 		formValues := values[fieldName]
@@ -153,6 +142,21 @@ func (b *FormBinder) bindForm(values map[string][]string, target any) error {
 	return nil
 }
 
+// parseFormTag 解析表单标签，返回字段名与是否必填；忽略空标签和 "-" 标签。
+func parseFormTag(tag string) (fieldName string, required bool) {
+	if tag == "" || tag == "-" {
+		return "", false
+	}
+	parts := strings.Split(tag, ",")
+	fieldName = parts[0]
+	for _, part := range parts[1:] {
+		if part == "required" {
+			return fieldName, true
+		}
+	}
+	return fieldName, false
+}
+
 // setFieldValues 绑定字段值：切片字段绑定全部值，标量字段使用第一个值。
 func (b *FormBinder) setFieldValues(field reflect.Value, values []string) error {
 	if field.Kind() != reflect.Slice {
@@ -168,7 +172,7 @@ func (b *FormBinder) setFieldValues(field reflect.Value, values []string) error 
 	slice := reflect.MakeSlice(field.Type(), len(parts), len(parts))
 	for i, part := range parts {
 		if err := b.setFieldValue(slice.Index(i), part); err != nil {
-			return err
+			return fmt.Errorf("set slice element: %w", err)
 		}
 	}
 	field.Set(slice)
@@ -180,29 +184,29 @@ func (b *FormBinder) setFieldValue(field reflect.Value, value string) error {
 	case reflect.String:
 		field.SetString(value)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, err := strconv.ParseInt(value, 10, field.Type().Bits())
+		parsed, err := strconv.ParseInt(value, 10, field.Type().Bits())
 		if err != nil {
-			return err
+			return fmt.Errorf("parse int value: %w", err)
 		}
-		field.SetInt(v)
+		field.SetInt(parsed)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, err := strconv.ParseUint(value, 10, field.Type().Bits())
+		parsed, err := strconv.ParseUint(value, 10, field.Type().Bits())
 		if err != nil {
-			return err
+			return fmt.Errorf("parse uint value: %w", err)
 		}
-		field.SetUint(v)
+		field.SetUint(parsed)
 	case reflect.Float32, reflect.Float64:
-		v, err := strconv.ParseFloat(value, field.Type().Bits())
+		parsed, err := strconv.ParseFloat(value, field.Type().Bits())
 		if err != nil {
-			return err
+			return fmt.Errorf("parse float value: %w", err)
 		}
-		field.SetFloat(v)
+		field.SetFloat(parsed)
 	case reflect.Bool:
-		v, err := strconv.ParseBool(value)
+		parsed, err := strconv.ParseBool(value)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse bool value: %w", err)
 		}
-		field.SetBool(v)
+		field.SetBool(parsed)
 	case reflect.Ptr:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))

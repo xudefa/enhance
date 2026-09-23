@@ -9,6 +9,13 @@ import (
 	"sync"
 )
 
+const (
+	// minHTTPStatusCode 合法 HTTP 状态码下界（含）。
+	minHTTPStatusCode = 100
+	// maxHTTPStatusCode 合法 HTTP 状态码上界（含）。
+	maxHTTPStatusCode = 999
+)
+
 // DefaultExceptionHandler 默认异常处理器实现。
 //
 // DefaultExceptionHandler 是 ExceptionHandler 接口的主要实现，提供了完整的异常处理功能：
@@ -69,28 +76,9 @@ func (h *DefaultExceptionHandler) Handle(ctx context.Context, err error, respons
 		return nil
 	}
 
+	handlerFunc := h.resolveHandlerFunc(err)
+
 	var resp *ErrorResponse
-
-	// 复制handler，避免在锁内执行用户回调导致死锁
-	h.mu.RLock()
-	errType := reflect.TypeOf(err)
-	handlerFunc, ok := h.typeMap[errType]
-	if !ok {
-		// 处理包装错误：遍历已注册类型，用 errors.As 匹配错误链，
-		// 否则 fmt.Errorf("wrap: %w") 等包装错误永远匹配不到处理函数
-		errorIface := reflect.TypeOf((*error)(nil)).Elem()
-		for t, fn := range h.typeMap {
-			if !t.Implements(errorIface) && t.Kind() != reflect.Interface {
-				continue
-			}
-			if errors.As(err, reflect.New(t).Interface()) {
-				handlerFunc = fn
-				break
-			}
-		}
-	}
-	h.mu.RUnlock()
-
 	if handlerFunc != nil {
 		resp = handlerFunc(ctx, err)
 	}
@@ -100,37 +88,77 @@ func (h *DefaultExceptionHandler) Handle(ctx context.Context, err error, respons
 	}
 
 	if resp == nil {
-		resp = NewErrorResponse(500, "Internal Server Error", "", "", nil)
+		resp = NewErrorResponse(500, "Internal Server Error")
 	}
 
 	if response != nil {
-		data, marshalErr := json.Marshal(resp)
-		if marshalErr != nil {
-			// JSON 序列化失败时回退为纯文本 500，并记录日志
-			response.SetStatusCode(http.StatusInternalServerError)
-			response.SetHeader("Content-Type", "text/plain; charset=utf-8")
-			if writeErr := response.Write([]byte("Internal Server Error")); writeErr != nil {
-				return resp
-			}
-			if h.config.Logger != nil {
-				h.config.Logger.Error(ctx, "failed to marshal error response",
-					KeyValue{Key: "error", Value: marshalErr.Error()},
-				)
-			}
-			return resp
-		}
-		// 钳制状态码到合法 HTTP 范围 [100, 999]，防止 net/http 的 WriteHeader panic
-		statusCode := resp.Code
-		if statusCode < 100 || statusCode > 999 {
-			statusCode = http.StatusInternalServerError
-		}
-		response.SetStatusCode(statusCode)
-		response.SetHeader("Content-Type", "application/json")
-		if writeErr := response.Write(data); writeErr != nil {
-			return resp
+		if earlyReturn := h.writeErrorResponse(ctx, resp, response); earlyReturn != nil {
+			return earlyReturn
 		}
 	}
 
+	h.recordObservability(ctx, err, resp)
+
+	return resp
+}
+
+// resolveHandlerFunc 查找与错误类型匹配的处理函数，支持 errors.As 匹配包装错误。
+func (h *DefaultExceptionHandler) resolveHandlerFunc(err error) func(ctx context.Context, err error) *ErrorResponse {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	errType := reflect.TypeOf(err)
+	handlerFunc, ok := h.typeMap[errType]
+	if ok {
+		return handlerFunc
+	}
+
+	// 处理包装错误：遍历已注册类型，用 errors.As 匹配错误链，
+	// 否则 fmt.Errorf("wrap: %w") 等包装错误永远匹配不到处理函数
+	errorIface := reflect.TypeOf((*error)(nil)).Elem()
+	for t, fn := range h.typeMap {
+		if !t.Implements(errorIface) && t.Kind() != reflect.Interface {
+			continue
+		}
+		if errors.As(err, reflect.New(t).Interface()) {
+			return fn
+		}
+	}
+	return nil
+}
+
+// writeErrorResponse 将错误响应序列化并写入 ResponseWriter；任一步失败时返回 resp 提前结束。
+func (h *DefaultExceptionHandler) writeErrorResponse(ctx context.Context, resp *ErrorResponse, response ResponseWriter) *ErrorResponse {
+	body, marshalErr := json.Marshal(resp)
+	if marshalErr != nil {
+		// JSON 序列化失败时回退为纯文本 500，并记录日志
+		response.SetStatusCode(http.StatusInternalServerError)
+		response.SetHeader("Content-Type", "text/plain; charset=utf-8")
+		if writeErr := response.Write([]byte("Internal Server Error")); writeErr != nil {
+			return resp
+		}
+		if h.config.Logger != nil {
+			h.config.Logger.Error(ctx, "failed to marshal error response",
+				KeyValue{Key: "error", Value: marshalErr.Error()},
+			)
+		}
+		return resp
+	}
+	// 钳制状态码到合法 HTTP 范围 [100, 999]，防止 net/http 的 WriteHeader panic
+	statusCode := resp.Code
+	if statusCode < minHTTPStatusCode || statusCode > maxHTTPStatusCode {
+		statusCode = http.StatusInternalServerError
+	}
+	response.SetStatusCode(statusCode)
+	response.SetHeader("Content-Type", "application/json")
+	if writeErr := response.Write(body); writeErr != nil {
+		return resp
+	}
+	return nil
+}
+
+// recordObservability 记录异常日志和指标。
+func (h *DefaultExceptionHandler) recordObservability(ctx context.Context, err error, resp *ErrorResponse) {
 	if h.config.Logger != nil {
 		h.config.Logger.Error(ctx, "exception handled",
 			KeyValue{Key: "exception_type", Value: reflect.TypeOf(err).String()},
@@ -138,12 +166,9 @@ func (h *DefaultExceptionHandler) Handle(ctx context.Context, err error, respons
 			KeyValue{Key: "code", Value: resp.Code},
 		)
 	}
-
 	if h.config.MetricsRecorder != nil {
 		h.config.MetricsRecorder.RecordException(reflect.TypeOf(err).String(), resp.Code)
 	}
-
-	return resp
 }
 
 // IncludeStackTrace 返回是否在错误响应中包含堆栈跟踪信息。

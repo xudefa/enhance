@@ -20,7 +20,7 @@ type Database struct {
 
 // UserService depends on Database.
 type UserService struct {
-	DB  *Database
+	DB   *Database
 	Name string
 }
 
@@ -135,8 +135,9 @@ func main() {
 	fmt.Println("--- Concurrent access test ---")
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
+	const concurrentIterations = 10 // 并发测试迭代次数
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < concurrentIterations; i++ {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()

@@ -7,6 +7,7 @@ import (
 )
 
 func TestSwaggerConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-swagger", environment.PriorityNormal, map[string]any{
 		"swagger.enabled": "true",
@@ -43,6 +44,7 @@ func TestSwaggerConfig_LoadConfig(t *testing.T) {
 }
 
 func TestSwaggerConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &SwaggerConfig{
 		Host:  DefaultSwaggerHost,
 		Port:  DefaultSwaggerPort,

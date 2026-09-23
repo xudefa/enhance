@@ -26,9 +26,9 @@ func RegisterController(ctrl core.Controller) {
 func GetControllers() []core.Controller {
 	mu.RLock()
 	defer mu.RUnlock()
-	result := make([]core.Controller, len(controllers))
-	copy(result, controllers)
-	return result
+	controllersCopy := make([]core.Controller, len(controllers))
+	copy(controllersCopy, controllers)
+	return controllersCopy
 }
 
 // ClearControllers 清除所有已注册的控制器(仅用于测试)。

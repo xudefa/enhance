@@ -68,26 +68,26 @@ func TestFileWatcher_StartStop_Helper(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	w := NewFileWatcher([]string{tmpDir}, ".go")
+	watcher := NewFileWatcher([]string{tmpDir}, ".go")
 
-	if err := w.Start(); err != nil {
+	if err := watcher.Start(); err != nil {
 		t.Fatalf("Start error: %v", err)
 	}
 
-	w.Stop()
+	watcher.Stop()
 }
 
 func TestFileWatcher_DoubleStart_Helper(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
-	w := NewFileWatcher([]string{tmpDir})
+	watcher := NewFileWatcher([]string{tmpDir})
 
-	if err := w.Start(); err != nil {
+	if err := watcher.Start(); err != nil {
 		t.Fatalf("Start error: %v", err)
 	}
-	defer w.Stop()
+	defer watcher.Stop()
 
-	err := w.Start()
+	err := watcher.Start()
 	if err == nil {
 		t.Error("second Start should return error")
 	}
@@ -108,21 +108,21 @@ func TestFileWatcher_OnChange_Helper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := NewFileWatcher([]string{tmpDir}, ".txt")
+	watcher := NewFileWatcher([]string{tmpDir}, ".txt")
 
 	var mu sync.Mutex
 	var events []ReloadEvent
 
-	w.OnChange(func(event ReloadEvent) {
+	watcher.OnChange(func(event ReloadEvent) {
 		mu.Lock()
 		events = append(events, event)
 		mu.Unlock()
 	})
 
-	if err := w.Start(); err != nil {
+	if err := watcher.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer w.Stop()
+	defer watcher.Stop()
 
 	// Modify file
 	time.Sleep(1500 * time.Millisecond)

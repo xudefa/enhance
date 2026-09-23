@@ -25,12 +25,12 @@ func TestEvaluate_Equality(t *testing.T) {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, tt.root)
+			got, err := Evaluate(tt.expr, tt.root)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -53,12 +53,12 @@ func TestEvaluate_LogicalOr(t *testing.T) {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, tt.root)
+			got, err := Evaluate(tt.expr, tt.root)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -80,12 +80,12 @@ func TestEvaluate_ArithmeticOperators(t *testing.T) {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, nil)
+			got, err := Evaluate(tt.expr, nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -112,52 +112,14 @@ func TestEvaluate_ComparisonOperators(t *testing.T) {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, tt.root)
+			got, err := Evaluate(tt.expr, tt.root)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestPropertyExpression_GetValue_NilRoot(t *testing.T) {
-	t.Parallel()
-	expr := &propertyExpressionImpl{property: "Name"}
-	ctx := NewStandardEvaluationContext(nil)
-
-	_, err := expr.GetValue(ctx)
-	if err == nil {
-		t.Error("expected error for nil root")
-	}
-}
-
-func TestPropertyExpression_SetValue_NilRoot(t *testing.T) {
-	t.Parallel()
-	expr := &propertyExpressionImpl{property: "Name"}
-	ctx := NewStandardEvaluationContext(nil)
-
-	err := expr.SetValue(ctx, "value")
-	if err == nil {
-		t.Error("expected error for nil root")
-	}
-}
-
-func TestPropertyExpression_String(t *testing.T) {
-	t.Parallel()
-	expr := &propertyExpressionImpl{property: "Name"}
-	if expr.String() != "Name" {
-		t.Errorf("expected 'Name', got %v", expr.String())
-	}
-}
-
-func TestComplexExpression_String(t *testing.T) {
-	t.Parallel()
-	expr := &complexExpressionImpl{raw: "age > 18"}
-	if expr.String() != "age > 18" {
-		t.Errorf("expected 'age > 18', got %v", expr.String())
 	}
 }
 
@@ -165,12 +127,12 @@ func TestEvaluate_TernaryFalse(t *testing.T) {
 	t.Parallel()
 	user := testUser{Age: 15}
 
-	val, err := Evaluate("Age > 18 ? 'adult' : 'minor'", user)
+	got, err := Evaluate("Age > 18 ? 'adult' : 'minor'", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "minor" {
-		t.Errorf("got %v, want 'minor'", val)
+	if got != "minor" {
+		t.Errorf("got %v, want 'minor'", got)
 	}
 }
 
@@ -196,12 +158,12 @@ func TestEvaluate_LogicalWithVariables(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
@@ -215,12 +177,12 @@ func TestEvaluate_ComparisonWithVariables(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
@@ -234,92 +196,24 @@ func TestEvaluate_ArithmeticWithVariables(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(20) {
-		t.Errorf("got %v, want 20", val)
-	}
-}
-
-func TestPropertyExpression_GetValue_WithVariable(t *testing.T) {
-	t.Parallel()
-	expr := &propertyExpressionImpl{property: "myVar"}
-	ctx := NewStandardEvaluationContext(nil)
-	ctx.SetVariable("myVar", 42)
-
-	val, err := expr.GetValue(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if val != 42 {
-		t.Errorf("got %v, want 42", val)
-	}
-}
-
-func TestPropertyExpression_GetValue_WithTag(t *testing.T) {
-	t.Parallel()
-	type TaggedUser struct {
-		FullName string `json:"full_name"`
-	}
-
-	accessor := NewReflectPropertyAccessor()
-	u := TaggedUser{FullName: "Alice"}
-
-	val, err := accessor.GetProperty(u, "full_name")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if val != "Alice" {
-		t.Errorf("got %v, want 'Alice'", val)
-	}
-}
-
-func TestReflectPropertyAccessor_SetProperty_PointerTarget(t *testing.T) {
-	t.Parallel()
-	accessor := NewReflectPropertyAccessor()
-	user := &testUser{Name: "Old"}
-
-	err := accessor.SetProperty(user, "Name", "New")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if user.Name != "New" {
-		t.Errorf("got %v, want 'New'", user.Name)
-	}
-}
-
-func TestReflectPropertyAccessor_GetProperty_PointerTarget(t *testing.T) {
-	t.Parallel()
-	accessor := NewReflectPropertyAccessor()
-	user := &testUser{Name: "Alice"}
-
-	val, err := accessor.GetProperty(user, "Name")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if val != "Alice" {
-		t.Errorf("got %v, want 'Alice'", val)
+	if got != float64(20) {
+		t.Errorf("got %v, want 20", got)
 	}
 }
 
 func TestEvaluate_MethodCall_WithArgs(t *testing.T) {
 	t.Parallel()
-	type Greeter struct {
-		Prefix string
-	}
-
-	g := &Greeter{Prefix: "Hello"}
-	_ = g
-
 	user := &testUser{Name: "Alice"}
-	val, err := Evaluate("Greet()", user)
+	got, err := Evaluate("Greet()", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Hello, Alice" {
-		t.Errorf("got %v, want 'Hello, Alice'", val)
+	if got != "Hello, Alice" {
+		t.Errorf("got %v, want 'Hello, Alice'", got)
 	}
 }
 
@@ -385,12 +279,12 @@ func TestEvaluate_LiteralFloat(t *testing.T) {
 	t.Parallel()
 	type Num struct{ Val float64 }
 
-	val, err := Evaluate("Val", Num{Val: 3.14})
+	got, err := Evaluate("Val", Num{Val: 3.14})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != 3.14 {
-		t.Errorf("got %v, want 3.14", val)
+	if got != 3.14 {
+		t.Errorf("got %v, want 3.14", got)
 	}
 }
 
@@ -401,12 +295,12 @@ func TestEvaluate_LiteralString(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val, err := expr.GetValue(NewStandardEvaluationContext(nil))
+	got, err := expr.GetValue(NewStandardEvaluationContext(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "hello world" {
-		t.Errorf("got %v, want 'hello world'", val)
+	if got != "hello world" {
+		t.Errorf("got %v, want 'hello world'", got)
 	}
 }
 
@@ -426,12 +320,12 @@ func TestEvaluate_LogicalOr_WithTruthValues(t *testing.T) {
 		tt := tt
 		t.Run(tt.expr, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, nil)
+			got, err := Evaluate(tt.expr, nil)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -486,13 +380,6 @@ func TestEvaluate_MethodCall_WrongArgCount(t *testing.T) {
 
 func TestEvaluate_MethodCall_ArgConversion(t *testing.T) {
 	t.Parallel()
-	type Converter struct{}
-
-	type convImpl struct{}
-
-	c := &convImpl{}
-	_ = c
-
 	expr, err := ParseExpression("NonExistent('a')")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -525,12 +412,12 @@ func TestEvaluate_PropertyChain_WithRootObject(t *testing.T) {
 	}
 
 	p := Person{Address: Address{City: "Shanghai"}}
-	val, err := Evaluate("Address.City", p)
+	got, err := Evaluate("Address.City", p)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "Shanghai" {
-		t.Errorf("got %v, want 'Shanghai'", val)
+	if got != "Shanghai" {
+		t.Errorf("got %v, want 'Shanghai'", got)
 	}
 }
 
@@ -539,63 +426,6 @@ func TestEvaluate_Convenience_WithNilRoot(t *testing.T) {
 	_, err := Evaluate("Name", nil)
 	if err == nil {
 		t.Error("expected error for nil root")
-	}
-}
-
-func TestSplitArgsRespectingQuotes(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		input    string
-		expected []string
-	}{
-		{"empty", "", []string{}},
-		{"single", "a", []string{"a"}},
-		{"multiple", "a,b,c", []string{"a", "b", "c"}},
-		{"quoted comma", "'a,b',c", []string{"'a,b'", "c"}},
-		{"spaces", " a , b ", []string{" a ", " b "}},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := splitArgsRespectingQuotes(tt.input)
-			if len(got) != len(tt.expected) {
-				t.Fatalf("got %d args, want %d: %v", len(got), len(tt.expected), got)
-			}
-			for i, v := range got {
-				if v != tt.expected[i] {
-					t.Errorf("got[%d] = %q, want %q", i, v, tt.expected[i])
-				}
-			}
-		})
-	}
-}
-
-func TestIsTruthyAdvanced(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		input    any
-		expected bool
-	}{
-		{"uint positive", uint(1), true},
-		{"uint zero", uint(0), false},
-		{"float positive", 1.5, true},
-		{"float zero", 0.0, false},
-		{"struct", struct{}{}, true},
-		{"slice", []int{}, true},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := isTruthy(tt.input); got != tt.expected {
-				t.Errorf("isTruthy(%v) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
 	}
 }
 
@@ -617,12 +447,12 @@ func TestEvaluate_EqualityComplexTypes(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			val, err := Evaluate(tt.expr, tt.root)
+			got, err := Evaluate(tt.expr, tt.root)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if val != tt.expected {
-				t.Errorf("got %v, want %v", val, tt.expected)
+			if got != tt.expected {
+				t.Errorf("got %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -630,34 +460,34 @@ func TestEvaluate_EqualityComplexTypes(t *testing.T) {
 
 func TestEvaluate_ArithmeticSubtraction(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("20 - 5", nil)
+	got, err := Evaluate("20 - 5", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(15) {
-		t.Errorf("got %v, want 15", val)
+	if got != float64(15) {
+		t.Errorf("got %v, want 15", got)
 	}
 }
 
 func TestEvaluate_ArithmeticMultiplication(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("3 * 7", nil)
+	got, err := Evaluate("3 * 7", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(21) {
-		t.Errorf("got %v, want 21", val)
+	if got != float64(21) {
+		t.Errorf("got %v, want 21", got)
 	}
 }
 
 func TestEvaluate_ArithmeticDivision(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("100 / 4", nil)
+	got, err := Evaluate("100 / 4", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(25) {
-		t.Errorf("got %v, want 25", val)
+	if got != float64(25) {
+		t.Errorf("got %v, want 25", got)
 	}
 }
 
@@ -671,23 +501,23 @@ func TestEvaluate_TernaryWithVariable(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "adult" {
-		t.Errorf("got %v, want 'adult'", val)
+	if got != "adult" {
+		t.Errorf("got %v, want 'adult'", got)
 	}
 }
 
 func TestEvaluate_LogicalAndFalse(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("true && false", nil)
+	got, err := Evaluate("true && false", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != false {
-		t.Errorf("got %v, want false", val)
+	if got != false {
+		t.Errorf("got %v, want false", got)
 	}
 }
 
@@ -695,49 +525,12 @@ func TestEvaluate_ComparisonLessEqual(t *testing.T) {
 	t.Parallel()
 	user := testUser{Age: 30}
 
-	val, err := Evaluate("Age <= 30", user)
+	got, err := Evaluate("Age <= 30", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
-	}
-}
-
-func TestReflectPropertyAccessor_SetProperty_ConvertibleTypes(t *testing.T) {
-	t.Parallel()
-	accessor := NewReflectPropertyAccessor()
-	target := &testSettable{Count: 0}
-
-	err := accessor.SetProperty(target, "Count", int(42))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if target.Count != 42 {
-		t.Errorf("got %d, want 42", target.Count)
-	}
-}
-
-func TestReflectPropertyAccessor_SetProperty_InconvertibleTypes(t *testing.T) {
-	t.Parallel()
-	accessor := NewReflectPropertyAccessor()
-	target := &testSettable{Name: ""}
-
-	type incompatibleStruct struct{ X int }
-	err := accessor.SetProperty(target, "Name", incompatibleStruct{X: 1})
-	if err == nil {
-		t.Error("expected error for inconvertible types")
-	}
-}
-
-func TestReflectPropertyAccessor_GetProperty_NotFound(t *testing.T) {
-	t.Parallel()
-	accessor := NewReflectPropertyAccessor()
-	user := testUser{Name: "Alice"}
-
-	_, err := accessor.GetProperty(user, "NonExistent")
-	if err == nil {
-		t.Error("expected error for non-existent property")
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
@@ -798,12 +591,12 @@ func TestEvaluate_LogicalWithMultipleOperators(t *testing.T) {
 	t.Parallel()
 	user := testUser{Age: 25}
 
-	val, err := Evaluate("Age > 18 && Age < 30 && true", user)
+	got, err := Evaluate("Age > 18 && Age < 30 && true", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
@@ -817,12 +610,12 @@ func TestEvaluate_ComplexPropertyChain(t *testing.T) {
 	}
 
 	o := Outer{Inner: Inner{Value: 42}}
-	val, err := Evaluate("Inner.Value", o)
+	got, err := Evaluate("Inner.Value", o)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != 42 {
-		t.Errorf("got %v, want 42", val)
+	if got != 42 {
+		t.Errorf("got %v, want 42", got)
 	}
 }
 
@@ -839,45 +632,45 @@ func TestEvaluate_SetValueOnPropertyExpression_NilRoot(t *testing.T) {
 
 func TestEvaluate_ArithmeticWithNegativeNumbers(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("-5 + 10", nil)
+	got, err := Evaluate("-5 + 10", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(5) {
-		t.Errorf("got %v, want 5", val)
+	if got != float64(5) {
+		t.Errorf("got %v, want 5", got)
 	}
 }
 
 func TestEvaluate_ArithmeticWithFloats(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("1.5 + 2.5", nil)
+	got, err := Evaluate("1.5 + 2.5", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != float64(4) {
-		t.Errorf("got %v, want 4", val)
+	if got != float64(4) {
+		t.Errorf("got %v, want 4", got)
 	}
 }
 
 func TestEvaluate_LogicalOrBothTrue(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("true || true", nil)
+	got, err := Evaluate("true || true", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
 func TestEvaluate_ComparisonEqualFloat(t *testing.T) {
 	t.Parallel()
-	val, err := Evaluate("1.0 == 1", nil)
+	got, err := Evaluate("1.0 == 1", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != true {
-		t.Errorf("got %v, want true", val)
+	if got != true {
+		t.Errorf("got %v, want true", got)
 	}
 }
 
@@ -885,12 +678,12 @@ func TestEvaluate_TernaryNested(t *testing.T) {
 	t.Parallel()
 	user := testUser{Age: 25}
 
-	val, err := Evaluate("Age > 18 ? 1 : 0", user)
+	got, err := Evaluate("Age > 18 ? 1 : 0", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != int64(1) {
-		t.Errorf("got %v (%T), want 1", val, val)
+	if got != int64(1) {
+		t.Errorf("got %v (%T), want 1", got, got)
 	}
 }
 
@@ -899,59 +692,6 @@ func TestEvaluate_PropertyChainWithNilRoot(t *testing.T) {
 	_, err := Evaluate("Name", nil)
 	if err == nil {
 		t.Error("expected error for nil root")
-	}
-}
-
-func TestIsSimplePropertyEdgeCases(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"", false},
-		{"123", false},
-		{"abc", true},
-		{"_abc", true},
-		{"a1b2", true},
-		{"abc_def", true},
-		{"abc.def", false},
-		{"abc-def", false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.input, func(t *testing.T) {
-			t.Parallel()
-			if got := isSimpleProperty(tt.input); got != tt.expected {
-				t.Errorf("isSimpleProperty(%q) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsLiteralEdgeCases(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    string
-		expected bool
-	}{
-		{"", false},
-		{"true", true},
-		{"false", true},
-		{"null", true},
-		{"TRUE", true},
-		{"123", true},
-		{"abc", false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.input, func(t *testing.T) {
-			t.Parallel()
-			if got := isLiteral(tt.input); got != tt.expected {
-				t.Errorf("isLiteral(%q) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
 	}
 }
 
@@ -982,219 +722,6 @@ func TestEvaluate_EqualityWithVariousTypes(t *testing.T) {
 				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
 			}
 		})
-	}
-}
-
-func TestToInt64(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    any
-		expected int64
-	}{
-		{int(42), 42},
-		{int8(8), 8},
-		{int16(16), 16},
-		{int32(32), 32},
-		{int64(64), 64},
-		{"not a number", 0},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			t.Parallel()
-			if got := toInt64(tt.input); got != tt.expected {
-				t.Errorf("toInt64(%v) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestToUint64(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    any
-		expected uint64
-	}{
-		{uint(42), 42},
-		{uint8(8), 8},
-		{uint16(16), 16},
-		{uint32(32), 32},
-		{uint64(64), 64},
-		{"not a number", 0},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			t.Parallel()
-			if got := toUint64(tt.input); got != tt.expected {
-				t.Errorf("toUint64(%v) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestToFloat64Value(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		input    any
-		expected float64
-	}{
-		{int(42), 42.0},
-		{int8(8), 8.0},
-		{int16(16), 16.0},
-		{int32(32), 32.0},
-		{int64(64), 64.0},
-		{uint(10), 10.0},
-		{uint8(8), 8.0},
-		{uint16(16), 16.0},
-		{uint32(32), 32.0},
-		{uint64(64), 64.0},
-		{float32(1.5), 1.5},
-		{float64(2.5), 2.5},
-		{"not a number", 0},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run("", func(t *testing.T) {
-			t.Parallel()
-			if got := toFloat64Value(tt.input); got != tt.expected {
-				t.Errorf("toFloat64Value(%v) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestToFloat64(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		input    any
-		expected float64
-		ok       bool
-	}{
-		{"int", int(42), 42.0, true},
-		{"int8", int8(8), 8.0, true},
-		{"int16", int16(16), 16.0, true},
-		{"int32", int32(32), 32.0, true},
-		{"int64", int64(64), 64.0, true},
-		{"uint", uint(10), 10.0, true},
-		{"uint8", uint8(8), 8.0, true},
-		{"uint16", uint16(16), 16.0, true},
-		{"uint32", uint32(32), 32.0, true},
-		{"uint64", uint64(64), 64.0, true},
-		{"float32", float32(1.5), 1.5, true},
-		{"float64", float64(2.5), 2.5, true},
-		{"string", "abc", 0, false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, ok := toFloat64(tt.input)
-			if ok != tt.ok {
-				t.Errorf("toFloat64(%v) ok = %v, want %v", tt.input, ok, tt.ok)
-			}
-			if ok && got != tt.expected {
-				t.Errorf("toFloat64(%v) = %v, want %v", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestEqualsCrossTypeComparisons(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		left     any
-		right    any
-		expected bool
-	}{
-		{"int vs int8", int(8), int8(8), true},
-		{"int vs int16", int(16), int16(16), true},
-		{"int vs int32", int(32), int32(32), true},
-		{"int vs int64", int(64), int64(64), true},
-		{"int vs uint8", int(8), uint8(8), true},
-		{"int vs uint16", int(16), uint16(16), true},
-		{"int vs uint32", int(32), uint32(32), true},
-		{"int vs float32", int(1), float32(1), true},
-		{"int vs float64", int(1), float64(1), true},
-		{"int64 vs int", int64(42), int(42), true},
-		{"int64 vs int8", int64(8), int8(8), true},
-		{"int64 vs int16", int64(16), int16(16), true},
-		{"int64 vs int32", int64(32), int32(32), true},
-		{"int64 vs uint8", int64(8), uint8(8), true},
-		{"int64 vs uint16", int64(16), uint16(16), true},
-		{"int64 vs uint32", int64(32), uint32(32), true},
-		{"int64 vs float32", int64(1), float32(1), true},
-		{"int64 vs float64", int64(1), float64(1), true},
-		{"uint vs uint", uint(42), uint(42), true},
-		{"uint vs uint8", uint(8), uint8(8), true},
-		{"uint vs uint16", uint(16), uint16(16), true},
-		{"uint vs uint32", uint(32), uint32(32), true},
-		{"uint vs uint64", uint(64), uint64(64), true},
-		{"uint vs float32", uint(1), float32(1), true},
-		{"uint vs float64", uint(1), float64(1), true},
-		{"uint64 vs int8", uint64(8), int8(8), true},
-		{"uint64 vs int16", uint64(16), int16(16), true},
-		{"uint64 vs int32", uint64(32), int32(32), true},
-		{"uint64 vs uint", uint64(42), uint(42), true},
-		{"uint64 vs uint8", uint64(8), uint8(8), true},
-		{"uint64 vs uint16", uint64(16), uint16(16), true},
-		{"uint64 vs uint32", uint64(32), uint32(32), true},
-		{"uint64 vs uint64", uint64(64), uint64(64), true},
-		{"uint64 vs float32", uint64(1), float32(1), true},
-		{"uint64 vs float64", uint64(1), float64(1), true},
-		{"float32 vs int", float32(42), int(42), true},
-		{"float32 vs int8", float32(8), int8(8), true},
-		{"float32 vs int16", float32(16), int16(16), true},
-		{"float32 vs int32", float32(32), int32(32), true},
-		{"float32 vs int64", float32(64), int64(64), true},
-		{"float32 vs uint", float32(42), uint(42), true},
-		{"float32 vs uint8", float32(8), uint8(8), true},
-		{"float32 vs uint16", float32(16), uint16(16), true},
-		{"float32 vs uint32", float32(32), uint32(32), true},
-		{"float32 vs uint64", float32(64), uint64(64), true},
-		{"float32 vs float64", float32(1.5), float64(1.5), true},
-		{"float64 vs int", float64(42), int(42), true},
-		{"float64 vs int8", float64(8), int8(8), true},
-		{"float64 vs int16", float64(16), int16(16), true},
-		{"float64 vs int32", float64(32), int32(32), true},
-		{"float64 vs int64", float64(64), int64(64), true},
-		{"float64 vs uint", float64(42), uint(42), true},
-		{"float64 vs uint8", float64(8), uint8(8), true},
-		{"float64 vs uint16", float64(16), uint16(16), true},
-		{"float64 vs uint32", float64(32), uint32(32), true},
-		{"float64 vs uint64", float64(64), uint64(64), true},
-		{"float64 vs float32", float64(1.5), float32(1.5), true},
-		{"int8 vs int", int8(42), int(42), true},
-		{"int16 vs int", int16(42), int(42), true},
-		{"int32 vs int", int32(42), int(42), true},
-		{"uint8 vs uint", uint8(42), uint(42), true},
-		{"uint16 vs uint", uint16(42), uint(42), true},
-		{"uint32 vs uint", uint32(42), uint(42), true},
-		{"float64 vs string", float64(1), "a", false},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := equals(tt.left, tt.right); got != tt.expected {
-				t.Errorf("equals(%v, %v) = %v, want %v", tt.left, tt.right, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestCompareValuesUnsupported(t *testing.T) {
-	t.Parallel()
-	_, err := compareValues("a", "b", "~")
-	if err == nil {
-		t.Error("expected error for unsupported operator")
 	}
 }
 

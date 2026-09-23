@@ -47,17 +47,17 @@ func TestHandlers_NewHealthInfo(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			h := NewHealthInfo(tt.status)
-			if h == nil {
+			healthInfo := NewHealthInfo(tt.status)
+			if healthInfo == nil {
 				t.Fatal("NewHealthInfo returned nil")
 			}
-			if h.Status != tt.status {
-				t.Errorf("Status = %s, want %s", h.Status, tt.status)
+			if healthInfo.Status != tt.status {
+				t.Errorf("Status = %s, want %s", healthInfo.Status, tt.status)
 			}
-			if h.Components == nil {
+			if healthInfo.Components == nil {
 				t.Error("Components should be initialized")
 			}
-			if h.Details == nil {
+			if healthInfo.Details == nil {
 				t.Error("Details should be initialized")
 			}
 		})

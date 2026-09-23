@@ -8,11 +8,51 @@ import (
 	"sync"
 )
 
+// 全局正则表达式缓存
+var defaultRegexCache = NewRegexCache()
+
+// ValidatorChain 验证器链，支持多个对象连续验证。
+type ValidatorChain struct {
+	validators       []Validator
+	stopOnFirstError bool
+}
+
+// structValidator 结构体验证器适配器
+type structValidator struct {
+	obj any
+}
+
+// valueValidator 值验证器适配器
+type valueValidator struct {
+	value any
+	rules string
+}
+
+// RegexCache 正则表达式缓存。
+type RegexCache struct {
+	mu    sync.RWMutex
+	cache map[string]*regexp.Regexp
+}
+
 // NewRuleBuilder 创建规则构建器。
 func NewRuleBuilder() *RuleBuilder {
 	return &RuleBuilder{
 		rules:    make([]string, 0),
 		messages: make(map[string]string),
+	}
+}
+
+// NewValidatorChain 创建验证器链。
+func NewValidatorChain() *ValidatorChain {
+	return &ValidatorChain{
+		validators: make([]Validator, 0),
+	}
+}
+
+// NewRegexCache 创建正则表达式缓存。
+func NewRegexCache() *RegexCache {
+	return &RegexCache{
+		cache: make(map[string]*regexp.Regexp),
 	}
 }
 
@@ -112,19 +152,6 @@ func (b *RuleBuilder) BuildWithMessages() (string, map[string]string) {
 	return b.Build(), b.messages
 }
 
-// ValidatorChain 验证器链，支持多个对象连续验证。
-type ValidatorChain struct {
-	validators       []Validator
-	stopOnFirstError bool
-}
-
-// NewValidatorChain 创建验证器链。
-func NewValidatorChain() *ValidatorChain {
-	return &ValidatorChain{
-		validators: make([]Validator, 0),
-	}
-}
-
 // StopOnFirstError 设置遇到第一个错误时停止。
 func (c *ValidatorChain) StopOnFirstError() *ValidatorChain {
 	c.stopOnFirstError = true
@@ -179,36 +206,14 @@ func (c *ValidatorChain) Validate() error {
 	return nil
 }
 
-// structValidator 结构体验证器适配器
-type structValidator struct {
-	obj any
-}
-
+// Validate 校验结构体对象并返回聚合的校验错误。
 func (v *structValidator) Validate(obj any) error {
 	return ValidateStruct(v.obj)
 }
 
-// valueValidator 值验证器适配器
-type valueValidator struct {
-	value any
-	rules string
-}
-
+// Validate 校验单个值并按规则列表返回校验结果。
 func (v *valueValidator) Validate(obj any) error {
 	return Validate(v.value, v.rules)
-}
-
-// RegexCache 正则表达式缓存。
-type RegexCache struct {
-	mu    sync.RWMutex
-	cache map[string]*regexp.Regexp
-}
-
-// NewRegexCache 创建正则表达式缓存。
-func NewRegexCache() *RegexCache {
-	return &RegexCache{
-		cache: make(map[string]*regexp.Regexp),
-	}
 }
 
 // Get 获取或编译正则表达式。
@@ -222,7 +227,7 @@ func (c *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
 
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to compile regexp: %w", err)
 	}
 
 	c.mu.Lock()
@@ -254,9 +259,6 @@ func (c *RegexCache) Size() int {
 	c.mu.RUnlock()
 	return n
 }
-
-// 全局正则表达式缓存
-var defaultRegexCache = NewRegexCache()
 
 // GetRegexCache 获取全局正则表达式缓存。
 func GetRegexCache() *RegexCache {

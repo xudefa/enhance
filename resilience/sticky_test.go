@@ -39,12 +39,12 @@ func TestStickySession_Next(t *testing.T) {
 		{URL: "http://backend1", ID: "1"},
 	}
 
-	result, err := ss.Next(backends)
+	backend, err := ss.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -56,12 +56,12 @@ func TestStickySession_NextWithSession_EmptySessionID(t *testing.T) {
 		{URL: "http://backend2", ID: "2"},
 	}
 
-	result, err := ss.NextWithSession(backends, "")
+	backend, err := ss.NextWithSession(backends, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -73,20 +73,20 @@ func TestStickySession_NextWithSession_NewSession(t *testing.T) {
 		{URL: "http://backend2", ID: "2"},
 	}
 
-	result, err := ss.NextWithSession(backends, "session-123")
+	selectedBackend, err := ss.NextWithSession(backends, "session-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
-		t.Fatal("expected non-nil result")
+	if selectedBackend == nil {
+		t.Fatal("expected non-nil backend")
 	}
 
 	backend, exists := ss.GetSessionBackend("session-123")
 	if !exists {
 		t.Error("expected session to be bound to a backend")
 	}
-	if backend.URL != result.URL {
-		t.Errorf("expected backend URL %s, got %s", result.URL, backend.URL)
+	if backend.URL != selectedBackend.URL {
+		t.Errorf("expected backend URL %s, got %s", selectedBackend.URL, backend.URL)
 	}
 }
 
@@ -126,12 +126,12 @@ func TestStickySession_NextWithSession_BackendRemoved(t *testing.T) {
 		{URL: "http://backend2", ID: "2"},
 	}
 
-	result, err := ss.NextWithSession(backends2, "session-789")
+	backend, err := ss.NextWithSession(backends2, "session-789")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend2" {
-		t.Errorf("expected http://backend2, got %s", result.URL)
+	if backend.URL != "http://backend2" {
+		t.Errorf("expected http://backend2, got %s", backend.URL)
 	}
 }
 

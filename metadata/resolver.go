@@ -11,8 +11,9 @@ import (
 
 // tagAnnotationResolverImpl TagAnnotationResolver 接口的默认实现。
 type tagAnnotationResolverImpl struct {
-	cache   sync.Map
-	tagName string
+	cache     sync.Map // reflect.Type -> []Annotation
+	nameCache sync.Map // reflect.Type -> map[string]Annotation (名称索引，O(1)查找)
+	tagName   string
 }
 
 // NewTagAnnotationResolver 创建 TagAnnotationResolver。
@@ -81,21 +82,28 @@ func (r *tagAnnotationResolverImpl) ResolveAnnotations(t reflect.Type) []Annotat
 	// 缓存结果
 	r.cache.Store(t, annotations)
 
+	// 构建名称索引缓存，O(1) 查找替代 O(n) 线性扫描
+	nameMap := make(map[string]Annotation, len(annotations))
+	for _, ann := range annotations {
+		nameMap[ann.Name] = ann
+	}
+	r.nameCache.Store(t, nameMap)
+
 	return cloneAnnotations(annotations)
 }
 
 // cloneAnnotations 深拷贝注解切片，防止调用方修改缓存中的注解。
 func cloneAnnotations(annotations []Annotation) []Annotation {
-	result := make([]Annotation, len(annotations))
+	cloned := make([]Annotation, len(annotations))
 	for i, ann := range annotations {
 		attrs := make(map[string]any, len(ann.Attributes))
 		for k, v := range ann.Attributes {
 			attrs[k] = v
 		}
 		ann.Attributes = attrs
-		result[i] = ann
+		cloned[i] = ann
 	}
-	return result
+	return cloned
 }
 
 // parseTagValue 解析 tag 值
@@ -180,7 +188,7 @@ func (r *tagAnnotationResolverImpl) parseAttributes(attrStr string) map[string]a
 
 // splitAttributes 分割属性字符串，支持引号内的逗号
 func splitAttributes(attrStr string) []string {
-	var result []string
+	var parts []string
 	var current strings.Builder
 	inQuotes := false
 
@@ -194,7 +202,7 @@ func splitAttributes(attrStr string) []string {
 				current.WriteRune(ch)
 				continue
 			}
-			result = append(result, current.String())
+			parts = append(parts, current.String())
 			current.Reset()
 		default:
 			current.WriteRune(ch)
@@ -203,10 +211,10 @@ func splitAttributes(attrStr string) []string {
 
 	// 添加最后一个属性
 	if current.Len() > 0 {
-		result = append(result, current.String())
+		parts = append(parts, current.String())
 	}
 
-	return result
+	return parts
 }
 
 // convertValue 转换字符串值为适当的类型
@@ -260,8 +268,17 @@ func (r *tagAnnotationResolverImpl) convertValue(value string) any {
 //   - Annotation: 注解，未找到时返回空注解
 func (r *tagAnnotationResolverImpl) GetAnnotation(target any, name string) Annotation {
 	t := reflect.TypeOf(target)
-	annotations := r.ResolveAnnotations(t)
 
+	// 性能优化：使用名称索引缓存 O(1) 查找
+	if nameMap, ok := r.nameCache.Load(t); ok {
+		if ann, found := nameMap.(map[string]Annotation)[name]; found {
+			cloned := cloneAnnotations([]Annotation{ann})
+			return cloned[0]
+		}
+		return Annotation{}
+	}
+
+	annotations := r.ResolveAnnotations(t)
 	for _, ann := range annotations {
 		if ann.Name == name {
 			return ann
@@ -281,8 +298,14 @@ func (r *tagAnnotationResolverImpl) GetAnnotation(target any, name string) Annot
 //   - bool: 是否存在
 func (r *tagAnnotationResolverImpl) HasAnnotation(target any, name string) bool {
 	t := reflect.TypeOf(target)
-	annotations := r.ResolveAnnotations(t)
 
+	// 性能优化：使用名称索引缓存 O(1) 查找
+	if nameMap, ok := r.nameCache.Load(t); ok {
+		_, found := nameMap.(map[string]Annotation)[name]
+		return found
+	}
+
+	annotations := r.ResolveAnnotations(t)
 	for _, ann := range annotations {
 		if ann.Name == name {
 			return true
@@ -314,16 +337,16 @@ func (r *tagAnnotationResolverImpl) GetAnnotations(target any) []Annotation {
 //   - []Annotation: 注解列表
 //   - error: 字段不存在时返回错误
 func (r *tagAnnotationResolverImpl) GetFieldAnnotations(target any, fieldName string) ([]Annotation, error) {
-	t := reflect.TypeOf(target)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+	typ := reflect.TypeOf(target)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
 	}
 
-	if t.Kind() != reflect.Struct {
+	if typ.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("target must be a struct or a pointer to a struct")
 	}
 
-	field, ok := t.FieldByName(fieldName)
+	field, ok := typ.FieldByName(fieldName)
 	if !ok {
 		return nil, fmt.Errorf("field %s does not exist", fieldName)
 	}
@@ -354,7 +377,7 @@ func (r *tagAnnotationResolverImpl) GetFieldAnnotations(target any, fieldName st
 func (r *tagAnnotationResolverImpl) GetFieldAnnotation(target any, fieldName, annotationName string) (Annotation, error) {
 	annotations, err := r.GetFieldAnnotations(target, fieldName)
 	if err != nil {
-		return Annotation{}, err
+		return Annotation{}, fmt.Errorf("get field annotations: %w", err)
 	}
 
 	for _, ann := range annotations {
@@ -376,16 +399,16 @@ func (r *tagAnnotationResolverImpl) GetFieldAnnotation(target any, fieldName, an
 //   - string: 属性值
 //   - bool: 是否存在
 func GetStringAttribute(ann Annotation, key string) (string, bool) {
-	val, ok := ann.Attributes[key]
+	value, ok := ann.Attributes[key]
 	if !ok {
 		return "", false
 	}
 
-	if str, ok := val.(string); ok {
+	if str, ok := value.(string); ok {
 		return str, true
 	}
 
-	return fmt.Sprintf("%v", val), true
+	return fmt.Sprintf("%v", value), true
 }
 
 // GetIntAttribute 获取整数类型的属性值
@@ -398,17 +421,17 @@ func GetStringAttribute(ann Annotation, key string) (string, bool) {
 //   - int: 属性值
 //   - bool: 是否存在且类型匹配
 func GetIntAttribute(ann Annotation, key string) (int, bool) {
-	val, ok := ann.Attributes[key]
+	value, ok := ann.Attributes[key]
 	if !ok {
 		return 0, false
 	}
 
-	if i, ok := val.(int); ok {
+	if i, ok := value.(int); ok {
 		return i, true
 	}
 
 	// 尝试从 float64 转换
-	if f, ok := val.(float64); ok {
+	if f, ok := value.(float64); ok {
 		return int(f), true
 	}
 
@@ -425,12 +448,12 @@ func GetIntAttribute(ann Annotation, key string) (int, bool) {
 //   - bool: 属性值
 //   - bool: 是否存在
 func GetBoolAttribute(ann Annotation, key string) (bool, bool) {
-	val, ok := ann.Attributes[key]
+	value, ok := ann.Attributes[key]
 	if !ok {
 		return false, false
 	}
 
-	if b, ok := val.(bool); ok {
+	if b, ok := value.(bool); ok {
 		return b, true
 	}
 

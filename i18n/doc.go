@@ -97,36 +97,36 @@ func formatMessage(msg string, args []any) string {
 func escapePercent(msg string) (string, bool) {
 	const verbs = "vTtbcdoOxXUeEfFgGqs"
 	hasVerb := false
-	var b strings.Builder
+	var builder strings.Builder
 	for i := 0; i < len(msg); i++ {
 		if msg[i] != '%' {
-			b.WriteByte(msg[i])
+			builder.WriteByte(msg[i])
 			continue
 		}
 
 		// 已转义的字面量 %（%%），原样保留
 		if i+1 < len(msg) && msg[i+1] == '%' {
-			b.WriteString("%%")
+			builder.WriteString("%%")
 			i++
 			continue
 		}
 
 		// 解析 %[flags][width][.precision]verb
-		j := i + 1
-		for j < len(msg) && isFormatPrefix(msg[j]) {
-			j++
+		end := i + 1
+		for end < len(msg) && isFormatPrefix(msg[end]) {
+			end++
 		}
-		if j < len(msg) && strings.ContainsRune(verbs, rune(msg[j])) {
+		if end < len(msg) && strings.ContainsRune(verbs, rune(msg[end])) {
 			hasVerb = true
-			b.WriteString(msg[i : j+1])
-			i = j
+			builder.WriteString(msg[i : end+1])
+			i = end
 			continue
 		}
 
 		// 字面量 %，转义为 %%
-		b.WriteString("%%")
+		builder.WriteString("%%")
 	}
-	return b.String(), hasVerb
+	return builder.String(), hasVerb
 }
 
 // isFormatPrefix 判断字符是否为格式动词前缀（标志、宽度、精度）。

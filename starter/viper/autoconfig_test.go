@@ -7,6 +7,7 @@ import (
 )
 
 func TestViperConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-viper", environment.PriorityNormal, map[string]any{
 		"viper.enabled":       "true",
@@ -46,6 +47,7 @@ func TestViperConfig_LoadConfig(t *testing.T) {
 }
 
 func TestViperConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &ViperConfig{
 		ConfigName:   DefaultConfigName,
 		ConfigType:   DefaultConfigType,

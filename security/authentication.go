@@ -49,9 +49,9 @@ func (t *UsernamePasswordAuthenticationToken) Credentials() any {
 
 // Authorities 返回认证令牌的授权列表（返回副本以保证安全）。
 func (t *UsernamePasswordAuthenticationToken) Authorities() []string {
-	result := make([]string, len(t.authorities))
-	copy(result, t.authorities)
-	return result
+	authoritiesCopy := make([]string, len(t.authorities))
+	copy(authoritiesCopy, t.authorities)
+	return authoritiesCopy
 }
 
 // Authenticated 返回认证令牌是否已通过验证。
@@ -120,13 +120,13 @@ func (m *ProviderManager) Authenticate(ctx context.Context, token Authentication
 
 	for _, provider := range providers {
 		if provider.Supports(token) {
-			result, err := provider.Authenticate(ctx, token)
+			authenticated, err := provider.Authenticate(ctx, token)
 			if err != nil {
 				lastErr = err
 				continue
 			}
-			if result != nil {
-				return result, nil
+			if authenticated != nil {
+				return authenticated, nil
 			}
 		}
 	}
@@ -163,12 +163,7 @@ func NewDaoAuthenticationProvider(userDetailsService UserDetailsService, passwor
 
 // Authenticate 执行认证逻辑
 func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
-	username := ""
-	if name, ok := token.Principal().(string); ok {
-		username = name
-	} else if userDetails, ok := token.Principal().(UserDetails); ok {
-		username = userDetails.Username()
-	}
+	username := resolveTokenUsername(token)
 
 	if username == "" {
 		p.logger.Debug(ctx, "认证失败：用户名为空")
@@ -186,7 +181,7 @@ func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 			log.KeyValue{Key: "username", Value: username},
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
-		return nil, err
+		return nil, fmt.Errorf("加载用户 %s 信息失败: %w", username, err)
 	}
 
 	p.logger.Debug(ctx, "验证用户密码", log.KeyValue{Key: "username", Value: username})
@@ -200,28 +195,48 @@ func (p *DaoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 		return nil, ErrBadCredentials
 	}
 
-	if !user.Enabled() {
-		p.logger.Warn(ctx, "用户已禁用", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user is disabled")
-	}
-
-	if !user.AccountNonLocked() {
-		p.logger.Warn(ctx, "用户账户已锁定", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user account is locked")
-	}
-
-	if !user.AccountNonExpired() {
-		p.logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user account is expired")
-	}
-
-	if !user.CredentialsNonExpired() {
-		p.logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user credentials are expired")
+	if err := validateUserState(ctx, p.logger, user, username); err != nil {
+		return nil, fmt.Errorf("validate user state: %w", err)
 	}
 
 	p.logger.Info(ctx, "用户认证成功", log.KeyValue{Key: "username", Value: username})
 	return NewAuthenticatedUsernamePasswordAuthenticationToken(user, user.Authorities()), nil
+}
+
+// resolveTokenUsername 从认证令牌中提取用户名。
+func resolveTokenUsername(token AuthenticationToken) string {
+	username := ""
+	if name, ok := token.Principal().(string); ok {
+		username = name
+	} else if userDetails, ok := token.Principal().(UserDetails); ok {
+		username = userDetails.Username()
+	}
+	return username
+}
+
+// validateUserState 校验用户账户状态，返回 nil 表示可正常认证。
+func validateUserState(ctx context.Context, logger log.Logger, user UserDetails, username string) error {
+	if !user.Enabled() {
+		logger.Warn(ctx, "用户已禁用", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user is disabled")
+	}
+
+	if !user.AccountNonLocked() {
+		logger.Warn(ctx, "用户账户已锁定", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user account is locked")
+	}
+
+	if !user.AccountNonExpired() {
+		logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user account is expired")
+	}
+
+	if !user.CredentialsNonExpired() {
+		logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user credentials are expired")
+	}
+
+	return nil
 }
 
 // Supports 判断是否支持该认证方式

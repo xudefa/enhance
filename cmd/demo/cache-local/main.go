@@ -37,8 +37,8 @@ func main() {
 	_ = lruCache.Set(ctx, "user:3", &User{ID: 3, Name: "王五", Email: "wangwu@example.com"}, 0)
 
 	// 获取缓存
-	if val, err := lruCache.Get(ctx, "user:1"); err == nil {
-		user := val.(*User)
+	if cachedVal, err := lruCache.Get(ctx, "user:1"); err == nil {
+		user := cachedVal.(*User)
 		fmt.Printf("   获取 user:1 -> %s (%s)\n", user.Name, user.Email)
 	}
 
@@ -55,8 +55,8 @@ func main() {
 		"role":    "admin",
 	}, time.Minute)
 
-	if val, err := shardedCache.Get(ctx, "session:abc123"); err == nil {
-		session := val.(map[string]any)
+	if cachedVal, err := shardedCache.Get(ctx, "session:abc123"); err == nil {
+		session := cachedVal.(map[string]any)
 		fmt.Printf("   获取 session -> user_id: %v, role: %v\n", session["user_id"], session["role"])
 	}
 

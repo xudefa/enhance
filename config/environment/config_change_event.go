@@ -23,21 +23,56 @@ func (e *ConfigChangeEvent) Timestamp() time.Time {
 	return e.timestamp
 }
 
+// configChangeEventOptions 保存配置变更事件的可选参数。
+type configChangeEventOptions struct {
+	keys      []string
+	oldValues map[string]any
+	newValues map[string]any
+	source    string
+}
+
+// ConfigChangeEventOption 配置变更事件的可选参数。
+type ConfigChangeEventOption func(*configChangeEventOptions)
+
+// WithEventKeys 设置变更的配置键列表。
+func WithEventKeys(keys []string) ConfigChangeEventOption {
+	return func(o *configChangeEventOptions) {
+		o.keys = keys
+	}
+}
+
+// WithEventValues 设置变更前后的值。
+func WithEventValues(oldValues, newValues map[string]any) ConfigChangeEventOption {
+	return func(o *configChangeEventOptions) {
+		o.oldValues = oldValues
+		o.newValues = newValues
+	}
+}
+
+// WithEventSource 设置配置源类型（如 "nacos"、"etcd"）。
+func WithEventSource(source string) ConfigChangeEventOption {
+	return func(o *configChangeEventOptions) {
+		o.source = source
+	}
+}
+
 // NewConfigChangeEvent 创建配置变更事件
 //
 // 参数：
 //   - eventType: 事件类型（"modify"、"delete"、"create"）
-//   - keys: 变更的配置键列表
-//   - oldValues: 变更前的值
-//   - newValues: 变更后的值
-//   - source: 配置源类型
-func NewConfigChangeEvent(eventType string, keys []string, oldValues, newValues map[string]any, source string) ConfigChangeEvent {
+//   - opts: 可选参数（WithEventKeys / WithEventValues / WithEventSource）
+func NewConfigChangeEvent(eventType string, opts ...ConfigChangeEventOption) ConfigChangeEvent {
+	options := &configChangeEventOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	return ConfigChangeEvent{
 		EventType: eventType,
-		Keys:      keys,
-		OldValues: oldValues,
-		NewValues: newValues,
-		Source:    source,
+		Keys:      options.keys,
+		OldValues: options.oldValues,
+		NewValues: options.newValues,
+		Source:    options.source,
 		timestamp: time.Now(),
 		Metadata:  make(map[string]string),
 	}

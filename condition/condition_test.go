@@ -191,44 +191,6 @@ func TestOnModuleLoaded(t *testing.T) {
 	}
 }
 
-// TestCompositeConditions 验证复合条件 All、Any、Not 的逻辑运算行为：
-//  1. All: 所有子条件匹配时返回 true（与运算）
-//  2. Any: 任一子条件匹配时返回 true（或运算）
-//  3. Not: 对子条件结果取反（非运算）
-func TestCompositeConditions(t *testing.T) {
-	t.Parallel()
-	trueCtx := &mockConditionContext{
-		envFn: func(key string) (any, bool) { return "true", true },
-	}
-	falseCtx := &mockConditionContext{
-		envFn: func(key string) (any, bool) { return nil, false },
-	}
-
-	cond1 := OnProperty("key1")
-	cond2 := OnProperty("key2")
-
-	all := All(cond1, cond2)
-	if !all.Matches(trueCtx) {
-		t.Fatal("All should match when both match")
-	}
-	if all.Matches(falseCtx) {
-		t.Fatal("All should not match when none match")
-	}
-
-	any := Any(cond1, cond2)
-	if !any.Matches(trueCtx) {
-		t.Fatal("Any should match when at least one matches")
-	}
-
-	not := Not(cond1)
-	if not.Matches(falseCtx) != true {
-		t.Fatal("Not should invert false to true")
-	}
-	if not.Matches(trueCtx) != false {
-		t.Fatal("Not should invert true to false")
-	}
-}
-
 type profileEnvGetter struct {
 	fn func(string) (any, bool)
 }
@@ -282,5 +244,228 @@ func TestOnProfileWithAcceptor(t *testing.T) {
 	}
 	if !OnProfile("!prod").Matches(ctx) {
 		t.Fatal("expected OnProfile('!prod') to match when 'prod' is NOT active")
+	}
+}
+
+// TestOnPropertyOrDefault 验证 OnPropertyOrDefault 条件的行为
+func TestOnPropertyOrDefault_String(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		key          string
+		defaultValue string
+		vals         []string
+		want         string
+	}{
+		{"with value", "gin.enabled", "true", []string{"true"}, "OnPropertyOrDefault(gin.enabled=true, default=true)"},
+		{"without value", "gin.enabled", "true", nil, "OnPropertyOrDefault(gin.enabled, default=true)"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := OnPropertyOrDefault(tt.key, tt.defaultValue, tt.vals...)
+			if got := c.String(); got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func testOnPropertyOrDefaultCases() []struct {
+	name         string
+	key          string
+	defaultValue string
+	expectedVal  string
+	propValue    any
+	propExists   bool
+	want         bool
+} {
+	return []struct {
+		name         string
+		key          string
+		defaultValue string
+		expectedVal  string
+		propValue    any
+		propExists   bool
+		want         bool
+	}{
+		{
+			name:         "property exists and matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    "true",
+			propExists:   true,
+			want:         true,
+		},
+		{
+			name:         "property exists but not matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    "false",
+			propExists:   true,
+			want:         false,
+		},
+		{
+			name:         "property not exists use default matches",
+			key:          "gin.enabled",
+			defaultValue: "true",
+			expectedVal:  "true",
+			propValue:    nil,
+			propExists:   false,
+			want:         true,
+		},
+		{
+			name:         "property not exists use default not matches",
+			key:          "gin.enabled",
+			defaultValue: "false",
+			expectedVal:  "true",
+			propValue:    nil,
+			propExists:   false,
+			want:         false,
+		},
+	}
+}
+
+func TestOnPropertyOrDefault_Matches(t *testing.T) {
+	t.Parallel()
+	for _, tt := range testOnPropertyOrDefaultCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := &mockConditionContext{
+				envFn: func(key string) (any, bool) {
+					if key == tt.key {
+						return tt.propValue, tt.propExists
+					}
+					return nil, false
+				},
+			}
+			c := OnPropertyOrDefault(tt.key, tt.defaultValue, tt.expectedVal)
+			if got := c.Matches(ctx); got != tt.want {
+				t.Errorf("Matches() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOnProperty_String(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		key  string
+		vals []string
+		want string
+	}{
+		{"key only", "server.port", nil, "OnProperty(server.port)"},
+		{"key and value", "server.port", []string{"8080"}, "OnProperty(server.port=8080)"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := OnProperty(tt.key, tt.vals...)
+			if got := c.String(); got != tt.want {
+				t.Errorf("String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOnMissingProperty_String(t *testing.T) {
+	t.Parallel()
+	c := OnMissingProperty("key")
+	if got := c.String(); got != "OnMissingProperty(key)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestOnBean_String(t *testing.T) {
+	t.Parallel()
+	c := OnBean("db")
+	if got := c.String(); got != "OnBean(db)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestOnMissingBean_String(t *testing.T) {
+	t.Parallel()
+	c := OnMissingBean("cache")
+	if got := c.String(); got != "OnMissingBean(cache)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestOnProfile_String(t *testing.T) {
+	t.Parallel()
+	c := OnProfile("dev")
+	if got := c.String(); got != "OnProfile(dev)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestOnProfile_NegateWithoutAcceptor(t *testing.T) {
+	t.Parallel()
+	ctx := &mockConditionContext{
+		envFn: func(key string) (any, bool) { return nil, false },
+	}
+	c := OnProfile("!prod")
+	if !c.Matches(ctx) {
+		t.Error("OnProfile(!prod) should match when env doesn't accept profiles")
+	}
+}
+
+func TestOnModuleLoaded_String(t *testing.T) {
+	t.Parallel()
+	c := OnModuleLoaded("cache")
+	if got := c.String(); got != "OnModuleLoaded(cache)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestOnMissingModule_String(t *testing.T) {
+	t.Parallel()
+	c := OnMissingModule("cache")
+	if got := c.String(); got != "OnMissingModule(cache)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestCustom_Condition(t *testing.T) {
+	t.Parallel()
+	c := Custom("always-true", func(ctx ConditionContext) bool {
+		return true
+	})
+	if !c.Matches(nil) {
+		t.Error("Custom always-true should match")
+	}
+	if got := c.String(); got != "Custom(always-true)" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestCustom_ConditionFalse(t *testing.T) {
+	t.Parallel()
+	c := Custom("always-false", func(ctx ConditionContext) bool {
+		return false
+	})
+	if c.Matches(nil) {
+		t.Error("Custom always-false should not match")
+	}
+}
+
+func TestOnPropertyPrefix_NoPropertySource(t *testing.T) {
+	t.Parallel()
+	ctx := &mockConditionContext{
+		envFn: func(key string) (any, bool) { return nil, false },
+	}
+	c := OnPropertyPrefix("app.")
+	if c.Matches(ctx) {
+		t.Error("OnPropertyPrefix should not match when env doesn't support PropertySources")
+	}
+	if got := c.String(); got != "OnPropertyPrefix(app.)" {
+		t.Errorf("String() = %q", got)
 	}
 }

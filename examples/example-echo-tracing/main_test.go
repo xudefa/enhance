@@ -17,6 +17,7 @@ import (
 )
 
 func TestEchoTracingIntegration(t *testing.T) {
+	tt.Parallel()
 	echoServer := echo.New()
 
 	app, err := boot.NewApplication(
@@ -132,6 +133,7 @@ func TestEchoTracingIntegration(t *testing.T) {
 }
 
 func TestEchoTracingHTTP(t *testing.T) {
+	tt.Parallel()
 	echoServer := echo.New()
 
 	app, err := boot.NewApplication(
@@ -255,6 +257,7 @@ func TestEchoTracingHTTP(t *testing.T) {
 }
 
 func TestEchoActuatorEndpointsWithTracing(t *testing.T) {
+	tt.Parallel()
 	echoServer := echo.New()
 
 	app, err := boot.NewApplication(
@@ -347,6 +350,7 @@ func TestEchoActuatorEndpointsWithTracing(t *testing.T) {
 }
 
 func TestEchoActuatorEndpointsTracingContextPropagation(t *testing.T) {
+	tt.Parallel()
 	echoServer := echo.New()
 
 	app, err := boot.NewApplication(

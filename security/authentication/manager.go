@@ -40,13 +40,13 @@ func (m *ProviderManager) Authenticate(ctx context.Context, token Authentication
 		if !provider.Supports(token) {
 			continue
 		}
-		result, err := provider.Authenticate(ctx, token)
+		authenticated, err := provider.Authenticate(ctx, token)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		if result != nil {
-			return result, nil
+		if authenticated != nil {
+			return authenticated, nil
 		}
 	}
 

@@ -26,13 +26,13 @@ func NewRequestScope() *RequestScope {
 // 注意：factory 在锁外执行，避免 factory 内部再次调用 Get 时发生重入死锁。
 func (s *RequestScope) Get(name string, factory func() any) any {
 	s.mu.RLock()
-	val, ok := s.cache[name]
+	bean, ok := s.cache[name]
 	s.mu.RUnlock()
 	if ok {
-		return val
+		return bean
 	}
 
-	val = factory()
+	bean = factory()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -42,8 +42,8 @@ func (s *RequestScope) Get(name string, factory func() any) any {
 		return cached
 	}
 
-	s.cache[name] = val
-	return val
+	s.cache[name] = bean
+	return bean
 }
 
 // Set 设置 Bean 实例

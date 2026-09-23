@@ -80,42 +80,66 @@ package xorm
 // ==================== 配置键常量 ====================
 
 const (
-	// XORM 配置
-	XORMEnabled         = "db.xorm.enabled"
-	XORMType            = "db.xorm.type"
-	XORMHost            = "db.xorm.host"
-	XORMPort            = "db.xorm.port"
-	XORMUsername        = "db.xorm.username"
-	XORMPassword        = "db.xorm.password"
-	XORMDatabase        = "db.xorm.database"
-	XORMCharset         = "db.xorm.charset"
-	XORMMaxOpenConns    = "db.xorm.max-open-conns"
-	XORMMaxIdleConns    = "db.xorm.max-idle-conns"
+	// XORMEnabled 是否启用 XORM。
+	XORMEnabled = "db.xorm.enabled"
+	// XORMType 数据库类型。
+	XORMType = "db.xorm.type"
+	// XORMHost 数据库主机地址。
+	XORMHost = "db.xorm.host"
+	// XORMPort 数据库端口。
+	XORMPort = "db.xorm.port"
+	// XORMUsername 数据库用户名。
+	XORMUsername = "db.xorm.username"
+	// XORMPassword 数据库密码。
+	XORMPassword = "db.xorm.password"
+	// XORMDatabase 数据库名称。
+	XORMDatabase = "db.xorm.database"
+	// XORMCharset 字符集。
+	XORMCharset = "db.xorm.charset"
+	// XORMMaxOpenConns 最大打开连接数。
+	XORMMaxOpenConns = "db.xorm.max-open-conns"
+	// XORMMaxIdleConns 最大空闲连接数。
+	XORMMaxIdleConns = "db.xorm.max-idle-conns"
+	// XORMConnMaxLifetime 连接最大生命周期。
 	XORMConnMaxLifetime = "db.xorm.conn-max-lifetime"
-	XORMShowSQL         = "db.xorm.show-sql"
+	// XORMShowSQL 是否显示 SQL 日志。
+	XORMShowSQL = "db.xorm.show-sql"
 
 	// 日志字段常量
-	LogFieldHost     = "host"
-	LogFieldPort     = "port"
+	LogFieldHost = "host"
+	// LogFieldPort 日志字段：端口。
+	LogFieldPort = "port"
+	// LogFieldDatabase 日志字段：数据库。
 	LogFieldDatabase = "database"
-	LogFieldType     = "type"
+	// LogFieldType 日志字段：数据库类型。
+	LogFieldType = "type"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	// XORM 默认值
-	DefaultXORMType            = "mysql"
-	DefaultXORMHost            = "localhost"
-	DefaultXORMPort            = 3306
-	DefaultXORMUsername        = "scott"
-	DefaultXORMPassword        = "123456"
-	DefaultXORMDatabase        = "demo"
-	DefaultXORMCharset         = "utf8mb4"
-	DefaultXORMMaxOpenConns    = 100
-	DefaultXORMMaxIdleConns    = 10
+	// DefaultXORMType 默认数据库类型。
+	DefaultXORMType = "mysql"
+	// DefaultXORMHost 默认数据库主机。
+	DefaultXORMHost = "localhost"
+	// DefaultXORMPort 默认数据库端口。
+	DefaultXORMPort = 3306
+	// DefaultXORMUsername 默认数据库用户名。
+	DefaultXORMUsername = "scott"
+	// DefaultXORMPassword 默认数据库密码。
+	DefaultXORMPassword = "123456"
+	// DefaultXORMDatabase 默认数据库名称。
+	DefaultXORMDatabase = "demo"
+	// DefaultXORMCharset 默认字符集。
+	DefaultXORMCharset = "utf8mb4"
+	// DefaultXORMMaxOpenConns 默认最大打开连接数。
+	DefaultXORMMaxOpenConns = 100
+	// DefaultXORMMaxIdleConns 默认最大空闲连接数。
+	DefaultXORMMaxIdleConns = 10
+	// DefaultXORMConnMaxLifetime 默认连接最大生命周期。
 	DefaultXORMConnMaxLifetime = 3600
-	DefaultXORMShowSQL         = false
+	// DefaultXORMShowSQL 默认是否显示 SQL 日志。
+	DefaultXORMShowSQL = false
 
 	// 条件值常量
 	ConditionTrue = "true"

@@ -46,14 +46,9 @@ func NewDaoAuthenticationProvider(
 
 // Authenticate 执行认证逻辑。
 func (p *daoAuthenticationProvider) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
-	var username string
-	switch principal := token.Principal().(type) {
-	case string:
-		username = principal
-	case UserDetails:
-		username = principal.Username()
-	default:
-		return nil, fmt.Errorf("unsupported principal type: %T", token.Principal())
+	username, err := extractTokenUsername(token)
+	if err != nil {
+		return nil, fmt.Errorf("extract token username: %w", err)
 	}
 	if username == "" {
 		p.logger.Debug(ctx, "认证失败：用户名为空")
@@ -71,7 +66,7 @@ func (p *daoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 			log.KeyValue{Key: "username", Value: username},
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
-		return nil, err
+		return nil, fmt.Errorf("加载用户 %s 信息失败: %w", username, err)
 	}
 
 	p.logger.Debug(ctx, "验证用户密码", log.KeyValue{Key: "username", Value: username})
@@ -85,28 +80,24 @@ func (p *daoAuthenticationProvider) Authenticate(ctx context.Context, token Auth
 		return nil, ErrBadCredentials
 	}
 
-	if !user.Enabled() {
-		p.logger.Warn(ctx, "用户已禁用", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user is disabled")
-	}
-
-	if !user.AccountNonLocked() {
-		p.logger.Warn(ctx, "用户账户已锁定", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user account is locked")
-	}
-
-	if !user.AccountNonExpired() {
-		p.logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user account is expired")
-	}
-
-	if !user.CredentialsNonExpired() {
-		p.logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
-		return nil, errors.New("user credentials are expired")
+	if err := validateUserState(ctx, p.logger, user, username); err != nil {
+		return nil, fmt.Errorf("validate user state: %w", err)
 	}
 
 	p.logger.Info(ctx, "用户认证成功", log.KeyValue{Key: "username", Value: username})
 	return NewAuthenticatedUsernamePasswordToken(user, nil, user.Authorities()), nil
+}
+
+// extractTokenUsername 从认证令牌中提取用户名，不支持的 principal 类型返回错误。
+func extractTokenUsername(token AuthenticationToken) (string, error) {
+	switch principal := token.Principal().(type) {
+	case string:
+		return principal, nil
+	case UserDetails:
+		return principal.Username(), nil
+	default:
+		return "", fmt.Errorf("unsupported principal type: %T", token.Principal())
+	}
 }
 
 // Supports 判断是否支持该令牌类型。
@@ -146,4 +137,29 @@ func (p *anonymousAuthenticationProvider) Authenticate(_ context.Context, token 
 func (p *anonymousAuthenticationProvider) Supports(token AuthenticationToken) bool {
 	_, ok := token.(*UsernamePasswordToken)
 	return ok
+}
+
+// validateUserState 校验用户账户状态，返回 nil 表示可正常认证。
+func validateUserState(ctx context.Context, logger log.Logger, user UserDetails, username string) error {
+	if !user.Enabled() {
+		logger.Warn(ctx, "用户已禁用", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user is disabled")
+	}
+
+	if !user.AccountNonLocked() {
+		logger.Warn(ctx, "用户账户已锁定", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user account is locked")
+	}
+
+	if !user.AccountNonExpired() {
+		logger.Warn(ctx, "用户账户已过期", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user account is expired")
+	}
+
+	if !user.CredentialsNonExpired() {
+		logger.Warn(ctx, "用户凭证已过期", log.KeyValue{Key: "username", Value: username})
+		return errors.New("user credentials are expired")
+	}
+
+	return nil
 }

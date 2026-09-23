@@ -44,7 +44,7 @@ func TestResolverChain_Resolve_NoDeadlockOnReentrant(t *testing.T) {
 		supports: func(err error) bool { return true },
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
 			chain.AddResolver(&mockResolver{order: 2})
-			return NewErrorResponse(200, "ok", "", "", nil)
+			return NewErrorResponse(200, "ok")
 		},
 	}
 	chain.AddResolver(resolver)

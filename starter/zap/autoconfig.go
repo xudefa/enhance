@@ -20,7 +20,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ZapAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ZapEnabled, ConditionTrue),
+			// 约定优于配置：当 zap.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ZapEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)

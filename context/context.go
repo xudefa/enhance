@@ -34,17 +34,19 @@ type DefaultApplicationContext struct {
 // 提供便捷的 PublishAsync 和 PublishAsyncWithCtx 方法。
 type asyncEventPublisherAdapter event.AsyncPublisher
 
+// PublishAsync 异步发布事件，使用后台上下文。
 func (a *asyncEventPublisherAdapter) PublishAsync(evt event.ApplicationEvent) {
 	ctx := context.Background()
 	(*event.AsyncPublisher)(a).Publish(ctx, evt)
 }
 
+// PublishAsyncWithCtx 使用指定上下文异步发布事件。
 func (a *asyncEventPublisherAdapter) PublishAsyncWithCtx(ctx context.Context, evt event.ApplicationEvent) {
 	(*event.AsyncPublisher)(a).Publish(ctx, evt)
 }
 
 // NewApplicationContext 创建默认应用上下文实例。
-func NewApplicationContext(container core.Container, env *environment.Environment, opts ...refresh.RefreshOption) *DefaultApplicationContext {
+func NewApplicationContext(container core.Container, env *environment.Environment, opts ...refresh.RefreshOption) ApplicationContext {
 	refreshMgr := refresh.NewRefreshScopeManager(container, slog.Default(), opts...)
 	events := event.NewEventBusWithOrdering()
 	return &DefaultApplicationContext{
@@ -57,34 +59,42 @@ func NewApplicationContext(container core.Container, env *environment.Environmen
 	}
 }
 
+// Container 返回应用上下文持有的 IoC 容器。
 func (c *DefaultApplicationContext) Container() core.Container {
 	return c.container
 }
 
+// Environment 返回应用上下文持有的环境配置。
 func (c *DefaultApplicationContext) Environment() *environment.Environment {
 	return c.env
 }
 
+// Lifecycle 返回应用上下文持有的生命周期管理器。
 func (c *DefaultApplicationContext) Lifecycle() *lifecycle.LifecycleManager {
 	return c.lifecycle
 }
 
+// EventBus 返回应用上下文持有的事件总线访问接口。
 func (c *DefaultApplicationContext) EventBus() EventBusAccess {
 	return c.events
 }
 
+// EventPublisher 返回应用上下文持有的事件发布接口。
 func (c *DefaultApplicationContext) EventPublisher() EventPublisher {
 	return c.events
 }
 
+// AsyncEventPublisher 返回应用上下文的异步事件发布接口。
 func (c *DefaultApplicationContext) AsyncEventPublisher() AsyncEventPublisher {
 	return (*asyncEventPublisherAdapter)(c.asyncPublisher)
 }
 
+// RefreshScopeManager 返回应用上下文的刷新作用域管理器。
 func (c *DefaultApplicationContext) RefreshScopeManager() *refresh.RefreshScopeManager {
 	return c.refreshScopeMgr
 }
 
+// Register 按给定类型注册 Bean 定义。
 func (c *DefaultApplicationContext) Register(t reflect.Type, opts ...core.BeanOption) error {
 	def := registry.BeanDef{
 		Type: t,
@@ -95,10 +105,11 @@ func (c *DefaultApplicationContext) Register(t reflect.Type, opts ...core.BeanOp
 	return c.container.RegisterBean(def)
 }
 
+// GetByType 按类型获取首个 Bean 实例，未找到时返回 ErrBeanNotFound。
 func (c *DefaultApplicationContext) GetByType(t reflect.Type) (any, error) {
 	instances, err := c.container.Get(t)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("按类型获取 Bean 失败: %w", err)
 	}
 	if len(instances) == 0 {
 		return nil, core.ErrBeanNotFound
@@ -106,6 +117,7 @@ func (c *DefaultApplicationContext) GetByType(t reflect.Type) (any, error) {
 	return instances[0], nil
 }
 
+// Invoke 调用函数并按其参数类型从容器注入依赖。
 func (c *DefaultApplicationContext) Invoke(fn any) error {
 	rv := reflect.ValueOf(fn)
 	if rv.Kind() != reflect.Func {
@@ -148,7 +160,7 @@ func extractInvokeError(results []reflect.Value, fnType reflect.Type) error {
 	if !ok {
 		return nil
 	}
-	return err
+	return fmt.Errorf("extract error from result: %w", err)
 }
 
 // isNilValue 判断 reflect.Value 是否为 nil，支持 interface 包裹的 typed-nil。
@@ -171,7 +183,7 @@ func (c *DefaultApplicationContext) Start() error {
 	c.events.Publish(&event.BaseEvent{EventType: event.EventApplicationStarted})
 
 	if err := c.lifecycle.SetPhase(lifecycle.PhaseRunning); err != nil {
-		return err
+		return fmt.Errorf("启动应用生命周期失败: %w", err)
 	}
 
 	c.events.Publish(&event.BaseEvent{EventType: event.EventApplicationReady})
@@ -181,7 +193,7 @@ func (c *DefaultApplicationContext) Start() error {
 // Stop 停止应用：PhaseRunning → PhaseStopped
 func (c *DefaultApplicationContext) Stop() error {
 	if err := c.lifecycle.SetPhase(lifecycle.PhaseStopped); err != nil {
-		return err
+		return fmt.Errorf("停止应用生命周期失败: %w", err)
 	}
 
 	c.events.Publish(&event.BaseEvent{EventType: event.EventApplicationStopped})
@@ -193,11 +205,13 @@ func (c *DefaultApplicationContext) IsRunning() bool {
 	return c.lifecycle.GetPhase() == lifecycle.PhaseRunning
 }
 
+// HasProperty 判断环境配置中是否存在指定键。
 func (c *DefaultApplicationContext) HasProperty(key string) bool {
 	_, ok := c.env.GetProperty(key)
 	return ok
 }
 
+// GetProperty 按键读取环境配置并返回是否命中。
 func (c *DefaultApplicationContext) GetProperty(key string) (any, bool) {
 	return c.env.GetProperty(key)
 }

@@ -18,16 +18,16 @@ func TestIndicatorBuilder_Build_Up(t *testing.T) {
 		Detail("type", "postgres").
 		Build()
 
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 
-	if h.Status != StatusUp {
-		t.Errorf("expected UP, got %s", h.Status)
+	if healthResult.Status != StatusUp {
+		t.Errorf("expected UP, got %s", healthResult.Status)
 	}
-	if h.Details["type"] != "postgres" {
-		t.Errorf("expected postgres, got %v", h.Details["type"])
+	if healthResult.Details["type"] != "postgres" {
+		t.Errorf("expected postgres, got %v", healthResult.Details["type"])
 	}
-	if h.Error != nil {
-		t.Errorf("expected no error, got %v", h.Error)
+	if healthResult.Error != nil {
+		t.Errorf("expected no error, got %v", healthResult.Error)
 	}
 }
 
@@ -40,12 +40,12 @@ func TestIndicatorBuilder_Build_Down(t *testing.T) {
 		}).
 		Build()
 
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 
-	if h.Status != StatusDown {
-		t.Errorf("expected DOWN, got %s", h.Status)
+	if healthResult.Status != StatusDown {
+		t.Errorf("expected DOWN, got %s", healthResult.Status)
 	}
-	if h.Error == nil {
+	if healthResult.Error == nil {
 		t.Error("expected error")
 	}
 }
@@ -66,11 +66,11 @@ func TestIndicatorBuilder_Build_Timeout(t *testing.T) {
 		Build()
 
 	start := time.Now()
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 	elapsed := time.Since(start)
 
-	if h.Status != StatusDown {
-		t.Errorf("expected DOWN due to timeout, got %s", h.Status)
+	if healthResult.Status != StatusDown {
+		t.Errorf("expected DOWN due to timeout, got %s", healthResult.Status)
 	}
 	if elapsed > 500*time.Millisecond {
 		t.Errorf("expected timeout around 100ms, took %v", elapsed)
@@ -83,10 +83,10 @@ func TestIndicatorBuilder_Build_NoCheckFunc(t *testing.T) {
 		Name("unknown").
 		Build()
 
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 
-	if h.Status != StatusUnknown {
-		t.Errorf("expected UNKNOWN, got %s", h.Status)
+	if healthResult.Status != StatusUnknown {
+		t.Errorf("expected UNKNOWN, got %s", healthResult.Status)
 	}
 }
 
@@ -102,16 +102,16 @@ func TestIndicatorBuilder_ChainConfiguration(t *testing.T) {
 		}).
 		Build()
 
-	h := indicator.Health(context.Background())
+	healthResult := indicator.Health(context.Background())
 
-	if h.Status != StatusUp {
-		t.Errorf("expected UP, got %s", h.Status)
+	if healthResult.Status != StatusUp {
+		t.Errorf("expected UP, got %s", healthResult.Status)
 	}
-	if h.Details["version"] != "1.0.0" {
-		t.Errorf("expected version 1.0.0, got %v", h.Details["version"])
+	if healthResult.Details["version"] != "1.0.0" {
+		t.Errorf("expected version 1.0.0, got %v", healthResult.Details["version"])
 	}
-	if h.Details["env"] != "production" {
-		t.Errorf("expected env production, got %v", h.Details["env"])
+	if healthResult.Details["env"] != "production" {
+		t.Errorf("expected env production, got %v", healthResult.Details["env"])
 	}
 }
 
@@ -136,15 +136,15 @@ func TestIndicatorBuilder_MultipleIndicators(t *testing.T) {
 	registry.AddIndicator(dbIndicator)
 	registry.AddIndicator(redisIndicator)
 
-	h := registry.Aggregate(context.Background())
+	healthResult := registry.Aggregate(context.Background())
 
 	// 数据库应该 UP，Redis 应该 DOWN
-	details := h.Details["database"].(map[string]any)
+	details := healthResult.Details["database"].(map[string]any)
 	if details["status"] != "UP" {
 		t.Errorf("expected database UP, got %s", details["status"])
 	}
 
-	redisDetails := h.Details["redis"].(map[string]any)
+	redisDetails := healthResult.Details["redis"].(map[string]any)
 	if redisDetails["status"] != "DOWN" {
 		t.Errorf("expected redis DOWN, got %s", redisDetails["status"])
 	}

@@ -7,51 +7,7 @@ import (
 	"github.com/xudefa/enhance/security/authorization"
 )
 
-// ==================== 配置键常量 ====================
-
-const (
-	// Casbin 配置
-	CasbinEnabled          = "security.casbin.enabled"
-	CasbinModelType        = "security.casbin.model-type"
-	CasbinModelPath        = "security.casbin.model-path"
-	CasbinModelText        = "security.casbin.model-text"
-	CasbinPolicyType       = "security.casbin.policy-type"
-	CasbinPolicyPath       = "security.casbin.policy-path"
-	CasbinPolicyText       = "security.casbin.policy-text"
-	CasbinAutoLoad         = "security.casbin.auto-load"
-	CasbinAutoLoadInterval = "security.casbin.auto-load-interval"
-
-	// casbin 字段常量
-	CasbinLogFieldModel  = "model-path"
-	CasbinLogFieldPolicy = "policy-path"
-)
-
-// ==================== 默认值常量 ====================
-
-const (
-	DefaultCasbinModelType        = "file"
-	DefaultCasbinModelPath        = "config/casbin_model.conf"
-	DefaultCasbinPolicyType       = "file"
-	DefaultCasbinPolicyPath       = "config/casbin_policy.csv"
-	DefaultCasbinAutoLoad         = false
-	DefaultCasbinAutoLoadInterval = 5
-)
-
-// CasbinEnforcer Casbin 执行器接口。
-type CasbinEnforcer interface {
-	Enforce(ctx context.Context, subject, object, action string) (bool, error)
-	AddPolicy(ctx context.Context, sub, obj, act string) error
-	RemovePolicy(ctx context.Context, sub, obj, act string) error
-	GetPolicy(ctx context.Context) ([][]string, error)
-	LoadPolicy(ctx context.Context) error
-	SavePolicy(ctx context.Context) error
-}
-
-// CasbinVoter Casbin 投票者实现。
-type CasbinVoter struct {
-	enforcer CasbinEnforcer
-}
-
+// NewCasbinVoter 创建 Casbin 投票者，enforcer 为空时返回错误。
 func NewCasbinVoter(enforcer CasbinEnforcer) (*CasbinVoter, error) {
 	if enforcer == nil {
 		return nil, fmt.Errorf("casbin: enforcer must not be nil")

@@ -100,11 +100,11 @@ func main() {
 
 	// 创建 Gin 路由
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
-	r.Use(gin.Recovery())
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	// 限流中间件
-	r.Use(func(c *gin.Context) {
+	router.Use(func(c *gin.Context) {
 		if !limiter.Allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": "请求过于频繁，请稍后重试",
@@ -115,9 +115,9 @@ func main() {
 	})
 
 	// 注册路由
-	r.POST("/api/users", createUserHandler(validate))
-	r.GET("/api/health", healthHandler())
-	r.POST("/api/tasks/email", sendEmailHandler(asynqClient))
+	router.POST("/api/users", createUserHandler(validate))
+	router.GET("/api/health", healthHandler())
+	router.POST("/api/tasks/email", sendEmailHandler(asynqClient))
 
 	// 创建日志记录器
 	logger := log.Build()
@@ -128,7 +128,7 @@ func main() {
 	// 启动 HTTP 服务器
 	go func() {
 		logger.Info(context.Background(), "HTTP 服务器启动在 :8080")
-		if err := r.Run(":8080"); err != nil {
+		if err := router.Run(":8080"); err != nil {
 			logger.Error(context.Background(), "HTTP 服务器启动失败", log.KeyValue{Key: "error", Value: err.Error()})
 		}
 	}()
@@ -196,7 +196,7 @@ func sendEmailHandler(client *asynq.Client) gin.HandlerFunc {
 		task := asynq.NewTask(TaskTypeEmailSend, payload)
 
 		// 添加到队列
-		info, err := client.Enqueue(task,
+		taskInfo, err := client.Enqueue(task,
 			asynq.MaxRetry(3),
 			asynq.Timeout(5*time.Minute),
 			asynq.Queue("default"),
@@ -210,8 +210,8 @@ func sendEmailHandler(client *asynq.Client) gin.HandlerFunc {
 
 		c.JSON(http.StatusAccepted, gin.H{
 			"message": "邮件发送任务已创建",
-			"task_id": info.ID,
-			"queue":   info.Queue,
+			"task_id": taskInfo.ID,
+			"queue":   taskInfo.Queue,
 		})
 	}
 }

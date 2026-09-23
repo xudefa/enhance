@@ -1,6 +1,7 @@
 package fiber
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -87,17 +88,20 @@ type fiberResponseWriter struct {
 	status int
 }
 
+// Header 返回响应头。
 func (w *fiberResponseWriter) Header() http.Header {
 	return w.header
 }
 
+// Write 写入响应体。
 func (w *fiberResponseWriter) Write(b []byte) (int, error) {
 	if err := w.ctx.Send(b); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to send response: %w", err)
 	}
 	return len(b), nil
 }
 
+// WriteHeader 设置响应状态码。
 func (w *fiberResponseWriter) WriteHeader(statusCode int) {
 	w.status = statusCode
 	w.ctx.Status(statusCode)

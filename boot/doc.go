@@ -85,6 +85,7 @@ package boot
 import (
 	"context"
 	"reflect"
+	"sync"
 
 	"github.com/xudefa/enhance/boot/banner"
 	"github.com/xudefa/enhance/condition"
@@ -97,22 +98,34 @@ import (
 type BannerMode = banner.BannerMode
 
 const (
+	// BannerModeConsole 控制台彩色横幅模式。
 	BannerModeConsole = banner.BannerModeConsole
-	BannerModeLog     = banner.BannerModeLog
-	BannerModeOff     = banner.BannerModeOff
+	// BannerModeLog 日志输出横幅模式。
+	BannerModeLog = banner.BannerModeLog
+	// BannerModeOff 关闭横幅输出。
+	BannerModeOff = banner.BannerModeOff
 )
 
+// TextBanner 纯文本横幅类型的别名。
 type TextBanner = banner.TextBanner
+
+// ASCIIArtBanner ASCII 艺术横幅类型的别名。
 type ASCIIArtBanner = banner.ASCIIArtBanner
+
+// LegacyBanner 遗留横幅类型的别名。
 type LegacyBanner = banner.LegacyBanner
 
 // LegacyBannerOption 是 banner.LegacyOption 的类型别名。
 type LegacyBannerOption = banner.LegacyOption
 
 var (
-	NewLegacyBanner    = banner.NewLegacyBanner
-	BannerWithLines    = banner.WithLines
-	BannerWithAppName  = banner.WithAppName
+	// NewLegacyBanner 创建遗留横幅的构造函数别名。
+	NewLegacyBanner = banner.NewLegacyBanner
+	// BannerWithLines 设置横幅行数的选项别名。
+	BannerWithLines = banner.WithLines
+	// BannerWithAppName 设置横幅应用名的选项别名。
+	BannerWithAppName = banner.WithAppName
+	// BannerWithProfiles 设置横幅激活 Profile 的选项别名。
 	BannerWithProfiles = banner.WithProfiles
 )
 
@@ -322,6 +335,66 @@ type EventBusResult interface {
 //
 // 定义如何向容器注册 Bean，是 Module 中 Bean 注册的统一抽象。
 type BeanProvider func(c core.Container) error
+
+// ==================== Plugin 接口 ====================
+
+// Plugin 插件接口，定义插件的生命周期和元信息。
+//
+// 插件是比 Starter 更高级的抽象，提供独立的生命周期管理和依赖管理。
+// 每个插件可以独立启用/禁用，并声明对其他插件的依赖。
+//
+// 示例:
+//
+//	type MyPlugin struct{}
+//
+//	func (p *MyPlugin) Name() string { return "my-plugin" }
+//	func (p *MyPlugin) Version() string { return "1.0.0" }
+//	func (p *MyPlugin) Dependencies() []string { return []string{"database", "cache"} }
+//	func (p *MyPlugin) Init(ctx PluginContext) error { /* 初始化 */ return nil }
+//	func (p *MyPlugin) Start(ctx PluginContext) error { /* 启动 */ return nil }
+//	func (p *MyPlugin) Stop(ctx PluginContext) error { /* 停止 */ return nil }
+type Plugin interface {
+	Name() string
+	Version() string
+	Dependencies() []string
+	Init(ctx PluginContext) error
+	Start(ctx PluginContext) error
+	Stop(ctx PluginContext) error
+}
+
+// PluginContext 插件上下文，提供插件运行时的环境信息。
+type PluginContext interface {
+	Container() core.Container
+	Environment() *environment.Environment
+	GetPlugin(name string) (Plugin, bool)
+	Config(key string) (any, bool)
+}
+
+// PluginState 插件状态
+type PluginState int
+
+const (
+	PluginStateRegistered PluginState = iota
+	PluginStateInitialized
+	PluginStateStarted
+	PluginStateStopped
+	PluginStateError
+)
+
+// PluginInfo 插件信息
+type PluginInfo struct {
+	Name    string
+	Version string
+	State   PluginState
+}
+
+// PluginManager 插件管理器，负责插件的注册、依赖解析和生命周期管理。
+type PluginManager struct {
+	mu      sync.RWMutex
+	plugins map[string]Plugin
+	infos   map[string]*PluginInfo
+	ctx     PluginContext
+}
 
 // 以下类型定义在其他文件中，此处仅作文档说明：
 // - ApplicationOption: application.go（包含完整实现）

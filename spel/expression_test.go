@@ -50,13 +50,13 @@ func TestEvaluate_Property(t *testing.T) {
 	t.Parallel()
 	user := testUser{Name: "Alice", Age: 30}
 
-	val, err := Evaluate("Name", user)
+	got, err := Evaluate("Name", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "Alice" {
-		t.Errorf("expected 'Alice', got %v", val)
+	if got != "Alice" {
+		t.Errorf("expected 'Alice', got %v", got)
 	}
 }
 
@@ -68,13 +68,13 @@ func TestEvaluate_Literal_String(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(nil)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "hello world" {
-		t.Errorf("expected 'hello world', got %v", val)
+	if got != "hello world" {
+		t.Errorf("expected 'hello world', got %v", got)
 	}
 }
 
@@ -86,13 +86,13 @@ func TestEvaluate_Literal_Number(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(nil)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != int64(42) {
-		t.Errorf("expected 42, got %v", val)
+	if got != int64(42) {
+		t.Errorf("expected 42, got %v", got)
 	}
 }
 
@@ -114,13 +114,13 @@ func TestEvaluate_Literal_Boolean(t *testing.T) {
 			}
 
 			ctx := NewStandardEvaluationContext(nil)
-			val, err := expr.GetValue(ctx)
+			got, err := expr.GetValue(ctx)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			if val != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, val)
+			if got != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, got)
 			}
 		})
 	}
@@ -134,13 +134,13 @@ func TestEvaluate_Literal_Null(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(nil)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != nil {
-		t.Errorf("expected nil, got %v", val)
+	if got != nil {
+		t.Errorf("expected nil, got %v", got)
 	}
 }
 
@@ -154,13 +154,13 @@ func TestEvaluate_Comparison(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(user)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != true {
-		t.Errorf("expected true, got %v", val)
+	if got != true {
+		t.Errorf("expected true, got %v", got)
 	}
 }
 
@@ -172,13 +172,13 @@ func TestEvaluate_Arithmetic(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(nil)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != float64(15) {
-		t.Errorf("expected 15, got %v", val)
+	if got != float64(15) {
+		t.Errorf("expected 15, got %v", got)
 	}
 }
 
@@ -192,13 +192,13 @@ func TestEvaluate_Logical(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(user)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != true {
-		t.Errorf("expected true, got %v", val)
+	if got != true {
+		t.Errorf("expected true, got %v", got)
 	}
 }
 
@@ -212,13 +212,13 @@ func TestEvaluate_Ternary(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(user)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "adult" {
-		t.Errorf("expected 'adult', got %v", val)
+	if got != "adult" {
+		t.Errorf("expected 'adult', got %v", got)
 	}
 }
 
@@ -239,13 +239,13 @@ func TestEvaluate_PropertyChain(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(p)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "Beijing" {
-		t.Errorf("expected 'Beijing', got %v", val)
+	if got != "Beijing" {
+		t.Errorf("expected 'Beijing', got %v", got)
 	}
 }
 
@@ -259,13 +259,13 @@ func TestEvaluate_MethodCall(t *testing.T) {
 	}
 
 	ctx := NewStandardEvaluationContext(user)
-	val, err := expr.GetValue(ctx)
+	got, err := expr.GetValue(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "Hello, Alice" {
-		t.Errorf("expected 'Hello, Alice', got %v", val)
+	if got != "Hello, Alice" {
+		t.Errorf("expected 'Hello, Alice', got %v", got)
 	}
 }
 
@@ -274,13 +274,13 @@ func TestStandardEvaluationContext_Variables(t *testing.T) {
 	ctx := NewStandardEvaluationContext(nil)
 
 	ctx.SetVariable("name", "Alice")
-	val, ok := ctx.GetVariable("name")
+	got, ok := ctx.GetVariable("name")
 	if !ok {
 		t.Fatal("variable not found")
 	}
 
-	if val != "Alice" {
-		t.Errorf("expected 'Alice', got %v", val)
+	if got != "Alice" {
+		t.Errorf("expected 'Alice', got %v", got)
 	}
 }
 
@@ -303,13 +303,13 @@ func TestReflectPropertyAccessor_GetProperty(t *testing.T) {
 	accessor := NewReflectPropertyAccessor()
 	user := testUser{Name: "Bob"}
 
-	val, err := accessor.GetProperty(user, "Name")
+	got, err := accessor.GetProperty(user, "Name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "Bob" {
-		t.Errorf("expected 'Bob', got %v", val)
+	if got != "Bob" {
+		t.Errorf("expected 'Bob', got %v", got)
 	}
 }
 
@@ -488,7 +488,6 @@ func TestExpression_Evaluate_Fallback(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown variable")
 	}
-	// 错误消息应包含 unknown、unable to evaluate 或 non-struct type
 	if !strings.Contains(err.Error(), "unknown") &&
 		!strings.Contains(err.Error(), "unable to evaluate") &&
 		!strings.Contains(err.Error(), "non-struct type") {
@@ -530,12 +529,12 @@ func TestEvaluate_Convenience(t *testing.T) {
 	t.Parallel()
 	user := testUser{Name: "Test"}
 
-	val, err := Evaluate("Name", user)
+	got, err := Evaluate("Name", user)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if val != "Test" {
-		t.Errorf("expected 'Test', got %v", val)
+	if got != "Test" {
+		t.Errorf("expected 'Test', got %v", got)
 	}
 }

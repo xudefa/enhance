@@ -64,8 +64,8 @@ func BenchmarkExceptionHandlingMiddleware(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		w := httptest.NewRecorder()
-		wrappedHandler.ServeHTTP(w, req)
+		rec := httptest.NewRecorder()
+		wrappedHandler.ServeHTTP(rec, req)
 	}
 }
 
@@ -92,7 +92,7 @@ func BenchmarkAccessDeniedHandlerAdapter_Handle(b *testing.B) {
 func BenchmarkNewErrorResponse(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		NewErrorResponse(500, "Internal Server Error", "req-123", "trace-456", nil)
+		NewErrorResponse(500, "Internal Server Error", WithRequestID("req-123"), WithTraceID("trace-456"))
 	}
 }
 

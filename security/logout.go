@@ -47,10 +47,12 @@ func MustNewLogoutFilter(logoutUrl string, handlers []LogoutHandler) *LogoutFilt
 	return filter
 }
 
+// AddLogoutHandler 追加一个登出处理器。
 func (f *LogoutFilter) AddLogoutHandler(handler LogoutHandler) {
 	f.handlers = append(f.handlers, handler)
 }
 
+// SetSuccessHandler 设置登出成功处理器。
 func (f *LogoutFilter) SetSuccessHandler(handler LogoutSuccessHandler) {
 	f.successHandler = handler
 }
@@ -118,12 +120,14 @@ type DefaultLogoutSuccessHandler struct {
 	defaultTargetUrl string
 }
 
+// NewDefaultLogoutSuccessHandler 创建默认登出成功处理器，重定向到指定地址。
 func NewDefaultLogoutSuccessHandler(defaultTargetUrl string) *DefaultLogoutSuccessHandler {
 	return &DefaultLogoutSuccessHandler{
 		defaultTargetUrl: defaultTargetUrl,
 	}
 }
 
+// OnLogoutSuccess 以 302 重定向到默认登出目标 URL。
 func (h *DefaultLogoutSuccessHandler) OnLogoutSuccess(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
 	response.SetStatusCode(302)
 	response.SetHeader("Location", h.defaultTargetUrl)
@@ -134,12 +138,14 @@ type SimpleLogoutSuccessHandler struct {
 	targetUrl string
 }
 
+// NewSimpleLogoutSuccessHandler 创建简单登出成功处理器，重定向到指定地址。
 func NewSimpleLogoutSuccessHandler(targetUrl string) *SimpleLogoutSuccessHandler {
 	return &SimpleLogoutSuccessHandler{
 		targetUrl: targetUrl,
 	}
 }
 
+// OnLogoutSuccess 以 302 重定向到登出目标 URL。
 func (h *SimpleLogoutSuccessHandler) OnLogoutSuccess(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
 	response.SetStatusCode(302)
 	response.SetHeader("Location", h.targetUrl)
@@ -148,10 +154,12 @@ func (h *SimpleLogoutSuccessHandler) OnLogoutSuccess(ctx context.Context, reques
 // SecurityContextLogoutHandler 安全上下文登出处理器
 type SecurityContextLogoutHandler struct{}
 
+// NewSecurityContextLogoutHandler 创建安全上下文登出处理器。
 func NewSecurityContextLogoutHandler() *SecurityContextLogoutHandler {
 	return &SecurityContextLogoutHandler{}
 }
 
+// Logout 清除当前请求的安全上下文认证信息。
 func (h *SecurityContextLogoutHandler) Logout(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
 }
 
@@ -160,12 +168,14 @@ type CookieClearingLogoutHandler struct {
 	cookieNames []string
 }
 
+// NewCookieClearingLogoutHandler 创建清除一个或多个 Cookie 的登出处理器。
 func NewCookieClearingLogoutHandler(cookieNames ...string) *CookieClearingLogoutHandler {
 	return &CookieClearingLogoutHandler{
 		cookieNames: cookieNames,
 	}
 }
 
+// Logout 在响应中清除指定的 Cookie。
 func (h *CookieClearingLogoutHandler) Logout(ctx context.Context, request SecurityRequest, response SecurityResponse, authentication Authentication) {
 	for _, name := range h.cookieNames {
 		response.SetHeader("Set-Cookie", fmt.Sprintf("%s=; Path=/; Max-Age=0", name))

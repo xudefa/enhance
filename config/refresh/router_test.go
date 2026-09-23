@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xudefa/enhance/config/environment"
 	"github.com/xudefa/enhance/event"
 )
 
@@ -36,8 +37,8 @@ func TestEventRouter_OnConfigChange_PublishesEvents(t *testing.T) {
 	router := NewEventRouter(bus)
 
 	var receivedEvents []*BeanRefreshEvent
-	bus.Subscribe("BeanRefresh", func(e event.ApplicationEvent) {
-		if bre, ok := e.(*BeanRefreshEvent); ok {
+	bus.Subscribe("BeanRefresh", func(evt event.ApplicationEvent) {
+		if bre, ok := evt.(*BeanRefreshEvent); ok {
 			receivedEvents = append(receivedEvents, bre)
 		}
 	})
@@ -47,10 +48,9 @@ func TestEventRouter_OnConfigChange_PublishesEvents(t *testing.T) {
 
 	configEvt := NewConfigChangeEvent(
 		"modify",
-		[]string{"key1"},
-		map[string]any{"key1": "old"},
-		map[string]any{"key1": "new"},
-		"test",
+		environment.WithEventKeys([]string{"key1"}),
+		environment.WithEventValues(map[string]any{"key1": "old"}, map[string]any{"key1": "new"}),
+		environment.WithEventSource("test"),
 	)
 	bus.Publish(&configEvt)
 
@@ -70,7 +70,7 @@ func TestEventRouter_OnConfigChange_IgnoresNonConfigEvent(t *testing.T) {
 	router.RegisterBean("svc1", []string{"key1"})
 
 	var count int
-	bus.Subscribe("BeanRefresh", func(e event.ApplicationEvent) {
+	bus.Subscribe("BeanRefresh", func(evt event.ApplicationEvent) {
 		count++
 	})
 
@@ -83,16 +83,16 @@ func TestEventRouter_OnConfigChange_IgnoresNonConfigEvent(t *testing.T) {
 
 func TestBeanRefreshEvent_TypeAndTimestamp(t *testing.T) {
 	t.Parallel()
-	e := &BeanRefreshEvent{
+	evt := &BeanRefreshEvent{
 		BeanID:     "myBean",
 		ConfigKeys: []string{"k1"},
 		OldValues:  map[string]any{"k1": "old"},
 		NewValues:  map[string]any{"k1": "new"},
 	}
-	if e.Type() != "BeanRefresh" {
-		t.Errorf("Type() = %q, want %q", e.Type(), "BeanRefresh")
+	if evt.Type() != "BeanRefresh" {
+		t.Errorf("Type() = %q, want %q", evt.Type(), "BeanRefresh")
 	}
-	if e.Timestamp().IsZero() {
+	if evt.Timestamp().IsZero() {
 		t.Error("Timestamp() should not be zero")
 	}
 }
@@ -112,5 +112,5 @@ func TestEventRouter_DuplicateKeys(t *testing.T) {
 
 type dummyEvent struct{}
 
-func (d *dummyEvent) Type() string      { return "dummy" }
+func (d *dummyEvent) Type() string         { return "dummy" }
 func (d *dummyEvent) Timestamp() time.Time { return time.Time{} }

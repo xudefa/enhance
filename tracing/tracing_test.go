@@ -346,7 +346,7 @@ func TestTraceHelper_TraceHTTP_Error(t *testing.T) {
 		return expectedErr
 	})
 
-	if err != expectedErr {
+	if !errors.Is(err, expectedErr) {
 		t.Fatalf("expected error %v, got %v", expectedErr, err)
 	}
 
@@ -609,33 +609,33 @@ func TestSpan_MarshalJSON_Basic(t *testing.T) {
 	span.End()
 
 	// 测试 JSON 序列化
-	data, err := json.Marshal(span)
+	jsonBytes, err := json.Marshal(span)
 	if err != nil {
 		t.Fatalf("JSON marshal failed: %v", err)
 	}
 
 	// 验证包含必要字段
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
 		t.Fatalf("JSON unmarshal failed: %v", err)
 	}
 
-	if result["trace_id"] == "" {
+	if parsed["trace_id"] == "" {
 		t.Error("missing trace_id field")
 	}
-	if result["span_id"] == "" {
+	if parsed["span_id"] == "" {
 		t.Error("missing span_id field")
 	}
-	if result["name"] != "test-operation" {
-		t.Errorf("expected name='test-operation', got '%s'", result["name"])
+	if parsed["name"] != "test-operation" {
+		t.Errorf("expected name='test-operation', got '%s'", parsed["name"])
 	}
-	if result["status"] != string(StatusOK) {
-		t.Errorf("expected status='OK', got '%s'", result["status"])
+	if parsed["status"] != string(StatusOK) {
+		t.Errorf("expected status='OK', got '%s'", parsed["status"])
 	}
-	if result["duration_ms"] == nil {
+	if parsed["duration_ms"] == nil {
 		t.Error("missing duration_ms field")
 	}
-	if result["tags"] == nil {
+	if parsed["tags"] == nil {
 		t.Error("missing tags field")
 	}
 }

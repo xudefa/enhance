@@ -48,28 +48,28 @@ func main() {
 	}
 
 	// Get the Chi router from container
-	r, err := core.GetByName[*chi.Mux](app.Container(), "")
+	chiRouter, err := core.GetByName[*chi.Mux](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get chi router: %v\n", err)
 		return
 	}
 
 	// Use middleware
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
+	chiRouter.Use(middleware.Logger)
+	chiRouter.Use(middleware.Recoverer)
+	chiRouter.Use(middleware.RequestID)
 
 	// Register routes
 	fmt.Println("--- Registering Routes ---")
 
 	// Root route
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	chiRouter.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"message": "Welcome to Chi Starter Example", "version": "1.0.0"}`))
 	})
 
 	// Hello route with query parameter
-	r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
+	chiRouter.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Query().Get("name")
 		if name == "" {
 			name = "World"
@@ -79,19 +79,19 @@ func main() {
 	})
 
 	// Health check endpoint
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	chiRouter.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status": "UP"}`))
 	})
 
 	// User routes with sub-router
-	r.Route("/users", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	chiRouter.Route("/users", func(subRouter chi.Router) {
+		subRouter.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`[{"id": 1, "name": "John Doe"}, {"id": 2, "name": "Jane Doe"}]`))
 		})
 
-		r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+		subRouter.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
 			id := chi.URLParam(r, "id")
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(fmt.Sprintf(`{"id": "%s", "name": "John Doe"}`, id)))

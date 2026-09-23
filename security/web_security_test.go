@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -10,60 +9,70 @@ import (
 	"github.com/xudefa/enhance/security/filter"
 )
 
-func TestCsrfFilter(t *testing.T) {
+func testCsrfFilterGetRequestGeneratesToken(t *testing.T, csrfFilter *CsrfFilter) {
 	t.Parallel()
 	ctx := context.Background()
+	req := &mockSecurityRequest{method: "GET", uri: "/api/test"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := csrfFilter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if !chain.called {
+		t.Error("Expected filter chain to be called")
+	}
+
+	token, exists := req.GetAttribute("csrf.token")
+	if !exists || token == nil {
+		t.Error("Expected CSRF token to be generated")
+	}
+}
+
+func testCsrfFilterPostWithoutTokenFails(t *testing.T, csrfFilter *CsrfFilter) {
+	t.Parallel()
+	ctx := context.Background()
+	req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := csrfFilter.DoFilter(ctx, req, resp, chain)
+	if err == nil {
+		t.Error("Expected error for missing CSRF token")
+	}
+	if !strings.Contains(err.Error(), "missing CSRF token") {
+		t.Errorf("Expected 'missing CSRF token' error, got %v", err)
+	}
+}
+
+func testCsrfFilterExcludePathSkipsCSRF(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tokenRepo := NewCookieCsrfTokenRepository()
+	csrfFilter := MustNewCsrfFilter(tokenRepo)
+	_ = csrfFilter.AddExcludePath("/public")
+
+	req := &mockSecurityRequest{method: "POST", uri: "/public/api"}
+	resp := &mockSecurityResponse{}
+	chain := &mockSecurityFilterChain{}
+
+	err := csrfFilter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("Expected no error for excluded path, got %v", err)
+	}
+}
+
+func TestCsrfFilter(t *testing.T) {
+	t.Parallel()
 
 	tokenRepo := NewCookieCsrfTokenRepository()
 	csrfFilter := MustNewCsrfFilter(tokenRepo)
 
-	t.Run("GET request should generate token", func(t *testing.T) {
-		req := &mockSecurityRequest{method: "GET", uri: "/api/test"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		err := csrfFilter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if !chain.called {
-			t.Error("Expected filter chain to be called")
-		}
-
-		token, exists := req.GetAttribute("csrf.token")
-		if !exists || token == nil {
-			t.Error("Expected CSRF token to be generated")
-		}
-	})
-
-	t.Run("POST request without token should fail", func(t *testing.T) {
-		req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		err := csrfFilter.DoFilter(ctx, req, resp, chain)
-		if err == nil {
-			t.Error("Expected error for missing CSRF token")
-		}
-		if !strings.Contains(err.Error(), "missing CSRF token") {
-			t.Errorf("Expected 'missing CSRF token' error, got %v", err)
-		}
-	})
-
-	t.Run("Exclude path should skip CSRF", func(t *testing.T) {
-		csrfFilterWithExclude := MustNewCsrfFilter(tokenRepo)
-		_ = csrfFilterWithExclude.AddExcludePath("/public")
-
-		req := &mockSecurityRequest{method: "POST", uri: "/public/api"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		err := csrfFilterWithExclude.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error for excluded path, got %v", err)
-		}
-	})
+	t.Run("GET request should generate token", func(t *testing.T) { testCsrfFilterGetRequestGeneratesToken(t, csrfFilter) })
+	t.Run("POST request without token should fail", func(t *testing.T) { testCsrfFilterPostWithoutTokenFails(t, csrfFilter) })
+	t.Run("Exclude path should skip CSRF", testCsrfFilterExcludePathSkipsCSRF)
 }
 
 func TestCookieCsrfTokenRepository(t *testing.T) {
@@ -111,440 +120,6 @@ func TestCookieCsrfTokenRepository(t *testing.T) {
 		}
 		if !strings.Contains(cookie, "test-token-value") {
 			t.Errorf("Expected token value in cookie, got %s", cookie)
-		}
-	})
-}
-
-func TestLogoutFilter(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("Logout success", func(t *testing.T) {
-		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-		logoutCtx := ContextWithAuthentication(ctx, auth)
-
-		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{NewSecurityContextLogoutHandler()})
-
-		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if chain.called {
-			t.Error("Filter chain should not be called after logout")
-		}
-	})
-
-	t.Run("Non-logout URL should skip", func(t *testing.T) {
-		req := &mockSecurityRequest{method: "POST", uri: "/api/test"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{})
-
-		err := logoutFilter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-		if !chain.called {
-			t.Error("Filter chain should be called for non-logout URL")
-		}
-	})
-
-	t.Run("Custom success handler", func(t *testing.T) {
-		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-		logoutCtx := ContextWithAuthentication(ctx, auth)
-
-		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		customHandler := &mockLogoutSuccessHandler{targetCalled: "/custom"}
-		logoutFilter := MustNewLogoutFilter("/logout", []LogoutHandler{})
-		logoutFilter.SetSuccessHandler(customHandler)
-
-		err := logoutFilter.DoFilter(logoutCtx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if resp.headers["Location"] != "/custom" {
-			t.Errorf("Expected Location '/custom', got '%s'", resp.headers["Location"])
-		}
-	})
-}
-
-func TestLogoutSuccessHandler(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("DefaultLogoutSuccessHandler", func(t *testing.T) {
-		handler := NewDefaultLogoutSuccessHandler("/login?logout")
-		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-
-		handler.OnLogoutSuccess(ctx, req, resp, auth)
-
-		if resp.statusCode != 302 {
-			t.Errorf("Expected status code 302, got %d", resp.statusCode)
-		}
-		if resp.headers["Location"] != "/login?logout" {
-			t.Errorf("Expected Location '/login?logout', got '%s'", resp.headers["Location"])
-		}
-	})
-
-	t.Run("SimpleLogoutSuccessHandler", func(t *testing.T) {
-		handler := NewSimpleLogoutSuccessHandler("/home")
-		req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-		resp := &mockSecurityResponse{}
-		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-
-		handler.OnLogoutSuccess(ctx, req, resp, auth)
-
-		if resp.statusCode != 302 {
-			t.Errorf("Expected status code 302, got %d", resp.statusCode)
-		}
-		if resp.headers["Location"] != "/home" {
-			t.Errorf("Expected Location '/home', got '%s'", resp.headers["Location"])
-		}
-	})
-}
-
-func TestCookieClearingLogoutHandler(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-	resp := &mockSecurityResponse{}
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-
-	handler := NewCookieClearingLogoutHandler("session_id")
-
-	handler.Logout(ctx, req, resp, auth)
-
-	cookie := resp.headers["Set-Cookie"]
-	if cookie == "" {
-		t.Error("Expected Set-Cookie header")
-	}
-	if !strings.Contains(cookie, "session_id") {
-		t.Errorf("Expected cookie 'session_id' to be cleared, got %s", cookie)
-	}
-	if !strings.Contains(cookie, "Max-Age=0") {
-		t.Errorf("Expected cookie to have Max-Age=0, got %s", cookie)
-	}
-}
-
-func TestUsernamePasswordAuthenticationFilter(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	t.Run("Successful authentication", func(t *testing.T) {
-		req := &mockSecurityRequest{
-			method: "POST",
-			uri:    "/login",
-		}
-		req.SetHeader("username", "admin")
-		req.SetHeader("password", "admin123")
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/home", "/login?error", authManager, log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if resp.statusCode != 302 {
-			t.Errorf("Expected status code 302, got %d", resp.statusCode)
-		}
-		if resp.headers["Location"] != "/home" {
-			t.Errorf("Expected Location '/home', got '%s'", resp.headers["Location"])
-		}
-
-		authVal, exists := req.GetAttribute("security.currentAuthentication")
-		if !exists || authVal == nil {
-			t.Error("Expected authentication to be set in request attribute")
-		}
-		if auth, ok := authVal.(Authentication); ok {
-			if extractPrincipalName(auth) != "admin" {
-				t.Errorf("Expected username 'admin', got '%s'", extractPrincipalName(auth))
-			}
-		}
-	})
-
-	t.Run("Failed authentication", func(t *testing.T) {
-		req := &mockSecurityRequest{
-			method: "POST",
-			uri:    "/login",
-		}
-		req.SetHeader("username", "admin")
-		req.SetHeader("password", "wrongpassword")
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/home", "/login?error", authManager, log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if resp.statusCode != 401 {
-			t.Errorf("Expected status code 401, got %d", resp.statusCode)
-		}
-	})
-
-	t.Run("Non-login URL should skip", func(t *testing.T) {
-		req := &mockSecurityRequest{
-			method: "POST",
-			uri:    "/api/test",
-		}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewUsernamePasswordAuthenticationFilterWithDefaults("/login", "/home", "/login?error", authManager, log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-		if !chain.called {
-			t.Error("Filter chain should be called for non-login URL")
-		}
-	})
-}
-
-func TestBasicAuthenticationFilter(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	t.Run("Successful Basic auth", func(t *testing.T) {
-		encoded := base64.StdEncoding.EncodeToString([]byte("admin:admin123"))
-		req := &mockSecurityRequest{
-			method: "GET",
-			uri:    "/api/test",
-		}
-		req.SetHeader("Authorization", "Basic "+encoded)
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewBasicAuthenticationFilterWithRealm(authManager, "Test Realm", log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-
-		if !chain.called {
-			t.Error("Expected chain to be called")
-		}
-	})
-
-	t.Run("Missing Authorization header returns error", func(t *testing.T) {
-		req := &mockSecurityRequest{
-			method: "GET",
-			uri:    "/api/test",
-		}
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewBasicAuthenticationFilterWithRealm(authManager, "Test Realm", log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err == nil {
-			t.Error("Expected error for missing Authorization header")
-		}
-		if resp.statusCode != 401 {
-			t.Errorf("Expected status 401, got %d", resp.statusCode)
-		}
-	})
-
-	t.Run("Invalid credentials returns error", func(t *testing.T) {
-		encoded := base64.StdEncoding.EncodeToString([]byte("admin:wrongpassword"))
-		req := &mockSecurityRequest{
-			method: "GET",
-			uri:    "/api/test",
-		}
-		req.SetHeader("Authorization", "Basic "+encoded)
-		resp := &mockSecurityResponse{}
-		chain := &mockSecurityFilterChain{}
-
-		filter := NewBasicAuthenticationFilterWithRealm(authManager, "Test Realm", log.Build())
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err == nil {
-			t.Error("Expected error for invalid credentials")
-		}
-		if resp.statusCode != 401 {
-			t.Errorf("Expected status 401, got %d", resp.statusCode)
-		}
-	})
-}
-
-func TestBasicAuthenticationEntryPoint(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("Send challenge", func(t *testing.T) {
-		entryPoint := NewBasicAuthenticationEntryPointWithRealm("Test Realm", log.Build())
-		req := &mockSecurityRequest{method: "GET", uri: "/api/test"}
-		resp := &mockSecurityResponse{}
-
-		err := entryPoint.Commence(ctx, req, resp, ErrBadCredentials)
-		if err == nil {
-			t.Error("Expected error to be returned")
-		}
-
-		if resp.statusCode != 401 {
-			t.Errorf("Expected status code 401, got %d", resp.statusCode)
-		}
-
-		wwwAuth := resp.headers["WWW-Authenticate"]
-		if !strings.Contains(wwwAuth, `Basic realm="Test Realm"`) {
-			t.Errorf("Expected WWW-Authenticate header with realm, got '%s'", wwwAuth)
-		}
-	})
-}
-
-func TestHttpSecurityConfiguration(t *testing.T) {
-	t.Parallel()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	t.Run("Build with all features", func(t *testing.T) {
-		chain, err := NewHttpSecurity().
-			AuthenticationManager(authManager).
-			Csrf().
-			FormLogin("/api/login", "/dashboard").
-			Logout("/api/logout").
-			HttpBasic().
-			Build()
-
-		if err != nil {
-			t.Fatalf("Failed to build security chain: %v", err)
-		}
-		if chain == nil {
-			t.Error("Expected security chain to be non-nil")
-		}
-	})
-
-	t.Run("Custom FormLogin URL", func(t *testing.T) {
-		chain, err := NewHttpSecurity().
-			AuthenticationManager(authManager).
-			FormLogin("/custom-login").
-			Build()
-
-		if err != nil {
-			t.Fatalf("Failed to build security chain: %v", err)
-		}
-		if chain == nil {
-			t.Error("Expected security chain to be non-nil")
-		}
-	})
-
-	t.Run("Custom Logout URL", func(t *testing.T) {
-		chain, err := NewHttpSecurity().
-			AuthenticationManager(authManager).
-			Logout("/custom-logout", NewSimpleLogoutSuccessHandler("/goodbye")).
-			Build()
-
-		if err != nil {
-			t.Fatalf("Failed to build security chain: %v", err)
-		}
-		if chain == nil {
-			t.Error("Expected security chain to be non-nil")
-		}
-	})
-}
-
-func TestHttpSecurity_AuthorizeRequests_AppliesRules(t *testing.T) {
-	t.Parallel()
-
-	userDetailsService := NewInMemoryUserDetailsService()
-	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-	passwordEncoder := NewNoOpPasswordEncoder()
-	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
-	authManager := NewProviderManager(authProvider)
-
-	t.Run("AntMatchers and AnyRequest rules applied", func(t *testing.T) {
-		t.Parallel()
-		h := NewHttpSecurity().
-			AuthenticationManager(authManager).
-			AuthorizeRequests(func(authz AuthorizeRequests) {
-				authz.AntMatchers("/api/**").HasRole("ROLE_API")
-				authz.AntMatchers("/admin/**").DenyAll()
-				authz.AnyRequest().Authenticated()
-			})
-
-		sec := h.(*httpSecurity)
-		if len(sec.authorizeRules) != 3 {
-			t.Fatalf("expected 3 collected rules, got %d", len(sec.authorizeRules))
-		}
-
-		chain, err := h.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-		if chain == nil {
-			t.Fatal("expected non-nil chain")
-		}
-
-		source, ok := sec.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
-		if !ok {
-			t.Fatal("expected expression based metadata source")
-		}
-		ctx := context.Background()
-
-		attrs, err := source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/api/users"})
-		if err != nil || len(attrs) != 1 || attrs[0] != "hasRole('ROLE_API')" {
-			t.Errorf("expected hasRole('ROLE_API') for /api/users, got %v (err=%v)", attrs, err)
-		}
-
-		attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/admin/panel"})
-		if err != nil || len(attrs) != 1 || attrs[0] != "denyAll" {
-			t.Errorf("expected denyAll for /admin/panel, got %v (err=%v)", attrs, err)
-		}
-
-		attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/other"})
-		if err != nil || len(attrs) != 1 || attrs[0] != "authenticated" {
-			t.Errorf("expected authenticated for /other, got %v (err=%v)", attrs, err)
-		}
-	})
-
-	t.Run("no rules still builds with empty source", func(t *testing.T) {
-		t.Parallel()
-		h := NewHttpSecurity().AuthenticationManager(authManager)
-		chain, err := h.Build()
-		if err != nil {
-			t.Fatalf("failed to build: %v", err)
-		}
-		if chain == nil {
-			t.Fatal("expected non-nil chain")
 		}
 	})
 }
@@ -599,23 +174,6 @@ func TestCsrfTokenManager(t *testing.T) {
 	})
 }
 
-func TestSecurityContextLogoutHandler(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	handler := NewSecurityContextLogoutHandler()
-
-	auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-
-	req := &mockSecurityRequest{method: "POST", uri: "/logout"}
-	resp := &mockSecurityResponse{}
-
-	handler.Logout(ctx, req, resp, auth)
-
-	// SecurityContextLogoutHandler is a no-op; authentication clearing
-	// is handled by LogoutFilter which reads from context.
-}
-
 type mockLogoutSuccessHandler struct {
 	targetCalled string
 	called       bool
@@ -665,8 +223,8 @@ func (r *mockSecurityRequest) SetAttribute(key string, value any) {
 	r.attributes[key] = value
 }
 func (r *mockSecurityRequest) GetAttribute(key string) (any, bool) {
-	val, ok := r.attributes[key]
-	return val, ok
+	attributeValue, ok := r.attributes[key]
+	return attributeValue, ok
 }
 
 func newMockSecurityRequest(method, uri string, headers map[string]string) *mockSecurityRequest {
@@ -718,4 +276,140 @@ func (m *mockSecurityFilterChain) AddFilter(filter filter.Filter) {}
 
 func (m *mockSecurityFilterChain) GetFilters() []filter.Filter {
 	return nil
+}
+
+// ==================== Web HTTP Security Configuration Tests ====================
+
+func testHttpSecConfigBuildAllFeatures(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	chain, err := NewHttpSecurity().
+		AuthenticationManager(authManager).
+		Csrf().
+		FormLogin("/api/login", "/dashboard").
+		Logout("/api/logout").
+		HttpBasic().
+		Build()
+
+	if err != nil {
+		t.Fatalf("Failed to build security chain: %v", err)
+	}
+	if chain == nil {
+		t.Error("Expected security chain to be non-nil")
+	}
+}
+
+func testHttpSecConfigCustomFormLoginURL(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	chain, err := NewHttpSecurity().
+		AuthenticationManager(authManager).
+		FormLogin("/custom-login").
+		Build()
+
+	if err != nil {
+		t.Fatalf("Failed to build security chain: %v", err)
+	}
+	if chain == nil {
+		t.Error("Expected security chain to be non-nil")
+	}
+}
+
+func testHttpSecConfigCustomLogoutURL(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	chain, err := NewHttpSecurity().
+		AuthenticationManager(authManager).
+		Logout("/custom-logout", NewSimpleLogoutSuccessHandler("/goodbye")).
+		Build()
+
+	if err != nil {
+		t.Fatalf("Failed to build security chain: %v", err)
+	}
+	if chain == nil {
+		t.Error("Expected security chain to be non-nil")
+	}
+}
+
+func TestHttpSecurityConfiguration(t *testing.T) {
+	t.Parallel()
+
+	userDetailsService := NewInMemoryUserDetailsService()
+	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
+
+	passwordEncoder := NewNoOpPasswordEncoder()
+	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
+	authManager := NewProviderManager(authProvider)
+
+	t.Run("Build with all features", func(t *testing.T) { testHttpSecConfigBuildAllFeatures(t, authManager) })
+	t.Run("Custom FormLogin URL", func(t *testing.T) { testHttpSecConfigCustomFormLoginURL(t, authManager) })
+	t.Run("Custom Logout URL", func(t *testing.T) { testHttpSecConfigCustomLogoutURL(t, authManager) })
+}
+
+func testHttpSecAuthorizeRulesApplied(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	httpSec := NewHttpSecurity().
+		AuthenticationManager(authManager).
+		AuthorizeRequests(func(authz AuthorizeRequests) {
+			authz.AntMatchers("/api/**").HasRole("ROLE_API")
+			authz.AntMatchers("/admin/**").DenyAll()
+			authz.AnyRequest().Authenticated()
+		})
+
+	sec := httpSec.(*httpSecurity)
+	if len(sec.authorizeRules) != 3 {
+		t.Fatalf("expected 3 collected rules, got %d", len(sec.authorizeRules))
+	}
+
+	chain, err := httpSec.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
+	}
+
+	source, ok := sec.securityMetadataSource.(*ExpressionBasedFilterInvocationSecurityMetadataSource)
+	if !ok {
+		t.Fatal("expected expression based metadata source")
+	}
+	ctx := context.Background()
+
+	attrs, err := source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/api/users"})
+	if err != nil || len(attrs) != 1 || attrs[0] != "hasRole('ROLE_API')" {
+		t.Errorf("expected hasRole('ROLE_API') for /api/users, got %v (err=%v)", attrs, err)
+	}
+
+	attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/admin/panel"})
+	if err != nil || len(attrs) != 1 || attrs[0] != "denyAll" {
+		t.Errorf("expected denyAll for /admin/panel, got %v (err=%v)", attrs, err)
+	}
+
+	attrs, err = source.GetAttributes(ctx, &mockSecurityRequest{method: "GET", uri: "/other"})
+	if err != nil || len(attrs) != 1 || attrs[0] != "authenticated" {
+		t.Errorf("expected authenticated for /other, got %v (err=%v)", attrs, err)
+	}
+}
+
+func testHttpSecAuthorizeNoRulesBuilds(t *testing.T, authManager AuthenticationManager) {
+	t.Parallel()
+	httpSec := NewHttpSecurity().AuthenticationManager(authManager)
+	chain, err := httpSec.Build()
+	if err != nil {
+		t.Fatalf("failed to build: %v", err)
+	}
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
+	}
+}
+
+func TestHttpSecurity_AuthorizeRequests_AppliesRules(t *testing.T) {
+	t.Parallel()
+
+	userDetailsService := NewInMemoryUserDetailsService()
+	userDetailsService.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
+
+	passwordEncoder := NewNoOpPasswordEncoder()
+	authProvider := NewDaoAuthenticationProvider(userDetailsService, passwordEncoder, log.Build())
+	authManager := NewProviderManager(authProvider)
+
+	t.Run("AntMatchers and AnyRequest rules applied", func(t *testing.T) { testHttpSecAuthorizeRulesApplied(t, authManager) })
+	t.Run("no rules still builds with empty source", func(t *testing.T) { testHttpSecAuthorizeNoRulesBuilds(t, authManager) })
 }

@@ -321,10 +321,10 @@ type mockSecurityRequest struct {
 	attributes map[string]any
 }
 
-func (m *mockSecurityRequest) GetMethod() string              { return "GET" }
-func (m *mockSecurityRequest) GetURI() string                 { return m.uri }
-func (m *mockSecurityRequest) GetHeader(key string) string    { return m.headers[key] }
-func (m *mockSecurityRequest) RemoteAddress() string          { return "127.0.0.1:8080" }
+func (m *mockSecurityRequest) GetMethod() string           { return "GET" }
+func (m *mockSecurityRequest) GetURI() string              { return m.uri }
+func (m *mockSecurityRequest) GetHeader(key string) string { return m.headers[key] }
+func (m *mockSecurityRequest) RemoteAddress() string       { return "127.0.0.1:8080" }
 func (m *mockSecurityRequest) SetAttribute(key string, v any) {
 	if m.attributes == nil {
 		m.attributes = make(map[string]any)
@@ -365,5 +365,5 @@ func (m *mockFilterChain) DoFilter(_, _, _ interface{}) error {
 	m.called = true
 	return nil
 }
-func (m *mockFilterChain) AddFilter(_ filter.Filter) {}
+func (m *mockFilterChain) AddFilter(_ filter.Filter)   {}
 func (m *mockFilterChain) GetFilters() []filter.Filter { return nil }

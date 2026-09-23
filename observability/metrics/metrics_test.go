@@ -24,41 +24,41 @@ func TestCounter(t *testing.T) {
 
 func TestGauge(t *testing.T) {
 	t.Parallel()
-	g := NewGauge("test_gauge")
+	gauge := NewGauge("test_gauge")
 
-	g.Set(42.5)
-	if g.Value() != 42.5 {
-		t.Errorf("expected 42.5, got %f", g.Value())
+	gauge.Set(42.5)
+	if gauge.Value() != 42.5 {
+		t.Errorf("expected 42.5, got %f", gauge.Value())
 	}
 
-	g.Set(10.0)
-	if g.Value() != 10.0 {
-		t.Errorf("expected 10.0, got %f", g.Value())
+	gauge.Set(10.0)
+	if gauge.Value() != 10.0 {
+		t.Errorf("expected 10.0, got %f", gauge.Value())
 	}
 }
 
 func TestHistogram(t *testing.T) {
 	t.Parallel()
-	h := NewHistogram("test_histogram")
+	histogram := NewHistogram("test_histogram")
 
-	h.Observe(10.0)
-	h.Observe(20.0)
-	h.Observe(30.0)
+	histogram.Observe(10.0)
+	histogram.Observe(20.0)
+	histogram.Observe(30.0)
 
-	if h.Count() != 3 {
-		t.Errorf("expected count 3, got %d", h.Count())
+	if histogram.Count() != 3 {
+		t.Errorf("expected count 3, got %d", histogram.Count())
 	}
-	if h.Sum() != 60.0 {
-		t.Errorf("expected sum 60.0, got %f", h.Sum())
+	if histogram.Sum() != 60.0 {
+		t.Errorf("expected sum 60.0, got %f", histogram.Sum())
 	}
-	if h.Min() != 10.0 {
-		t.Errorf("expected min 10.0, got %f", h.Min())
+	if histogram.Min() != 10.0 {
+		t.Errorf("expected min 10.0, got %f", histogram.Min())
 	}
-	if h.Max() != 30.0 {
-		t.Errorf("expected max 30.0, got %f", h.Max())
+	if histogram.Max() != 30.0 {
+		t.Errorf("expected max 30.0, got %f", histogram.Max())
 	}
-	if h.Value() != 20.0 {
-		t.Errorf("expected avg 20.0, got %f", h.Value())
+	if histogram.Value() != 20.0 {
+		t.Errorf("expected avg 20.0, got %f", histogram.Value())
 	}
 }
 

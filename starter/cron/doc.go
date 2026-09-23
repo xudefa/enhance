@@ -29,7 +29,8 @@ package cron
 
 const (
 	// Cron 配置
-	CronEnabled    = "cron.enabled"
+	CronEnabled = "cron.enabled"
+	// CronWithLogger 是否启用日志记录。
 	CronWithLogger = "cron.with-logger"
 
 	// 日志字段常量

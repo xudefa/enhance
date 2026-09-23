@@ -116,7 +116,7 @@ func (w *httpResponseWriter) SetHeader(key, value string) {
 // 调用底层 http.ResponseWriter 的 Write 方法。
 func (w *httpResponseWriter) Write(data []byte) error {
 	_, err := w.ResponseWriter.Write(data)
-	return err
+	return fmt.Errorf("write response: %w", err)
 }
 
 // WriteHeader 写入响应头并标记响应已提交

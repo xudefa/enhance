@@ -8,6 +8,7 @@ import (
 )
 
 func TestValidatorConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-validator", environment.PriorityNormal, map[string]any{
 		"validator.enabled":                  "true",
@@ -32,6 +33,7 @@ func TestValidatorConfig_LoadConfig(t *testing.T) {
 }
 
 func TestValidatorConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &ValidatorConfig{
 		EnableCustomValidators: DefaultEnableCustomValidators,
 	}
@@ -42,6 +44,7 @@ func TestValidatorConfig_DefaultValues(t *testing.T) {
 }
 
 func TestValidator_ValidateStruct(t *testing.T) {
+	tt.Parallel()
 	v := NewTestValidator()
 
 	type TestUser struct {
@@ -69,6 +72,7 @@ func TestValidator_ValidateStruct(t *testing.T) {
 }
 
 func TestValidator_ValidateVar(t *testing.T) {
+	tt.Parallel()
 	v := NewTestValidator()
 
 	// 测试有效邮箱

@@ -7,6 +7,7 @@ import (
 )
 
 func TestApolloConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-apollo", environment.PriorityNormal, map[string]any{
 		"apollo.enabled":   "true",
@@ -42,6 +43,7 @@ func TestApolloConfig_LoadConfig(t *testing.T) {
 }
 
 func TestApolloConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &ApolloConfig{
 		Cluster:        DefaultCluster,
 		Namespace:      DefaultNamespace,

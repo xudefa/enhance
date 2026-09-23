@@ -49,13 +49,13 @@ type DefaultTokenProvider struct {
 
 // NewTokenProvider 创建 Token 提供者。
 func NewTokenProvider(opts ...TokenOption) *DefaultTokenProvider {
-	p := &DefaultTokenProvider{
+	provider := &DefaultTokenProvider{
 		expiration: time.Hour,
 	}
 	for _, opt := range opts {
-		opt(p)
+		opt(provider)
 	}
-	return p
+	return provider
 }
 
 // TokenOption Token 选项函数类型。
@@ -163,14 +163,17 @@ func (p *DefaultTokenProvider) ParseToken(ctx context.Context, tokenString strin
 // ValidateToken 验证 JWT Token 是否有效。
 func (p *DefaultTokenProvider) ValidateToken(ctx context.Context, tokenString string) error {
 	_, err := p.ParseToken(ctx, tokenString)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to validate token: %w", err)
+	}
+	return nil
 }
 
 // RefreshToken 刷新 JWT Token。
 func (p *DefaultTokenProvider) RefreshToken(ctx context.Context, tokenString string) (string, error) {
 	claims, err := p.ParseToken(ctx, tokenString)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to refresh token: %w", err)
 	}
 
 	refreshExpiration := p.refreshExpiration

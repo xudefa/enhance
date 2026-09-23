@@ -55,7 +55,10 @@ func (e *DefaultCasbinEnforcer) AddPolicy(ctx context.Context, sub, obj, act str
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_, err := e.enforcer.AddPolicy(sub, obj, act)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to add policy: %w", err)
+	}
+	return nil
 }
 
 // RemovePolicy 移除策略。
@@ -63,7 +66,10 @@ func (e *DefaultCasbinEnforcer) RemovePolicy(ctx context.Context, sub, obj, act 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_, err := e.enforcer.RemovePolicy(sub, obj, act)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to remove policy: %w", err)
+	}
+	return nil
 }
 
 // GetPolicy 获取所有策略。
@@ -71,7 +77,10 @@ func (e *DefaultCasbinEnforcer) GetPolicy(ctx context.Context) ([][]string, erro
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	policies, err := e.enforcer.GetPolicy()
-	return policies, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get policy: %w", err)
+	}
+	return policies, nil
 }
 
 // LoadPolicy 重新加载策略。
@@ -93,7 +102,10 @@ func (e *DefaultCasbinEnforcer) AddRole(ctx context.Context, user, role string) 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_, err := e.enforcer.AddRoleForUser(user, role)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to add role for user: %w", err)
+	}
+	return nil
 }
 
 // GetRolesForUser 获取用户的所有角色（便捷方法）。
@@ -101,7 +113,10 @@ func (e *DefaultCasbinEnforcer) GetRolesForUser(ctx context.Context, user string
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	roles, err := e.enforcer.GetRolesForUser(user)
-	return roles, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get roles for user: %w", err)
+	}
+	return roles, nil
 }
 
 // AddRoleForUser 为用户添加角色（便捷方法）。
@@ -123,7 +138,10 @@ func (e *DefaultCasbinEnforcer) GetUsersForRole(ctx context.Context, role string
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	users, err := e.enforcer.GetUsersForRole(role)
-	return users, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users for role: %w", err)
+	}
+	return users, nil
 }
 
 // HasRoleForUser 检查用户是否有指定角色（便捷方法）。

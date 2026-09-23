@@ -27,25 +27,41 @@ func (c *adapterTestChain) Matches(request interface{}) bool { return true }
 
 func (c *adapterTestChain) GetFilters() []filter.Filter { return nil }
 
+// mockResponseWriter 用于测试的 http.ResponseWriter Mock
+type mockResponseWriter struct {
+	header http.Header
+	code   int
+	body   []byte
+}
+
+func newMockResponseWriter() *mockResponseWriter {
+	return &mockResponseWriter{header: make(http.Header)}
+}
+
+func (m *mockResponseWriter) Header() http.Header {
+	return m.header
+}
+
+func (m *mockResponseWriter) Write(b []byte) (int, error) {
+	m.body = append(m.body, b...)
+	return len(b), nil
+}
+
+func (m *mockResponseWriter) WriteHeader(code int) {
+	m.code = code
+}
+
 // TestSecurityFilterChainHandler_ServeHTTP 验证安全响应产生后不再调用 nextHandler（H2）。
-func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
-	t.Parallel()
+type testSecurityFilterChainHandlerCase struct {
+	name           string
+	chainFunc      func(ctx interface{}, request interface{}, response interface{}) error
+	wantStatus     int
+	wantBody       string
+	wantNextCalled bool
+}
 
-	newHandler := func(chainFunc func(ctx interface{}, request interface{}, response interface{}) error) (*SecurityFilterChainHandler, *bool) {
-		nextCalled := false
-		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			nextCalled = true
-		})
-		return NewSecurityFilterChainHandler(&adapterTestChain{doFilter: chainFunc}, next), &nextCalled
-	}
-
-	tests := []struct {
-		name           string
-		chainFunc      func(ctx interface{}, request interface{}, response interface{}) error
-		wantStatus     int
-		wantBody       string
-		wantNextCalled bool
-	}{
+func testSecurityFilterChainHandlerCases() []testSecurityFilterChainHandlerCase {
+	return []testSecurityFilterChainHandlerCase{
 		{
 			name: "redirect response terminates request",
 			chainFunc: func(ctx interface{}, request interface{}, response interface{}) error {
@@ -87,12 +103,24 @@ func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
 			wantNextCalled: true,
 		},
 	}
+}
 
-	for _, tt := range tests {
+func testSecurityFilterChainHandlerBuild(chainFunc func(ctx interface{}, request interface{}, response interface{}) error) (*SecurityFilterChainHandler, *bool) {
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+	})
+	return NewSecurityFilterChainHandler(&adapterTestChain{doFilter: chainFunc}, next), &nextCalled
+}
+
+func TestSecurityFilterChainHandler_ServeHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range testSecurityFilterChainHandlerCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			handler, nextCalled := newHandler(tt.chainFunc)
+			handler, nextCalled := testSecurityFilterChainHandlerBuild(tt.chainFunc)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api", nil))
 
@@ -178,5 +206,59 @@ func TestBasicAuthenticationFilter_SetsRequestAttribute(t *testing.T) {
 		if got := extractPrincipalName(auth); got != "admin" {
 			t.Errorf("principal = %q, want %q", got, "admin")
 		}
+	}
+}
+
+// ==================== HTTP Adapter Coverage Tests ====================
+
+func TestHttpRequestAdapter_AdditionalMethods(t *testing.T) {
+	t.Parallel()
+
+	req := &http.Request{
+		Method:     "POST",
+		URL:        mustParseURL("/api/test?q=1"),
+		RemoteAddr: "192.168.1.1:8080",
+		Header:     http.Header{"X-Custom": {"value1"}},
+	}
+
+	adapter := NewHttpRequestAdapter(req)
+
+	if adapter.GetHeader("X-Custom") != "value1" {
+		t.Errorf("expected 'value1', got '%s'", adapter.GetHeader("X-Custom"))
+	}
+	if adapter.GetHeader("X-Missing") != "" {
+		t.Error("expected empty string for missing header")
+	}
+
+	if adapter.RemoteAddress() != "192.168.1.1:8080" {
+		t.Errorf("expected '192.168.1.1:8080', got '%s'", adapter.RemoteAddress())
+	}
+
+	adapter.SetAttribute("testKey", "testValue")
+	attributeValue, ok := adapter.GetAttribute("testKey")
+	if !ok || attributeValue != "testValue" {
+		t.Errorf("expected attribute 'testValue', got %v (exists=%v)", attributeValue, ok)
+	}
+
+	// Test GetAttribute for non-existent key
+	_, ok = adapter.GetAttribute("nonExistent")
+	if ok {
+		t.Error("expected false for non-existent attribute")
+	}
+}
+
+func TestHttpResponseAdapter_StatusCodeGetter(t *testing.T) {
+	t.Parallel()
+
+	rec := newMockResponseWriter()
+	adapter := NewHttpResponseAdapter(rec)
+
+	if adapter.StatusCode() != http.StatusOK {
+		t.Errorf("expected default status %d, got %d", http.StatusOK, adapter.StatusCode())
+	}
+
+	adapter.SetStatusCode(http.StatusNotFound)
+	if adapter.StatusCode() != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, adapter.StatusCode())
 	}
 }

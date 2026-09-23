@@ -84,12 +84,16 @@ package casbinxorm
 // ==================== 配置键常量 ====================
 
 const (
-	// Casbin XORM 配置
-	CasbinXormEnabled         = "security.casbin.enabled"
-	CasbinXormPolicyType      = "security.casbin.policy-type"
+	// CasbinXormEnabled 是否启用 Casbin XORM 集成。
+	CasbinXormEnabled = "security.casbin.enabled"
+	// CasbinXormPolicyType Casbin 策略存储类型。
+	CasbinXormPolicyType = "security.casbin.policy-type"
+	// CasbinXormAutoCreateTable 是否自动创建策略表。
 	CasbinXormAutoCreateTable = "security.casbin.auto-create-table"
-	CasbinXormTableName       = "security.casbin.table-name"
-	CasbinXormDatabasePrefix  = "security.casbin.database-prefix"
+	// CasbinXormTableName 策略表名。
+	CasbinXormTableName = "security.casbin.table-name"
+	// CasbinXormDatabasePrefix 数据库前缀。
+	CasbinXormDatabasePrefix = "security.casbin.database-prefix"
 
 	// 日志字段常量
 	LogFieldPolicyType = "policy-type"
@@ -98,11 +102,14 @@ const (
 // ==================== 默认值常量 ====================
 
 const (
-	// Casbin XORM 默认值
-	DefaultCasbinXormPolicyType      = "xorm"
+	// DefaultCasbinXormPolicyType 默认策略存储类型。
+	DefaultCasbinXormPolicyType = "xorm"
+	// DefaultCasbinXormAutoCreateTable 默认是否自动创建策略表。
 	DefaultCasbinXormAutoCreateTable = true
-	DefaultCasbinXormTableName       = "casbin_rule"
-	DefaultCasbinXormDatabasePrefix  = ""
+	// DefaultCasbinXormTableName 默认策略表名。
+	DefaultCasbinXormTableName = "casbin_rule"
+	// DefaultCasbinXormDatabasePrefix 默认数据库前缀。
+	DefaultCasbinXormDatabasePrefix = ""
 
 	// 条件值常量
 	ConditionTrue = "true"

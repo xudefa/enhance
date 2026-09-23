@@ -99,34 +99,34 @@ func WithErrorHandler(handler func(error, ApplicationEvent)) AsyncPublisherOptio
 // 返回:
 //   - *AsyncPublisher: 异步发布器实例
 func NewAsyncPublisher(bus AsyncPublisherBus, opts ...AsyncPublisherOption) *AsyncPublisher {
-	p := &AsyncPublisher{
+	publisher := &AsyncPublisher{
 		bus:         bus,
 		done:        make(chan struct{}),
 		workerCount: 1,  // 默认 1 个工作协程
 		queueSize:   10, // 默认缓冲 10
 	}
 	for _, opt := range opts {
-		opt(p)
+		opt(publisher)
 	}
 
 	// 创建工作队列
-	p.worker = make(chan func(), p.queueSize)
+	publisher.worker = make(chan func(), publisher.queueSize)
 
 	// 启动工作协程池
-	for range p.workerCount {
-		p.wg.Add(1)
-		go p.run()
+	for range publisher.workerCount {
+		publisher.wg.Add(1)
+		go publisher.run()
 	}
 
-	return p
+	return publisher
 }
 
 // run 工作协程主循环
 func (p *AsyncPublisher) run() {
 	defer p.wg.Done()
 	defer func() {
-		if r := recover(); r != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "panic in async publisher worker: %v\n", r)
+		if rec := recover(); rec != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "panic in async publisher worker: %v\n", rec)
 		}
 	}()
 	for {
@@ -155,35 +155,43 @@ func (p *AsyncPublisher) run() {
 //   - ctx: 上下文，用于超时控制
 //   - event: 要发布的事件
 func (p *AsyncPublisher) Publish(ctx context.Context, event ApplicationEvent) {
+	// 已关闭或上下文已完成时快速失败
 	if p.closed.Load() {
-		if p.errHandler != nil {
-			p.errHandler(fmt.Errorf("event: publisher is closed"), event)
-		}
+		p.reportError(fmt.Errorf("event: publisher is closed"), event)
 		return
 	}
 
 	// 先检查上下文是否已经完成
 	select {
 	case <-ctx.Done():
-		if p.errHandler != nil {
-			p.errHandler(ctx.Err(), event)
-		}
+		p.reportError(ctx.Err(), event)
 		return
 	default:
 	}
 
+	// 关闭与入队之间的竞态保护：加锁后再次检查
 	p.closeMu.Lock()
 	if p.closed.Load() {
 		p.closeMu.Unlock()
-		if p.errHandler != nil {
-			p.errHandler(fmt.Errorf("event: publisher is closed"), event)
-		}
+		p.reportError(fmt.Errorf("event: publisher is closed"), event)
 		return
 	}
 	p.wg.Add(1)
 	p.taskWg.Add(1)
 	p.closeMu.Unlock()
 
+	p.enqueueOrFallback(ctx, event)
+}
+
+// reportError 通过错误处理器上报发布错误。
+func (p *AsyncPublisher) reportError(err error, event ApplicationEvent) {
+	if p.errHandler != nil {
+		p.errHandler(err, event)
+	}
+}
+
+// enqueueOrFallback 将发布任务写入工作队列，队列满或超时则回退为阻塞发布。
+func (p *AsyncPublisher) enqueueOrFallback(ctx context.Context, event ApplicationEvent) {
 	select {
 	case p.worker <- func() {
 		defer p.wg.Done()
@@ -193,51 +201,58 @@ func (p *AsyncPublisher) Publish(ctx context.Context, event ApplicationEvent) {
 	case <-ctx.Done():
 		p.wg.Done()
 		p.taskWg.Done()
-		if p.errHandler != nil {
-			p.errHandler(ctx.Err(), event)
-		}
+		p.reportError(ctx.Err(), event)
 	default:
-		if p.errHandler != nil {
-			p.errHandler(fmt.Errorf("event: async worker queue full"), event)
-		}
-		go func() {
-			defer p.wg.Done()
-			defer p.taskWg.Done()
-			done := make(chan struct{}, 1)
-			go func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("fallback event handler panic", "event", event.Type(), "recover", r)
-					}
-					close(done)
-				}()
-				p.bus.Publish(event)
-			}()
-			timer := time.NewTimer(30 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-done:
-			case <-timer.C:
-				slog.Error("fallback event publish timeout", "event", event.Type())
-			}
-		}()
+		p.reportError(fmt.Errorf("event: async worker queue full"), event)
+		p.fallbackPublish(event)
 	}
+}
+
+// fallbackPublish 队列满时在独立协程中阻塞发布，带超时保护。
+func (p *AsyncPublisher) fallbackPublish(event ApplicationEvent) {
+	go p.runFallbackPublish(event)
+}
+
+// runFallbackPublish 后备发布协程（WaitGroup 保护）。
+func (p *AsyncPublisher) runFallbackPublish(event ApplicationEvent) {
+	defer p.wg.Done()
+	defer p.taskWg.Done()
+	done := make(chan struct{}, 1)
+	go p.publishWithDone(event, done)
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+		slog.Error("fallback event publish timeout", "event", event.Type())
+	}
+}
+
+// publishWithDone 发布事件并在完成后关闭 done 通道。
+func (p *AsyncPublisher) publishWithDone(event ApplicationEvent, done chan struct{}) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("fallback event handler panic", "event", event.Type(), "recover", rec)
+		}
+		close(done)
+	}()
+	p.bus.Publish(event)
 }
 
 // publishEvent 发布单个事件，包含 panic 恢复逻辑
 func (p *AsyncPublisher) publishEvent(event ApplicationEvent) {
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
 			var err error
-			if e, ok := r.(error); ok {
+			if e, ok := rec.(error); ok {
 				err = e
 			} else {
-				err = fmt.Errorf("event handler panic: %v", r)
+				err = fmt.Errorf("event handler panic: %v", rec)
 			}
 			if p.errHandler != nil {
 				p.errHandler(err, event)
 			}
-			slog.Error("event handler panic", "event", event.Type(), "recover", r)
+			slog.Error("event handler panic", "event", event.Type(), "recover", rec)
 		}
 	}()
 	p.bus.Publish(event)

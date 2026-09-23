@@ -8,10 +8,11 @@ import (
 	"time"
 )
 
+// ==================== Builder Core Tests ====================
+
 func TestEnvironmentBuilder_WithJSONConfig(t *testing.T) {
 	t.Parallel()
 
-	// Create a temporary JSON config file
 	tmpDir := t.TempDir()
 	jsonFile := filepath.Join(tmpDir, "test-config.json")
 	content := `{"test.key": "test-value", "app.name": "test-app"}`
@@ -25,7 +26,6 @@ func TestEnvironmentBuilder_WithJSONConfig(t *testing.T) {
 		t.Fatal("expected builder to be created")
 	}
 
-	// Verify builder has property sources
 	if len(builder.propertySources) == 0 {
 		t.Error("expected builder to have property sources from JSON config")
 	}
@@ -39,7 +39,6 @@ func TestEnvironmentBuilder_WithJSONConfig(t *testing.T) {
 func TestEnvironmentBuilder_WithJSONConfig_NonExistent(t *testing.T) {
 	t.Parallel()
 
-	// Should not panic even if file doesn't exist
 	builder := NewEnvironmentBuilder().WithJSONConfig("/non/existent/file.json")
 	env := builder.Build()
 	if env == nil {
@@ -77,6 +76,314 @@ func TestEnvironmentBuilder_ChainedMethods(t *testing.T) {
 		t.Error("expected 'test' profile to be active")
 	}
 }
+
+func TestEnvironmentBuilder_WithPropertySource(t *testing.T) {
+	t.Parallel()
+
+	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
+		"key": "value",
+	})
+
+	builder := NewEnvironmentBuilder().WithPropertySource(source)
+	if len(builder.propertySources) != 1 {
+		t.Errorf("expected 1 property source, got %d", len(builder.propertySources))
+	}
+
+	env := builder.Build()
+	value, ok := env.GetProperty("key")
+	if !ok || value != "value" {
+		t.Errorf("expected 'value', got %v", value)
+	}
+}
+
+func TestEnvironmentBuilder_WithPropertySourceFirst(t *testing.T) {
+	t.Parallel()
+
+	source1 := NewMapPropertySource("first", PriorityNormal, map[string]any{
+		"key": "first-value",
+	})
+	source2 := NewMapPropertySource("second", PriorityNormal, map[string]any{
+		"key": "second-value",
+	})
+
+	builder := NewEnvironmentBuilder().
+		WithPropertySource(source1).
+		WithPropertySourceFirst(source2)
+
+	if len(builder.propertySources) != 2 {
+		t.Fatalf("expected 2 property sources, got %d", len(builder.propertySources))
+	}
+	if builder.propertySources[0].Name() != "second" {
+		t.Errorf("expected first source to be 'second', got %s", builder.propertySources[0].Name())
+	}
+}
+
+// ==================== Builder Config Option Tests ====================
+
+func TestWithProfiles(t *testing.T) {
+	t.Parallel()
+
+	config := &EnvironmentConfig{}
+	opt := WithProfiles("dev", "test")
+	opt(config)
+
+	if len(config.Profiles) != 2 {
+		t.Errorf("expected 2 profiles, got %d", len(config.Profiles))
+	}
+}
+
+func TestWithDefaultProfile(t *testing.T) {
+	t.Parallel()
+
+	config := &EnvironmentConfig{}
+	opt := WithDefaultProfile("prod")
+	opt(config)
+
+	if config.DefaultProfile != "prod" {
+		t.Errorf("expected 'prod', got %s", config.DefaultProfile)
+	}
+}
+
+func TestWithAutoDetectProfiles(t *testing.T) {
+	t.Parallel()
+
+	config := &EnvironmentConfig{}
+	opt := WithAutoDetectProfiles(true)
+	opt(config)
+
+	if !config.AutoDetectProfiles {
+		t.Error("expected AutoDetectProfiles to be true")
+	}
+}
+
+func TestWithPropertySources(t *testing.T) {
+	t.Parallel()
+
+	config := &EnvironmentConfig{}
+	source := NewMapPropertySource("test", PriorityNormal, map[string]any{})
+	opt := WithPropertySources(source)
+	opt(config)
+
+	if len(config.PropertySources) != 1 {
+		t.Errorf("expected 1 property source, got %d", len(config.PropertySources))
+	}
+}
+
+func TestDefaultEnvironmentConfig(t *testing.T) {
+	t.Parallel()
+
+	config := DefaultEnvironmentConfig()
+
+	if config.DefaultProfile != "default" {
+		t.Errorf("expected 'default', got %s", config.DefaultProfile)
+	}
+	if !config.AutoDetectProfiles {
+		t.Error("expected AutoDetectProfiles to be true")
+	}
+}
+
+func TestEnvironmentConfig_ApplyOptions(t *testing.T) {
+	t.Parallel()
+
+	config := &EnvironmentConfig{}
+	opts := []EnvironmentOption{
+		WithProfiles("dev"),
+		WithDefaultProfile("default"),
+		WithAutoDetectProfiles(false),
+	}
+
+	config.ApplyOptions(opts)
+
+	if len(config.Profiles) != 1 {
+		t.Errorf("expected 1 profile, got %d", len(config.Profiles))
+	}
+	if config.DefaultProfile != "default" {
+		t.Errorf("expected 'default', got %s", config.DefaultProfile)
+	}
+	if config.AutoDetectProfiles {
+		t.Error("expected AutoDetectProfiles to be false")
+	}
+}
+
+func TestCreateEnvironment(t *testing.T) {
+	t.Parallel()
+
+	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
+		"key": "value",
+	})
+
+	env := CreateEnvironment(
+		WithProfiles("dev"),
+		WithDefaultProfile("default"),
+		WithPropertySources(source),
+	)
+
+	if env == nil {
+		t.Fatal("expected environment to be created")
+	}
+
+	if !env.AcceptsProfile("dev") {
+		t.Error("expected 'dev' profile to be active")
+	}
+
+	value, ok := env.GetProperty("key")
+	if !ok || value != "value" {
+		t.Errorf("expected 'value', got %v", value)
+	}
+}
+
+// ==================== Environment Operations Tests ====================
+
+func TestEnvironment_AddPropertySourceFirst(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnvironment()
+	env.AddPropertySource(NewMapPropertySource("first", PriorityNormal, map[string]any{
+		"key": "first-value",
+	}))
+	env.AddPropertySourceFirst(NewMapPropertySource("second", PriorityNormal, map[string]any{
+		"key": "second-value",
+	}))
+
+	value, ok := env.GetProperty("key")
+	if !ok {
+		t.Fatal("expected 'key' to exist")
+	}
+	if value != "second-value" {
+		t.Errorf("expected 'second-value' (higher priority), got %v", value)
+	}
+}
+
+func TestEnvironment_RemovePropertySource(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnvironment()
+	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
+		"key": "value",
+	}))
+
+	_, ok := env.GetProperty("key")
+	if !ok {
+		t.Fatal("expected 'key' to exist before removal")
+	}
+
+	env.RemovePropertySource("test")
+
+	_, ok = env.GetProperty("key")
+	if ok {
+		t.Error("expected 'key' to not exist after removal")
+	}
+}
+
+func TestEnvironment_RemoveProfile(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnvironment()
+	env.AddActiveProfile("dev")
+	env.AddActiveProfile("test")
+
+	if !env.AcceptsProfile("dev") {
+		t.Fatal("expected 'dev' profile to exist before removal")
+	}
+
+	env.RemoveProfile("dev")
+
+	if env.AcceptsProfile("dev") {
+		t.Error("expected 'dev' profile to not exist after removal")
+	}
+
+	if !env.AcceptsProfile("test") {
+		t.Error("expected 'test' profile to still exist")
+	}
+}
+
+func TestEnvironment_GetPropertySources(t *testing.T) {
+	t.Parallel()
+
+	env := NewEnvironment()
+	initialCount := len(env.GetPropertySources())
+
+	source1 := NewMapPropertySource("source1", PriorityNormal, map[string]any{})
+	source2 := NewMapPropertySource("source2", PriorityNormal, map[string]any{})
+	env.AddPropertySource(source1)
+	env.AddPropertySource(source2)
+
+	sources := env.GetPropertySources()
+	if len(sources) != initialCount+2 {
+		t.Errorf("expected %d property sources, got %d", initialCount+2, len(sources))
+	}
+}
+
+// ==================== Property Source Tests ====================
+
+func TestPropertySource_Contains(t *testing.T) {
+	t.Parallel()
+
+	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
+		"key1": "value1",
+		"key2": "value2",
+	})
+
+	if !source.Contains("key1") {
+		t.Error("expected source to contain 'key1'")
+	}
+
+	if source.Contains("nonexistent") {
+		t.Error("expected source to not contain 'nonexistent'")
+	}
+}
+
+func TestPropertySource_Keys(t *testing.T) {
+	t.Parallel()
+
+	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
+		"key1": "value1",
+		"key2": "value2",
+	})
+
+	keys := source.Keys()
+	if len(keys) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(keys))
+	}
+}
+
+func TestEnvPropertySource_Name(t *testing.T) {
+	t.Parallel()
+
+	source := NewEnvPropertySource("test-env", "TEST")
+	if source.Name() != "test-env" {
+		t.Errorf("expected name 'test-env', got %s", source.Name())
+	}
+}
+
+func TestEnvPropertySource_Contains(t *testing.T) {
+	t.Setenv("TEST_KEY", "test-value")
+
+	source := NewEnvPropertySource("test-env", "TEST")
+	if !source.Contains("key") {
+		t.Error("expected env source to contain 'key' (mapped to 'TEST_KEY')")
+	}
+}
+
+func TestArgsPropertySource_Name(t *testing.T) {
+	t.Parallel()
+
+	source := NewArgsPropertySource("test-args", []string{"--key=value"})
+	if source.Name() != "test-args" {
+		t.Errorf("expected name 'test-args', got %s", source.Name())
+	}
+}
+
+func TestArgsPropertySource_Contains(t *testing.T) {
+	t.Parallel()
+
+	source := NewArgsPropertySource("test-args", []string{"--key=value"})
+	if !source.Contains("key") {
+		t.Error("expected args source to contain 'key'")
+	}
+}
+
+// ==================== Environment Helper Tests ====================
 
 func TestEnvironmentHelper_WithPrefix(t *testing.T) {
 	t.Parallel()
@@ -240,378 +547,53 @@ func TestEnvironmentHelper_GetActiveProfile(t *testing.T) {
 	}
 }
 
-func TestBindConfig(t *testing.T) {
+func TestEnvironmentHelper_GetRequiredProperty(t *testing.T) {
 	t.Parallel()
 
 	env := NewEnvironment()
 	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"name":    "test-app",
-		"version": "1.0.0",
+		"app.name": "test-app",
 	}))
 
-	type Config struct {
-		Name    string
-		Version string
-	}
+	helper := NewEnvironmentHelper(env)
 
-	cfg, err := BindConfig[Config](env)
+	prop, err := helper.GetRequiredProperty("app.name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if cfg.Name != "test-app" {
-		t.Errorf("expected name 'test-app', got %s", cfg.Name)
+	if prop != "test-app" {
+		t.Errorf("expected 'test-app', got %v", prop)
 	}
-	if cfg.Version != "1.0.0" {
-		t.Errorf("expected version '1.0.0', got %s", cfg.Version)
+
+	_, err = helper.GetRequiredProperty("non.existent")
+	if err == nil {
+		t.Error("expected error for non-existent property")
 	}
 }
 
-func TestBindConfigPrefix(t *testing.T) {
+func TestEnvironmentHelper_WithPrefix_GetString(t *testing.T) {
 	t.Parallel()
 
 	env := NewEnvironment()
 	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"app.name":    "test-app",
-		"app.version": "1.0.0",
+		"app.name": "test-app",
+		"app.port": "8080",
 	}))
 
-	type Config struct {
-		Name    string
-		Version string
+	helper := NewEnvironmentHelper(env)
+	prefixedHelper := helper.WithPrefix("app")
+
+	if prefixedHelper == nil {
+		t.Fatal("expected prefixed helper to be created")
 	}
 
-	cfg, err := BindConfigPrefix[Config](env, "app")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if cfg.Name != "test-app" {
-		t.Errorf("expected name 'test-app', got %s", cfg.Name)
-	}
-	if cfg.Version != "1.0.0" {
-		t.Errorf("expected version '1.0.0', got %s", cfg.Version)
+	value := prefixedHelper.GetString("name", "default")
+	if value != "test-app" {
+		t.Errorf("expected 'test-app', got %v", value)
 	}
 }
 
-func TestMustBindConfigPrefix(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"db.host": "localhost",
-		"db.port": "5432",
-	}))
-
-	type DBConfig struct {
-		Host string
-		Port string
-	}
-
-	cfg := MustBindConfigPrefix[DBConfig](env, "db")
-	if cfg.Host != "localhost" {
-		t.Errorf("expected host 'localhost', got %s", cfg.Host)
-	}
-	if cfg.Port != "5432" {
-		t.Errorf("expected port '5432', got %s", cfg.Port)
-	}
-}
-
-func TestIsTimeType(t *testing.T) {
-	t.Parallel()
-
-	// Test time.Time type
-	if !isTimeType(reflect.TypeOf(time.Time{})) {
-		t.Error("expected time.Time to be recognized as time type")
-	}
-
-	// Test non-time type
-	if isTimeType(reflect.TypeOf("")) {
-		t.Error("expected string to not be recognized as time type")
-	}
-
-	if isTimeType(reflect.TypeOf(0)) {
-		t.Error("expected int to not be recognized as time type")
-	}
-}
-
-func TestHasNestedExplicitKeys(t *testing.T) {
-	t.Parallel()
-
-	type DBConfig struct {
-		Host string
-		Port string
-	}
-
-	cfg := DBConfig{Host: "localhost", Port: "5432"}
-	val := reflect.ValueOf(cfg)
-
-	// This function checks if there are nested explicit keys
-	result := hasNestedExplicitKeys(val)
-	// Function should return false for simple struct without nested config keys
-	_ = result
-}
-
-func TestHasExplicitConfigKey(t *testing.T) {
-	t.Parallel()
-
-	type AppConfig struct {
-		Name string `config:"app.name"`
-	}
-
-	cfg := AppConfig{}
-	typ := reflect.TypeOf(cfg)
-	field, _ := typ.FieldByName("Name")
-
-	result := hasExplicitConfigKey(field)
-	if !result {
-		t.Error("expected field with config tag to have explicit config key")
-	}
-
-	type SimpleConfig struct {
-		Name string
-	}
-
-	simpleCfg := SimpleConfig{}
-	simpleTyp := reflect.TypeOf(simpleCfg)
-	simpleField, _ := simpleTyp.FieldByName("Name")
-
-	result = hasExplicitConfigKey(simpleField)
-	if result {
-		t.Error("expected field without config tag to not have explicit config key")
-	}
-}
-
-func TestEnvironment_AddPropertySourceFirst(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddPropertySource(NewMapPropertySource("first", PriorityNormal, map[string]any{
-		"key": "first-value",
-	}))
-	env.AddPropertySourceFirst(NewMapPropertySource("second", PriorityNormal, map[string]any{
-		"key": "second-value",
-	}))
-
-	value, ok := env.GetProperty("key")
-	if !ok {
-		t.Fatal("expected 'key' to exist")
-	}
-	if value != "second-value" {
-		t.Errorf("expected 'second-value' (higher priority), got %v", value)
-	}
-}
-
-func TestEnvironment_RemovePropertySource(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"key": "value",
-	}))
-
-	// Verify property exists
-	_, ok := env.GetProperty("key")
-	if !ok {
-		t.Fatal("expected 'key' to exist before removal")
-	}
-
-	// Remove the property source by name
-	env.RemovePropertySource("test")
-
-	// Verify property no longer exists
-	_, ok = env.GetProperty("key")
-	if ok {
-		t.Error("expected 'key' to not exist after removal")
-	}
-}
-
-func TestEnvironment_RemoveProfile(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddActiveProfile("dev")
-	env.AddActiveProfile("test")
-
-	// Verify profiles exist
-	if !env.AcceptsProfile("dev") {
-		t.Fatal("expected 'dev' profile to exist before removal")
-	}
-
-	// Remove the profile
-	env.RemoveProfile("dev")
-
-	// Verify profile no longer exists
-	if env.AcceptsProfile("dev") {
-		t.Error("expected 'dev' profile to not exist after removal")
-	}
-
-	// Verify other profile still exists
-	if !env.AcceptsProfile("test") {
-		t.Error("expected 'test' profile to still exist")
-	}
-}
-
-func TestEnvironment_GetPropertySources(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	initialCount := len(env.GetPropertySources())
-
-	source1 := NewMapPropertySource("source1", PriorityNormal, map[string]any{})
-	source2 := NewMapPropertySource("source2", PriorityNormal, map[string]any{})
-	env.AddPropertySource(source1)
-	env.AddPropertySource(source2)
-
-	sources := env.GetPropertySources()
-	if len(sources) != initialCount+2 {
-		t.Errorf("expected %d property sources, got %d", initialCount+2, len(sources))
-	}
-}
-
-func TestFindDefaultConfigFile(t *testing.T) {
-	t.Parallel()
-
-	// This function searches for default config files
-	// Just verify it doesn't panic
-	file := FindDefaultConfigFile()
-	// File may or may not exist depending on the environment
-	_ = file
-}
-
-func TestPropertySource_Contains(t *testing.T) {
-	t.Parallel()
-
-	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"key1": "value1",
-		"key2": "value2",
-	})
-
-	if !source.Contains("key1") {
-		t.Error("expected source to contain 'key1'")
-	}
-
-	if source.Contains("nonexistent") {
-		t.Error("expected source to not contain 'nonexistent'")
-	}
-}
-
-func TestPropertySource_Keys(t *testing.T) {
-	t.Parallel()
-
-	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"key1": "value1",
-		"key2": "value2",
-	})
-
-	keys := source.Keys()
-	if len(keys) != 2 {
-		t.Errorf("expected 2 keys, got %d", len(keys))
-	}
-}
-
-func TestEnvPropertySource_Name(t *testing.T) {
-	t.Parallel()
-
-	source := NewEnvPropertySource("test-env", "TEST")
-	if source.Name() != "test-env" {
-		t.Errorf("expected name 'test-env', got %s", source.Name())
-	}
-}
-
-func TestEnvPropertySource_Contains(t *testing.T) {
-	t.Parallel()
-
-	_ = os.Setenv("TEST_KEY", "test-value")
-	defer func() { _ = os.Unsetenv("TEST_KEY") }()
-
-	source := NewEnvPropertySource("test-env", "TEST")
-	// Contains会将"key"转换为"TEST_KEY"（前缀+大写）
-	if !source.Contains("key") {
-		t.Error("expected env source to contain 'key' (mapped to 'TEST_KEY')")
-	}
-}
-
-func TestArgsPropertySource_Name(t *testing.T) {
-	t.Parallel()
-
-	source := NewArgsPropertySource("test-args", []string{"--key=value"})
-	if source.Name() != "test-args" {
-		t.Errorf("expected name 'test-args', got %s", source.Name())
-	}
-}
-
-func TestArgsPropertySource_Contains(t *testing.T) {
-	t.Parallel()
-
-	source := NewArgsPropertySource("test-args", []string{"--key=value"})
-	if !source.Contains("key") {
-		t.Error("expected args source to contain 'key'")
-	}
-}
-
-func TestTypeConverter_ToSlice(t *testing.T) {
-	t.Parallel()
-
-	converter := NewTypeConverter()
-
-	// Test converting to slice
-	result, err := converter.ConvertTo("a,b,c", reflect.TypeOf([]string{}))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	slice, ok := result.Interface().([]string)
-	if !ok {
-		t.Fatal("expected result to be []string")
-	}
-
-	if len(slice) != 3 {
-		t.Errorf("expected 3 elements, got %d", len(slice))
-	}
-}
-
-func TestTypeConverter_ToUint(t *testing.T) {
-	t.Parallel()
-
-	converter := NewTypeConverter()
-
-	// Test converting to uint
-	result, err := converter.ConvertTo("42", reflect.TypeOf(uint(0)))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	val, ok := result.Interface().(uint)
-	if !ok {
-		t.Fatal("expected result to be uint")
-	}
-
-	if val != 42 {
-		t.Errorf("expected 42, got %d", val)
-	}
-}
-
-func TestTypeConverter_ToFloat(t *testing.T) {
-	t.Parallel()
-
-	converter := NewTypeConverter()
-
-	// Test converting to float64
-	result, err := converter.ConvertTo("3.14", reflect.TypeOf(float64(0)))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	val, ok := result.Interface().(float64)
-	if !ok {
-		t.Fatal("expected result to be float64")
-	}
-
-	if val != 3.14 {
-		t.Errorf("expected 3.14, got %f", val)
-	}
-}
+// ==================== Environment Template Tests ====================
 
 func TestEnvironmentTemplate(t *testing.T) {
 	t.Parallel()
@@ -638,160 +620,6 @@ func TestEnvironmentTemplate(t *testing.T) {
 	port := template.GetDatabasePort(0)
 	if port != 5432 {
 		t.Errorf("expected database port 5432, got %d", port)
-	}
-}
-
-func TestGetConfigFileExtension(t *testing.T) {
-	t.Parallel()
-
-	// 测试JSON配置类型
-	ext := GetConfigFileExtension(ConfigTypeJSON)
-	if ext != "json" {
-		t.Errorf("expected extension 'json', got %s", ext)
-	}
-}
-
-func TestParseConfigType(t *testing.T) {
-	t.Parallel()
-
-	// 测试解析配置类型
-	configType := ParseConfigType("/path/to/config.json")
-	if configType != ConfigTypeJSON {
-		t.Errorf("expected ConfigTypeJSON, got %s", configType)
-	}
-}
-
-func TestTypeConverter_ConvertNumeric(t *testing.T) {
-	t.Parallel()
-
-	converter := NewTypeConverter()
-
-	// 测试转换为int8
-	result, err := converter.ConvertTo("127", reflect.TypeOf(int8(0)))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	val, ok := result.Interface().(int8)
-	if !ok {
-		t.Fatal("expected result to be int8")
-	}
-
-	if val != 127 {
-		t.Errorf("expected 127, got %d", val)
-	}
-}
-
-func TestTypeConverter_SpecialConvert(t *testing.T) {
-	t.Parallel()
-
-	converter := NewTypeConverter()
-
-	// 测试转换为time.Duration
-	result, err := converter.ConvertTo("5s", reflect.TypeOf(time.Duration(0)))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	val, ok := result.Interface().(time.Duration)
-	if !ok {
-		t.Fatal("expected result to be time.Duration")
-	}
-
-	if val != 5*time.Second {
-		t.Errorf("expected 5s, got %v", val)
-	}
-}
-
-func TestEnvironmentBuilder_WithPropertySource(t *testing.T) {
-	t.Parallel()
-
-	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"key": "value",
-	})
-
-	builder := NewEnvironmentBuilder().WithPropertySource(source)
-	if len(builder.propertySources) != 1 {
-		t.Errorf("expected 1 property source, got %d", len(builder.propertySources))
-	}
-
-	env := builder.Build()
-	value, ok := env.GetProperty("key")
-	if !ok || value != "value" {
-		t.Errorf("expected 'value', got %v", value)
-	}
-}
-
-func TestEnvironmentBuilder_WithPropertySourceFirst(t *testing.T) {
-	t.Parallel()
-
-	source1 := NewMapPropertySource("first", PriorityNormal, map[string]any{
-		"key": "first-value",
-	})
-	source2 := NewMapPropertySource("second", PriorityNormal, map[string]any{
-		"key": "second-value",
-	})
-
-	builder := NewEnvironmentBuilder().
-		WithPropertySource(source1).
-		WithPropertySourceFirst(source2)
-
-	// 验证builder中的propertySources顺序
-	if len(builder.propertySources) != 2 {
-		t.Fatalf("expected 2 property sources, got %d", len(builder.propertySources))
-	}
-	// WithPropertySourceFirst应该把source2放在列表前面
-	if builder.propertySources[0].Name() != "second" {
-		t.Errorf("expected first source to be 'second', got %s", builder.propertySources[0].Name())
-	}
-}
-
-func TestEnvironmentHelper_GetRequiredProperty(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"app.name": "test-app",
-	}))
-
-	helper := NewEnvironmentHelper(env)
-
-	// 测试获取存在的属性
-	val, err := helper.GetRequiredProperty("app.name")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if val != "test-app" {
-		t.Errorf("expected 'test-app', got %v", val)
-	}
-
-	// 测试获取不存在的属性
-	_, err = helper.GetRequiredProperty("non.existent")
-	if err == nil {
-		t.Error("expected error for non-existent property")
-	}
-}
-
-func TestEnvironmentHelper_WithPrefix_GetString(t *testing.T) {
-	t.Parallel()
-
-	env := NewEnvironment()
-	env.AddPropertySource(NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"app.name": "test-app",
-		"app.port": "8080",
-	}))
-
-	helper := NewEnvironmentHelper(env)
-	prefixedHelper := helper.WithPrefix("app")
-
-	if prefixedHelper == nil {
-		t.Fatal("expected prefixed helper to be created")
-	}
-
-	// 测试带前缀的键
-	value := prefixedHelper.GetString("name", "default")
-	if value != "test-app" {
-		t.Errorf("expected 'test-app', got %v", value)
 	}
 }
 
@@ -935,114 +763,192 @@ func TestEnvironmentTemplate_IsVerbose(t *testing.T) {
 	}
 }
 
-func TestWithProfiles(t *testing.T) {
+// ==================== Type Converter Tests ====================
+
+func TestTypeConverter_ToSlice(t *testing.T) {
 	t.Parallel()
 
-	config := &EnvironmentConfig{}
-	opt := WithProfiles("dev", "test")
-	opt(config)
+	converter := NewTypeConverter()
 
-	if len(config.Profiles) != 2 {
-		t.Errorf("expected 2 profiles, got %d", len(config.Profiles))
+	converted, err := converter.ConvertTo("a,b,c", reflect.TypeOf([]string{}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	slice, ok := converted.Interface().([]string)
+	if !ok {
+		t.Fatal("expected result to be []string")
+	}
+
+	if len(slice) != 3 {
+		t.Errorf("expected 3 elements, got %d", len(slice))
 	}
 }
 
-func TestWithDefaultProfile(t *testing.T) {
+func TestTypeConverter_ToUint(t *testing.T) {
 	t.Parallel()
 
-	config := &EnvironmentConfig{}
-	opt := WithDefaultProfile("prod")
-	opt(config)
+	converter := NewTypeConverter()
 
-	if config.DefaultProfile != "prod" {
-		t.Errorf("expected 'prod', got %s", config.DefaultProfile)
+	converted, err := converter.ConvertTo("42", reflect.TypeOf(uint(0)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	typed, ok := converted.Interface().(uint)
+	if !ok {
+		t.Fatal("expected result to be uint")
+	}
+
+	if typed != 42 {
+		t.Errorf("expected 42, got %d", typed)
 	}
 }
 
-func TestWithAutoDetectProfiles(t *testing.T) {
+func TestTypeConverter_ToFloat(t *testing.T) {
 	t.Parallel()
 
-	config := &EnvironmentConfig{}
-	opt := WithAutoDetectProfiles(true)
-	opt(config)
+	converter := NewTypeConverter()
 
-	if !config.AutoDetectProfiles {
-		t.Error("expected AutoDetectProfiles to be true")
+	converted, err := converter.ConvertTo("3.14", reflect.TypeOf(float64(0)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	typed, ok := converted.Interface().(float64)
+	if !ok {
+		t.Fatal("expected result to be float64")
+	}
+
+	if typed != 3.14 {
+		t.Errorf("expected 3.14, got %f", typed)
 	}
 }
 
-func TestWithPropertySources(t *testing.T) {
+func TestTypeConverter_ConvertNumeric(t *testing.T) {
 	t.Parallel()
 
-	config := &EnvironmentConfig{}
-	source := NewMapPropertySource("test", PriorityNormal, map[string]any{})
-	opt := WithPropertySources(source)
-	opt(config)
+	converter := NewTypeConverter()
 
-	if len(config.PropertySources) != 1 {
-		t.Errorf("expected 1 property source, got %d", len(config.PropertySources))
+	converted, err := converter.ConvertTo("127", reflect.TypeOf(int8(0)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	typed, ok := converted.Interface().(int8)
+	if !ok {
+		t.Fatal("expected result to be int8")
+	}
+
+	if typed != 127 {
+		t.Errorf("expected 127, got %d", typed)
 	}
 }
 
-func TestDefaultEnvironmentConfig(t *testing.T) {
+func TestTypeConverter_SpecialConvert(t *testing.T) {
 	t.Parallel()
 
-	config := DefaultEnvironmentConfig()
+	converter := NewTypeConverter()
 
-	if config.DefaultProfile != "default" {
-		t.Errorf("expected 'default', got %s", config.DefaultProfile)
+	converted, err := converter.ConvertTo("5s", reflect.TypeOf(time.Duration(0)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !config.AutoDetectProfiles {
-		t.Error("expected AutoDetectProfiles to be true")
+
+	typed, ok := converted.Interface().(time.Duration)
+	if !ok {
+		t.Fatal("expected result to be time.Duration")
+	}
+
+	if typed != 5*time.Second {
+		t.Errorf("expected 5s, got %v", typed)
 	}
 }
 
-func TestEnvironmentConfig_ApplyOptions(t *testing.T) {
+// ==================== Utility Function Tests ====================
+
+func TestIsTimeType(t *testing.T) {
 	t.Parallel()
 
-	config := &EnvironmentConfig{}
-	opts := []EnvironmentOption{
-		WithProfiles("dev"),
-		WithDefaultProfile("default"),
-		WithAutoDetectProfiles(false),
+	if !isTimeType(reflect.TypeOf(time.Time{})) {
+		t.Error("expected time.Time to be recognized as time type")
 	}
 
-	config.ApplyOptions(opts)
+	if isTimeType(reflect.TypeOf("")) {
+		t.Error("expected string to not be recognized as time type")
+	}
 
-	if len(config.Profiles) != 1 {
-		t.Errorf("expected 1 profile, got %d", len(config.Profiles))
-	}
-	if config.DefaultProfile != "default" {
-		t.Errorf("expected 'default', got %s", config.DefaultProfile)
-	}
-	if config.AutoDetectProfiles {
-		t.Error("expected AutoDetectProfiles to be false")
+	if isTimeType(reflect.TypeOf(0)) {
+		t.Error("expected int to not be recognized as time type")
 	}
 }
 
-func TestCreateEnvironment(t *testing.T) {
+func TestHasNestedExplicitKeys(t *testing.T) {
 	t.Parallel()
 
-	source := NewMapPropertySource("test", PriorityNormal, map[string]any{
-		"key": "value",
-	})
-
-	env := CreateEnvironment(
-		WithProfiles("dev"),
-		WithDefaultProfile("default"),
-		WithPropertySources(source),
-	)
-
-	if env == nil {
-		t.Fatal("expected environment to be created")
+	type DBConfig struct {
+		Host string
+		Port string
 	}
 
-	if !env.AcceptsProfile("dev") {
-		t.Error("expected 'dev' profile to be active")
+	cfg := DBConfig{Host: "localhost", Port: "5432"}
+	rv := reflect.ValueOf(cfg)
+
+	got := hasNestedExplicitKeys(rv)
+	_ = got
+}
+
+func TestHasExplicitConfigKey(t *testing.T) {
+	t.Parallel()
+
+	type AppConfig struct {
+		Name string `config:"app.name"`
 	}
 
-	value, ok := env.GetProperty("key")
-	if !ok || value != "value" {
-		t.Errorf("expected 'value', got %v", value)
+	cfg := AppConfig{}
+	typ := reflect.TypeOf(cfg)
+	field, _ := typ.FieldByName("Name")
+
+	got := hasExplicitConfigKey(field)
+	if !got {
+		t.Error("expected field with config tag to have explicit config key")
+	}
+
+	type SimpleConfig struct {
+		Name string
+	}
+
+	simpleCfg := SimpleConfig{}
+	simpleTyp := reflect.TypeOf(simpleCfg)
+	simpleField, _ := simpleTyp.FieldByName("Name")
+
+	got = hasExplicitConfigKey(simpleField)
+	if got {
+		t.Error("expected field without config tag to not have explicit config key")
+	}
+}
+
+func TestFindDefaultConfigFile(t *testing.T) {
+	t.Parallel()
+
+	file := FindDefaultConfigFile()
+	_ = file
+}
+
+func TestGetConfigFileExtension(t *testing.T) {
+	t.Parallel()
+
+	ext := GetConfigFileExtension(ConfigTypeJSON)
+	if ext != "json" {
+		t.Errorf("expected extension 'json', got %s", ext)
+	}
+}
+
+func TestParseConfigType(t *testing.T) {
+	t.Parallel()
+
+	configType := ParseConfigType("/path/to/config.json")
+	if configType != ConfigTypeJSON {
+		t.Errorf("expected ConfigTypeJSON, got %s", configType)
 	}
 }

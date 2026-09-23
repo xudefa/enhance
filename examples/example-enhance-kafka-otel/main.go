@@ -67,14 +67,14 @@ func (s *UserService) GetUser(ctx context.Context, userID string) (string, error
 
 	span.SetAttributes(attribute.String("user.id", userID))
 
-	val, err := s.cache.Get(ctx, "user:"+userID)
+	cachedVal, err := s.cache.Get(ctx, "user:"+userID)
 	if err == nil {
 		s.logger.Info(ctx, "Cache hit", log.KeyValue{Key: "user_id", Value: userID})
-		result, ok := val.(string)
+		cachedUser, ok := cachedVal.(string)
 		if !ok {
 			return "", fmt.Errorf("invalid cache value type for user: %s", userID)
 		}
-		return result, nil
+		return cachedUser, nil
 	}
 
 	s.logger.Info(ctx, "Cache miss, loading from DB", log.KeyValue{Key: "user_id", Value: userID})

@@ -23,7 +23,8 @@ var redisAutoConfig = &RedisAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(redisAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(RedisEnabled, ConditionTrue),
+			// 约定优于配置：当 redis.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(RedisEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityDataLayer)),
 	)
@@ -126,7 +127,7 @@ func (c *RedisAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *RedisAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(RedisEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(RedisEnabled, ConditionTrue, ConditionTrue)
 }
 
 // RedisConfig Redis 配置。
@@ -153,14 +154,14 @@ func NewRedisCache(client *redis.Client, prefix string) *RedisCache {
 
 // Get 获取缓存值。
 func (r *RedisCache) Get(ctx context.Context, key string) (any, error) {
-	val, err := r.client.Get(ctx, r.prefix+key).Result()
+	cacheVal, err := r.client.Get(ctx, r.prefix+key).Result()
 	if errors.Is(err, redis.Nil) {
 		return nil, cache.ErrNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("redis get error: %w", err)
 	}
-	return val, nil
+	return cacheVal, nil
 }
 
 // Set 设置缓存值。

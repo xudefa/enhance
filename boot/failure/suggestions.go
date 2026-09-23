@@ -2,6 +2,7 @@ package failure
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -86,10 +87,5 @@ func FormatFailureAnalysis(analysis *FailureAnalysis) string {
 
 // containsComponent 检查组件列表中是否包含指定组件。
 func containsComponent(components []string, target string) bool {
-	for _, c := range components {
-		if c == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(components, target)
 }

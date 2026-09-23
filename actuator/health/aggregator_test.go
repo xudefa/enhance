@@ -45,102 +45,102 @@ func (i *mockIndicator) Health(_ context.Context) Health {
 
 func TestAggregatorHelper_NewAggregator(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	if a == nil {
+	aggregator := NewAggregator()
+	if aggregator == nil {
 		t.Fatal("NewAggregator returned nil")
 	}
-	if len(a.Indicators()) != 0 {
-		t.Errorf("expected 0 indicators, got %d", len(a.Indicators()))
+	if len(aggregator.Indicators()) != 0 {
+		t.Errorf("expected 0 indicators, got %d", len(aggregator.Indicators()))
 	}
 }
 
 func TestAggregatorHelper_AddAndList(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "a", health: Health{Status: StatusUp}})
-	a.AddIndicator(&mockIndicator{name: "b", health: Health{Status: StatusDown}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "a", health: Health{Status: StatusUp}})
+	aggregator.AddIndicator(&mockIndicator{name: "b", health: Health{Status: StatusDown}})
 
-	if len(a.Indicators()) != 2 {
-		t.Errorf("expected 2 indicators, got %d", len(a.Indicators()))
+	if len(aggregator.Indicators()) != 2 {
+		t.Errorf("expected 2 indicators, got %d", len(aggregator.Indicators()))
 	}
 }
 
 func TestAggregatorHelper_IndicatorsReturnsCopy(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "a", health: Health{Status: StatusUp}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "a", health: Health{Status: StatusUp}})
 
-	indicators := a.Indicators()
+	indicators := aggregator.Indicators()
 	indicators = append(indicators, &mockIndicator{name: "b", health: Health{Status: StatusDown}})
 
-	if len(a.Indicators()) != 1 {
+	if len(aggregator.Indicators()) != 1 {
 		t.Error("modifying returned slice should not affect aggregator")
 	}
 }
 
 func TestAggregatorHelper_AggregateAllUp(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
-	a.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusUp}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
+	aggregator.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusUp}})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusUp {
-		t.Errorf("expected UP, got %s", result.Status)
+	if aggregateResult.Status != StatusUp {
+		t.Errorf("expected UP, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_AggregateOneDown(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
-	a.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusDown}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
+	aggregator.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusDown}})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusDown {
-		t.Errorf("expected DOWN, got %s", result.Status)
+	if aggregateResult.Status != StatusDown {
+		t.Errorf("expected DOWN, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_AggregateOutage(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusDown}})
-	a.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusOutage}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusDown}})
+	aggregator.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusOutage}})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusOutage {
-		t.Errorf("expected OUTAGE, got %s", result.Status)
+	if aggregateResult.Status != StatusOutage {
+		t.Errorf("expected OUTAGE, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_AggregateDegraded(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
-	a.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusDegraded}})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{name: "db", health: Health{Status: StatusUp}})
+	aggregator.AddIndicator(&mockIndicator{name: "cache", health: Health{Status: StatusDegraded}})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusDegraded {
-		t.Errorf("expected DEGRADED, got %s", result.Status)
+	if aggregateResult.Status != StatusDegraded {
+		t.Errorf("expected DEGRADED, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_AggregateWithError(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&mockIndicator{
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&mockIndicator{
 		name:   "failing",
 		health: Health{Status: StatusDown, Error: fmt.Errorf("connection refused")},
 	})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	d, ok := result.Details["failing"]
+	d, ok := aggregateResult.Details["failing"]
 	if !ok {
 		t.Fatal("should contain failing details")
 	}
@@ -152,67 +152,67 @@ func TestAggregatorHelper_AggregateWithError(t *testing.T) {
 
 func TestAggregatorHelper_AggregateEmpty(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	result := a.Aggregate(context.Background())
+	aggregator := NewAggregator()
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusUp {
-		t.Errorf("expected UP for empty aggregator, got %s", result.Status)
+	if aggregateResult.Status != StatusUp {
+		t.Errorf("expected UP for empty aggregator, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_Timeout(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&slowMockIndicator{delay: 10 * time.Second})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&slowMockIndicator{delay: 10 * time.Second})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusDown {
-		t.Errorf("expected DOWN for timeout, got %s", result.Status)
+	if aggregateResult.Status != StatusDown {
+		t.Errorf("expected DOWN for timeout, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_CancelledContext(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&slowMockIndicator{delay: 10 * time.Second})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&slowMockIndicator{delay: 10 * time.Second})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	result := a.Aggregate(ctx)
+	aggregateResult := aggregator.Aggregate(ctx)
 
-	if result.Status != StatusDown {
-		t.Errorf("expected DOWN for cancelled context, got %s", result.Status)
+	if aggregateResult.Status != StatusDown {
+		t.Errorf("expected DOWN for cancelled context, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_PanicRecovery(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
-	a.AddIndicator(&panicMockIndicator{})
+	aggregator := NewAggregator()
+	aggregator.AddIndicator(&panicMockIndicator{})
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusDown {
-		t.Errorf("expected DOWN for panic, got %s", result.Status)
+	if aggregateResult.Status != StatusDown {
+		t.Errorf("expected DOWN for panic, got %s", aggregateResult.Status)
 	}
 }
 
 func TestAggregatorHelper_ConcurrentAggregate(t *testing.T) {
 	t.Parallel()
-	a := NewAggregator()
+	aggregator := NewAggregator()
 	for i := 0; i < 10; i++ {
-		a.AddIndicator(&mockIndicator{
+		aggregator.AddIndicator(&mockIndicator{
 			name:   fmt.Sprintf("ind-%d", i),
 			health: Health{Status: StatusUp},
 		})
 	}
 
-	result := a.Aggregate(context.Background())
+	aggregateResult := aggregator.Aggregate(context.Background())
 
-	if result.Status != StatusUp {
-		t.Errorf("expected UP, got %s", result.Status)
+	if aggregateResult.Status != StatusUp {
+		t.Errorf("expected UP, got %s", aggregateResult.Status)
 	}
 }
 

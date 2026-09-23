@@ -8,6 +8,7 @@ import (
 )
 
 func TestCasbinConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-casbin", environment.PriorityNormal, map[string]any{
 		"security.casbin.enabled":     "true",
@@ -41,6 +42,7 @@ func TestCasbinConfig_LoadConfig(t *testing.T) {
 }
 
 func TestCasbinConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &CasbinConfig{
 		ModelType:  security.DefaultCasbinModelType,
 		ModelPath:  security.DefaultCasbinModelPath,

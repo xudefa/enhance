@@ -62,6 +62,7 @@ type securityFilterChainAdapter struct {
 	proxy *filterChainProxy
 }
 
+// DoFilter 执行安全过滤器链中的下一个过滤器。
 func (a *securityFilterChainAdapter) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
 	ctxVal, ok := ctx.(context.Context)
 	if !ok {
@@ -78,15 +79,17 @@ func (a *securityFilterChainAdapter) DoFilter(ctx interface{}, request interface
 	return a.proxy.doFilterWithChain(ctxVal, req, resp, &filterChainAdapter{vfc: &virtualFilterChain{proxy: a.proxy, index: 0}})
 }
 
+// Matches 判断请求是否匹配此安全过滤器链（按类型判断）。
 func (a *securityFilterChainAdapter) Matches(request interface{}) bool {
 	_, ok := request.(SecurityRequest)
 	return ok
 }
 
+// GetFilters 返回过滤器链中过滤器的副本。
 func (a *securityFilterChainAdapter) GetFilters() []filter.Filter {
-	result := make([]filter.Filter, len(a.proxy.filters))
-	copy(result, a.proxy.filters)
-	return result
+	filtersCopy := make([]filter.Filter, len(a.proxy.filters))
+	copy(filtersCopy, a.proxy.filters)
+	return filtersCopy
 }
 
 // filterChainAdapter 将 virtualFilterChain 适配为 filter.FilterChain 接口。
@@ -94,6 +97,7 @@ type filterChainAdapter struct {
 	vfc *virtualFilterChain
 }
 
+// DoFilter 执行虚拟过滤器链的下一个过滤器。
 func (a *filterChainAdapter) DoFilter(ctx interface{}, request interface{}, response interface{}) error {
 	ctxVal, ok := ctx.(context.Context)
 	if !ok {
@@ -110,8 +114,10 @@ func (a *filterChainAdapter) DoFilter(ctx interface{}, request interface{}, resp
 	return a.vfc.DoFilter(ctxVal, req, resp)
 }
 
+// AddFilter 虚拟适配器中追加过滤器为空操作。
 func (a *filterChainAdapter) AddFilter(f filter.Filter) {}
 
+// GetFilters 虚拟适配器中返回 nil。
 func (a *filterChainAdapter) GetFilters() []filter.Filter {
 	return nil
 }

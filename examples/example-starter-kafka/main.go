@@ -100,12 +100,12 @@ func main() {
 	// Demo 3: Consume messages
 	fmt.Println("\n--- Demo 3: Consume Messages ---")
 	consumer := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:9092"},
-		Topic:     "enhance-events",
-		GroupID:   "enhance-consumer",
-		MinBytes:  1,
-		MaxBytes:  10e6,
-		MaxWait:   1 * time.Second,
+		Brokers:  []string{"localhost:9092"},
+		Topic:    "enhance-events",
+		GroupID:  "enhance-consumer",
+		MinBytes: 1,
+		MaxBytes: 10e6,
+		MaxWait:  1 * time.Second,
 	})
 	defer consumer.Close()
 

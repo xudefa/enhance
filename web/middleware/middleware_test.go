@@ -282,9 +282,9 @@ func TestJoinStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := joinStrings(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, result)
+			joined := joinStrings(tt.input)
+			if joined != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, joined)
 			}
 		})
 	}
@@ -323,11 +323,11 @@ func (m *mockContext) Query(name string) string {
 }
 
 func (m *mockContext) QueryDefault(name, defaultVal string) string {
-	val := m.req.URL.Query().Get(name)
-	if val == "" {
+	paramValue := m.req.URL.Query().Get(name)
+	if paramValue == "" {
 		return defaultVal
 	}
-	return val
+	return paramValue
 }
 
 func (m *mockContext) Header(key string) string {

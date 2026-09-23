@@ -42,8 +42,122 @@ const filterAppliedKey = "FILTER_APPLIED"
 // 供下游 HTTP 处理器使用。
 type AuthContextFilter struct{}
 
+// AnonymousAuthenticationFilter 匿名认证过滤器
+type AnonymousAuthenticationFilter struct {
+	key         string
+	principal   any
+	authorities []string
+}
+
+// AnonymousAuthenticationToken 匿名认证令牌
+type AnonymousAuthenticationToken struct {
+	principal     any
+	authorities   []string
+	authenticated bool
+}
+
+// ExceptionTranslationFilter 异常转换过滤器
+type ExceptionTranslationFilter struct {
+	accessDeniedHandler      AccessDeniedHandler
+	authenticationEntryPoint AuthenticationEntryPoint
+}
+
+// FilterSecurityInterceptor 过滤器安全拦截器
+type FilterSecurityInterceptor struct {
+	securityMetadataSource SecurityMetadataSource
+	accessDecisionManager  AccessDecisionManager
+	authenticationManager  AuthenticationManager
+	observeOncePerRequest  bool
+}
+
+// ExpressionBasedFilterInvocationSecurityMetadataSource 基于表达式的过滤器调用安全元数据源
+type ExpressionBasedFilterInvocationSecurityMetadataSource struct {
+	mu         sync.RWMutex
+	requestMap map[string][]string
+}
+
+// Http403ForbiddenEntryPoint 403禁止访问入口点
+type Http403ForbiddenEntryPoint struct{}
+
+// Http401UnauthorizedEntryPoint 401未认证入口点
+type Http401UnauthorizedEntryPoint struct{}
+
+// Http403ForbiddenAccessDeniedHandler 403禁止访问拒绝处理器
+type Http403ForbiddenAccessDeniedHandler struct{}
+
+// LoginUrlAuthenticationEntryPoint 登录URL认证入口点
+type LoginUrlAuthenticationEntryPoint struct {
+	loginFormUrl string
+}
+
+// NewAuthContextFilter 创建认证上下文过滤器。
 func NewAuthContextFilter() *AuthContextFilter {
 	return &AuthContextFilter{}
+}
+
+// NewAnonymousAuthenticationFilter 创建匿名认证过滤器，使用默认匿名用户。
+func NewAnonymousAuthenticationFilter() *AnonymousAuthenticationFilter {
+	return &AnonymousAuthenticationFilter{
+		key:         defaultAnonymousKey,
+		principal:   defaultAnonymousUser,
+		authorities: []string{defaultAnonymousAuthority},
+	}
+}
+
+// NewAnonymousAuthenticationToken 创建匿名认证令牌。
+func NewAnonymousAuthenticationToken(key string, principal any, authorities []string) *AnonymousAuthenticationToken {
+	return &AnonymousAuthenticationToken{
+		principal:     principal,
+		authorities:   authorities,
+		authenticated: false,
+	}
+}
+
+// NewExceptionTranslationFilter 创建异常翻译过滤器，将安全异常转为 HTTP 响应。
+func NewExceptionTranslationFilter(accessDeniedHandler AccessDeniedHandler, authenticationEntryPoint AuthenticationEntryPoint) *ExceptionTranslationFilter {
+	return &ExceptionTranslationFilter{
+		accessDeniedHandler:      accessDeniedHandler,
+		authenticationEntryPoint: authenticationEntryPoint,
+	}
+}
+
+// NewFilterSecurityInterceptor 创建过滤器安全拦截器，执行访问决策和授权检查。
+func NewFilterSecurityInterceptor(securityMetadataSource SecurityMetadataSource, accessDecisionManager AccessDecisionManager, authenticationManager AuthenticationManager) *FilterSecurityInterceptor {
+	return &FilterSecurityInterceptor{
+		securityMetadataSource: securityMetadataSource,
+		accessDecisionManager:  accessDecisionManager,
+		authenticationManager:  authenticationManager,
+		observeOncePerRequest:  true,
+	}
+}
+
+// NewExpressionBasedFilterInvocationSecurityMetadataSource 创建基于表达式的请求安全元数据源。
+func NewExpressionBasedFilterInvocationSecurityMetadataSource() *ExpressionBasedFilterInvocationSecurityMetadataSource {
+	return &ExpressionBasedFilterInvocationSecurityMetadataSource{
+		requestMap: make(map[string][]string),
+	}
+}
+
+// NewHttp403ForbiddenEntryPoint 创建 HTTP 403 禁止访问入口点。
+func NewHttp403ForbiddenEntryPoint() *Http403ForbiddenEntryPoint {
+	return &Http403ForbiddenEntryPoint{}
+}
+
+// NewHttp401UnauthorizedEntryPoint 创建 HTTP 401 未认证入口点。
+func NewHttp401UnauthorizedEntryPoint() *Http401UnauthorizedEntryPoint {
+	return &Http401UnauthorizedEntryPoint{}
+}
+
+// NewHttp403ForbiddenAccessDeniedHandler 创建 HTTP 403 访问拒绝处理器。
+func NewHttp403ForbiddenAccessDeniedHandler() *Http403ForbiddenAccessDeniedHandler {
+	return &Http403ForbiddenAccessDeniedHandler{}
+}
+
+// NewLoginUrlAuthenticationEntryPoint 创建登录 URL 认证入口点。
+func NewLoginUrlAuthenticationEntryPoint(loginFormUrl string) *LoginUrlAuthenticationEntryPoint {
+	return &LoginUrlAuthenticationEntryPoint{
+		loginFormUrl: loginFormUrl,
+	}
 }
 
 // DoFilter 实现 filter.Filter 接口
@@ -72,26 +186,14 @@ func (f *AuthContextFilter) doFilter(ctx context.Context, request SecurityReques
 		}
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("认证上下文过滤失败: %w", err)
+	}
+	return nil
 }
 
 // Order 实现 filter.Filter 接口
 func (f *AuthContextFilter) Order() int { return AuthContextFilterOrder }
-
-// AnonymousAuthenticationFilter 匿名认证过滤器
-type AnonymousAuthenticationFilter struct {
-	key         string
-	principal   any
-	authorities []string
-}
-
-func NewAnonymousAuthenticationFilter() *AnonymousAuthenticationFilter {
-	return &AnonymousAuthenticationFilter{
-		key:         defaultAnonymousKey,
-		principal:   defaultAnonymousUser,
-		authorities: []string{defaultAnonymousAuthority},
-	}
-}
 
 // DoFilter 实现 filter.Filter 接口
 func (f *AnonymousAuthenticationFilter) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
@@ -122,21 +224,6 @@ func (f *AnonymousAuthenticationFilter) doFilter(ctx context.Context, request Se
 // Order 实现 filter.Filter 接口
 func (f *AnonymousAuthenticationFilter) Order() int { return AnonymousAuthenticationFilterOrder }
 
-// AnonymousAuthenticationToken 匿名认证令牌
-type AnonymousAuthenticationToken struct {
-	principal     any
-	authorities   []string
-	authenticated bool
-}
-
-func NewAnonymousAuthenticationToken(key string, principal any, authorities []string) *AnonymousAuthenticationToken {
-	return &AnonymousAuthenticationToken{
-		principal:     principal,
-		authorities:   authorities,
-		authenticated: false,
-	}
-}
-
 // Principal 返回匿名认证主体的身份信息。
 func (t *AnonymousAuthenticationToken) Principal() any { return t.principal }
 
@@ -155,19 +242,6 @@ func (t *AnonymousAuthenticationToken) Name() string {
 		return name
 	}
 	return ""
-}
-
-// ExceptionTranslationFilter 异常转换过滤器
-type ExceptionTranslationFilter struct {
-	accessDeniedHandler      AccessDeniedHandler
-	authenticationEntryPoint AuthenticationEntryPoint
-}
-
-func NewExceptionTranslationFilter(accessDeniedHandler AccessDeniedHandler, authenticationEntryPoint AuthenticationEntryPoint) *ExceptionTranslationFilter {
-	return &ExceptionTranslationFilter{
-		accessDeniedHandler:      accessDeniedHandler,
-		authenticationEntryPoint: authenticationEntryPoint,
-	}
 }
 
 // DoFilter 实现 filter.Filter 接口
@@ -196,36 +270,19 @@ func (f *ExceptionTranslationFilter) doFilter(ctx context.Context, request Secur
 				if f.authenticationEntryPoint != nil {
 					return f.authenticationEntryPoint.Commence(ctx, request, response, err)
 				}
-				return err
+				return fmt.Errorf("拒绝访问（未配置认证入口点）: %w", err)
 			}
 			if f.accessDeniedHandler != nil {
 				return f.accessDeniedHandler.Handle(ctx, request, response, err)
 			}
 		}
-		return err
+		return fmt.Errorf("安全异常转换过滤失败: %w", err)
 	}
 	return nil
 }
 
 // Order 实现 filter.Filter 接口
 func (f *ExceptionTranslationFilter) Order() int { return ExceptionTranslationFilterOrder }
-
-// FilterSecurityInterceptor 过滤器安全拦截器
-type FilterSecurityInterceptor struct {
-	securityMetadataSource SecurityMetadataSource
-	accessDecisionManager  AccessDecisionManager
-	authenticationManager  AuthenticationManager
-	observeOncePerRequest  bool
-}
-
-func NewFilterSecurityInterceptor(securityMetadataSource SecurityMetadataSource, accessDecisionManager AccessDecisionManager, authenticationManager AuthenticationManager) *FilterSecurityInterceptor {
-	return &FilterSecurityInterceptor{
-		securityMetadataSource: securityMetadataSource,
-		accessDecisionManager:  accessDecisionManager,
-		authenticationManager:  authenticationManager,
-		observeOncePerRequest:  true,
-	}
-}
 
 // DoFilter 实现 filter.Filter 接口
 func (f *FilterSecurityInterceptor) DoFilter(ctx interface{}, request interface{}, response interface{}, chain filter.FilterChain) error {
@@ -247,7 +304,7 @@ func (f *FilterSecurityInterceptor) DoFilter(ctx interface{}, request interface{
 func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request SecurityRequest, response SecurityResponse, chain filter.FilterChain) error {
 	attributes, err := f.securityMetadataSource.GetAttributes(ctx, request)
 	if err != nil {
-		return err
+		return fmt.Errorf("获取请求安全属性失败: %w", err)
 	}
 
 	if f.observeOncePerRequest {
@@ -266,7 +323,7 @@ func (f *FilterSecurityInterceptor) doFilter(ctx context.Context, request Securi
 
 	resource := fmt.Sprintf("%s:%s", request.GetMethod(), request.GetURI())
 	if err := f.accessDecisionManager.Decide(ctx, auth, resource, attributes); err != nil {
-		return err
+		return fmt.Errorf("访问决策失败: %w", err)
 	}
 
 	return chain.DoFilter(ctx, request, response)
@@ -288,19 +345,6 @@ func (f *FilterSecurityInterceptor) SetAccessDecisionManager(manager AccessDecis
 // SetAuthenticationManager 设置认证管理器。
 func (f *FilterSecurityInterceptor) SetAuthenticationManager(manager AuthenticationManager) {
 	f.authenticationManager = manager
-}
-
-// ExpressionBasedFilterInvocationSecurityMetadataSource 基于表达式的过滤器调用安全元数据源
-type ExpressionBasedFilterInvocationSecurityMetadataSource struct {
-	mu         sync.RWMutex
-	requestMap map[string][]string
-}
-
-// NewExpressionBasedFilterInvocationSecurityMetadataSource 创建基于表达式的过滤器调用安全元数据源实例。
-func NewExpressionBasedFilterInvocationSecurityMetadataSource() *ExpressionBasedFilterInvocationSecurityMetadataSource {
-	return &ExpressionBasedFilterInvocationSecurityMetadataSource{
-		requestMap: make(map[string][]string),
-	}
 }
 
 // AddMapping 添加 URL 模式与安全属性的映射关系。
@@ -410,13 +454,6 @@ func (s *ExpressionBasedFilterInvocationSecurityMetadataSource) matchWildcard(pa
 	return true
 }
 
-// Http403ForbiddenEntryPoint 403禁止访问入口点
-type Http403ForbiddenEntryPoint struct{}
-
-func NewHttp403ForbiddenEntryPoint() *Http403ForbiddenEntryPoint {
-	return &Http403ForbiddenEntryPoint{}
-}
-
 // Commence 发送 403 Forbidden 响应给客户端。
 func (e *Http403ForbiddenEntryPoint) Commence(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusForbidden)
@@ -424,13 +461,6 @@ func (e *Http403ForbiddenEntryPoint) Commence(ctx context.Context, request Secur
 		fmt.Printf("[enhance] failed to write 403 response: %v\n", writeErr)
 	}
 	return nil
-}
-
-// Http401UnauthorizedEntryPoint 401未认证入口点
-type Http401UnauthorizedEntryPoint struct{}
-
-func NewHttp401UnauthorizedEntryPoint() *Http401UnauthorizedEntryPoint {
-	return &Http401UnauthorizedEntryPoint{}
 }
 
 // Commence 发送 401 Unauthorized 响应给客户端。
@@ -442,13 +472,6 @@ func (e *Http401UnauthorizedEntryPoint) Commence(ctx context.Context, request Se
 	return nil
 }
 
-// Http403ForbiddenAccessDeniedHandler 403禁止访问拒绝处理器
-type Http403ForbiddenAccessDeniedHandler struct{}
-
-func NewHttp403ForbiddenAccessDeniedHandler() *Http403ForbiddenAccessDeniedHandler {
-	return &Http403ForbiddenAccessDeniedHandler{}
-}
-
 // Handle 处理访问被拒绝的情况，发送 403 Forbidden 响应给客户端。
 func (e *Http403ForbiddenAccessDeniedHandler) Handle(ctx context.Context, request SecurityRequest, response SecurityResponse, err error) error {
 	response.SetStatusCode(http.StatusForbidden)
@@ -456,17 +479,6 @@ func (e *Http403ForbiddenAccessDeniedHandler) Handle(ctx context.Context, reques
 		fmt.Printf("[enhance] failed to write 403 access denied response: %v\n", writeErr)
 	}
 	return nil
-}
-
-// LoginUrlAuthenticationEntryPoint 登录URL认证入口点
-type LoginUrlAuthenticationEntryPoint struct {
-	loginFormUrl string
-}
-
-func NewLoginUrlAuthenticationEntryPoint(loginFormUrl string) *LoginUrlAuthenticationEntryPoint {
-	return &LoginUrlAuthenticationEntryPoint{
-		loginFormUrl: loginFormUrl,
-	}
 }
 
 // Commence 重定向客户端到登录页面。

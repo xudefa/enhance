@@ -56,22 +56,22 @@ func (a *Actuator) HealthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no health aggregator", http.StatusInternalServerError)
 		return
 	}
-	h := a.healthAggregator.Aggregate(r.Context())
+	healthResult := a.healthAggregator.Aggregate(r.Context())
 
-	data, err := json.Marshal(h)
+	jsonData, err := json.Marshal(healthResult)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	statusCode := http.StatusOK
-	if h.Status != health.StatusUp {
+	if healthResult.Status != health.StatusUp {
 		statusCode = http.StatusServiceUnavailable
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	_, _ = w.Write(data)
+	_, _ = w.Write(jsonData)
 }
 
 // MetricsHandler 指标 HTTP 处理器
@@ -88,6 +88,19 @@ func (a *Actuator) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// envPropertyItem 环境属性键值项。
+type envPropertyItem struct {
+	Name  string `json:"name"`
+	Value any    `json:"value,omitempty"`
+}
+
+// envSourceInfo 环境属性源信息。
+type envSourceInfo struct {
+	Name       string            `json:"name"`
+	Priority   int               `json:"priority"`
+	Properties []envPropertyItem `json:"properties,omitempty"`
+}
+
 // EnvHandler 环境信息 HTTP 处理器
 func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 	if a.appContext == nil {
@@ -99,51 +112,45 @@ func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no environment", http.StatusInternalServerError)
 		return
 	}
-	sources := env.GetPropertySources()
 
-	type propertyItem struct {
-		Name  string `json:"name"`
-		Value any    `json:"value,omitempty"`
+	sourceInfoList := a.buildEnvSourceInfoList(env.GetPropertySources())
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(sourceInfoList); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+}
 
-	type sourceInfo struct {
-		Name       string         `json:"name"`
-		Priority   int            `json:"priority"`
-		Properties []propertyItem `json:"properties,omitempty"`
-	}
-
-	result := make([]sourceInfo, 0, len(sources))
+// buildEnvSourceInfoList 构建环境属性源信息列表。
+func (a *Actuator) buildEnvSourceInfoList(sources []environment.PropertySource) []envSourceInfo {
+	sourceInfoList := make([]envSourceInfo, 0, len(sources))
 	for _, s := range sources {
-		info := sourceInfo{
+		sourceDetail := envSourceInfo{
 			Name:     s.Name(),
 			Priority: int(s.Priority()),
 		}
 		if mp, ok := s.(*environment.MapPropertySource); ok {
 			keys := mp.Keys()
-			props := make([]propertyItem, 0, len(keys))
+			props := make([]envPropertyItem, 0, len(keys))
 			for _, k := range keys {
 				v, _ := mp.GetProperty(k)
 				// 脱敏处理敏感值
 				sanitizedValue := a.sanitizer.Sanitize(k, v)
-				props = append(props, propertyItem{
+				props = append(props, envPropertyItem{
 					Name:  k,
 					Value: sanitizedValue,
 				})
 			}
-			info.Properties = props
-			result = append(result, info)
+			sourceDetail.Properties = props
+			sourceInfoList = append(sourceInfoList, sourceDetail)
 			continue
 		}
 		// 对于非 MapPropertySource，简单处理
-		info.Properties = make([]propertyItem, 0)
-		result = append(result, info)
+		sourceDetail.Properties = make([]envPropertyItem, 0)
+		sourceInfoList = append(sourceInfoList, sourceDetail)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	return sourceInfoList
 }
 
 // BeansHandler Bean 列表 HTTP 处理器
@@ -217,7 +224,7 @@ func (a *Actuator) RegisterDebugRoutes(registrar RouteRegistrar) {
 	}
 }
 
-// PprofHandlers returns handlers for pprof endpoints
+// PprofHandlers 返回 pprof 调试端点的 HTTP 处理函数集合。
 func (a *Actuator) PprofHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"/debug/pprof/":        pprof.Index,
@@ -241,7 +248,7 @@ func (a *Actuator) InfoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	info := map[string]any{
+	appInfo := map[string]any{
 		"app": map[string]any{
 			"name":    env.GetString("app.name", "enhance-app"),
 			"version": env.GetString("app.version", "1.0.0"),
@@ -252,7 +259,7 @@ func (a *Actuator) InfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(info); err != nil {
+	if err := json.NewEncoder(w).Encode(appInfo); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -286,23 +293,23 @@ func writePrometheus(w io.Writer, collected []metrics.Metric) error {
 	families := make(map[string]*family)
 	names := make([]string, 0, len(collected))
 	for _, m := range collected {
-		f, ok := families[m.Name]
+		familyEntry, ok := families[m.Name]
 		if !ok {
-			f = &family{typ: m.Type}
-			families[m.Name] = f
+			familyEntry = &family{typ: m.Type}
+			families[m.Name] = familyEntry
 			names = append(names, m.Name)
 		}
-		f.sample += formatPrometheusSample(m)
+		familyEntry.sample += formatPrometheusSample(m)
 	}
 	sort.Strings(names)
 
 	for _, name := range names {
-		f := families[name]
-		if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", name, f.typ); err != nil {
-			return err
+		familyEntry := families[name]
+		if _, err := fmt.Fprintf(w, "# TYPE %s %s\n", name, familyEntry.typ); err != nil {
+			return fmt.Errorf("写入指标类型行失败: %w", err)
 		}
-		if _, err := io.WriteString(w, f.sample); err != nil {
-			return err
+		if _, err := io.WriteString(w, familyEntry.sample); err != nil {
+			return fmt.Errorf("写入指标样本失败: %w", err)
 		}
 	}
 	return nil

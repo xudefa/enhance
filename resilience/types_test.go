@@ -19,9 +19,9 @@ func TestState_String(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
 			t.Parallel()
-			result := tt.state.String()
-			if result != tt.expected {
-				t.Errorf("expected %s, got %s", tt.expected, result)
+			stateString := tt.state.String()
+			if stateString != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, stateString)
 			}
 		})
 	}

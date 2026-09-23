@@ -53,16 +53,13 @@ Desktop.ini
 # ==================== AI 开发工具 ====================
 
 # Trae IDE
-.trae/
 .trae-cache/
+.trae/*.log
+!.trae/rules/
 
 # Cursor
 .cursor/
-.cursorrules
 .cursorignore
-
-# GitHub Copilot
-.github/copilot-instructions.md
 
 # Roo Code (原 Cline)
 .roo/
@@ -87,6 +84,10 @@ Desktop.ini
 
 # Sourcegraph Cody
 .cody/
+
+# 审计文档
+docs/AI_READABILITY_AUDIT.md
+docs/audit-report.json
 
 # ==================== 临时文件 ====================
 

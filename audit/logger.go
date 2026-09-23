@@ -17,6 +17,7 @@ func NewAuditLogger(auditor Auditor, actor string, source string) AuditLogger {
 	}
 }
 
+// Create 记录一条创建资源的审计事件。
 func (l *auditLoggerImpl) Create(resource string, target string, details map[string]any) {
 	l.auditor.Log(Event{
 		Actor:    l.actor,
@@ -30,6 +31,7 @@ func (l *auditLoggerImpl) Create(resource string, target string, details map[str
 	})
 }
 
+// Update 记录一条更新资源的审计事件。
 func (l *auditLoggerImpl) Update(resource string, target string, details map[string]any) {
 	l.auditor.Log(Event{
 		Actor:    l.actor,
@@ -43,6 +45,7 @@ func (l *auditLoggerImpl) Update(resource string, target string, details map[str
 	})
 }
 
+// Delete 记录一条删除资源的审计事件。
 func (l *auditLoggerImpl) Delete(resource string, target string) {
 	l.auditor.Log(Event{
 		Actor:    l.actor,
@@ -55,6 +58,7 @@ func (l *auditLoggerImpl) Delete(resource string, target string) {
 	})
 }
 
+// Login 记录一条登录相关的审计事件。
 func (l *auditLoggerImpl) Login(target string, details map[string]any) {
 	l.auditor.Log(Event{
 		Actor:    l.actor,
@@ -67,6 +71,7 @@ func (l *auditLoggerImpl) Login(target string, details map[string]any) {
 	})
 }
 
+// Severity 记录一条指定严重级别的安全审计事件。
 func (l *auditLoggerImpl) Severity(resource string, target string, severity EventSeverity, details map[string]any) {
 	l.auditor.Log(Event{
 		Actor:    l.actor,

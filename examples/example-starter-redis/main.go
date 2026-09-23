@@ -111,12 +111,12 @@ func main() {
 
 	// Get all values
 	for k := range users {
-		val, err := redisCache.Get(ctx, k)
+		cacheVal, err := redisCache.Get(ctx, k)
 		if err != nil {
 			fmt.Printf("Get %s failed: %v\n", k, err)
 			continue
 		}
-		fmt.Printf("Get: %s = %v\n", k, val)
+		fmt.Printf("Get: %s = %v\n", k, cacheVal)
 	}
 
 	// Delete a key

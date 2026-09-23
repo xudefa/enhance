@@ -48,21 +48,21 @@ func main() {
 	}
 
 	// Get the Echo instance from container
-	e, err := core.GetByName[*echo.Echo](app.Container(), "")
+	echoInstance, err := core.GetByName[*echo.Echo](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get echo instance: %v\n", err)
 		return
 	}
 
 	// Register middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	echoInstance.Use(middleware.Logger())
+	echoInstance.Use(middleware.Recover())
 
 	// Register routes
 	fmt.Println("--- Registering Routes ---")
 
 	// Root route
-	e.GET("/", func(c echo.Context) error {
+	echoInstance.GET("/", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"message": "Welcome to Echo Starter Example",
 			"version": "1.0.0",
@@ -70,7 +70,7 @@ func main() {
 	})
 
 	// Hello route with query parameter
-	e.GET("/hello", func(c echo.Context) error {
+	echoInstance.GET("/hello", func(c echo.Context) error {
 		name := c.QueryParam("name")
 		if name == "" {
 			name = "World"
@@ -81,21 +81,21 @@ func main() {
 	})
 
 	// Health check endpoint
-	e.GET("/health", func(c echo.Context) error {
+	echoInstance.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"status": "UP",
 		})
 	})
 
 	// User routes
-	e.GET("/users", func(c echo.Context) error {
+	echoInstance.GET("/users", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, []map[string]interface{}{
 			{"id": 1, "name": "John Doe", "email": "john@example.com"},
 			{"id": 2, "name": "Jane Doe", "email": "jane@example.com"},
 		})
 	})
 
-	e.GET("/users/:id", func(c echo.Context) error {
+	echoInstance.GET("/users/:id", func(c echo.Context) error {
 		id := c.Param("id")
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"id":    id,

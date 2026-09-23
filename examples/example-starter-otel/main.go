@@ -15,11 +15,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/xudefa/enhance/boot"
+	"github.com/xudefa/enhance/core"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"github.com/xudefa/enhance/boot"
-	"github.com/xudefa/enhance/core"
 
 	_ "github.com/xudefa/enhance/starter/otel"
 )

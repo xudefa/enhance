@@ -21,7 +21,7 @@ func TestAppCtxAdapter_Context(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -36,7 +36,7 @@ func TestAppCtxAdapter_Container(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -51,7 +51,7 @@ func TestAppCtxAdapter_Environment(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -66,7 +66,7 @@ func TestAppCtxAdapter_Register(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -82,7 +82,7 @@ func TestAppCtxAdapter_GetByType(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -108,7 +108,7 @@ func TestAppCtxAdapter_GetByType_NotFound(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -125,7 +125,7 @@ func TestAppCtxAdapter_EventBus(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	gctx := context.Background()
 
 	adapter := newAppCtx(appCtx, gctx)
@@ -141,7 +141,7 @@ func TestConditionCtx_Environment(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -156,7 +156,7 @@ func TestConditionCtx_Container(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -171,7 +171,7 @@ func TestConditionCtx_GetBeanByType(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -196,7 +196,7 @@ func TestConditionCtx_GetBeanByType_NotFound(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -212,7 +212,7 @@ func TestConditionCtx_HasProperty(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -235,7 +235,7 @@ func TestConditionCtx_GetProperty(t *testing.T) {
 
 	container := core.NewContainer()
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 
 	condCtx := newConditionCtx(appCtx)
 
@@ -268,7 +268,7 @@ func TestContainerAccessorAdapter_Has(t *testing.T) {
 
 	// 通过 ApplicationContext 注册 Bean
 	env := environment.NewEnvironment()
-	appCtx := contextpkg.NewApplicationContext(container, env)
+	appCtx := contextpkg.NewApplicationContext(container, env).(*contextpkg.DefaultApplicationContext)
 	err := core.Register[*testBean](appCtx.Container())
 	if err != nil {
 		t.Fatalf("failed to register: %v", err)

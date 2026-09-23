@@ -121,13 +121,13 @@ func TestHTTPResponse_Bind_JSON_Helper(t *testing.T) {
 		Name string `json:"name"`
 	}
 	r := &HTTPResponse{Body: []byte(`{"name":"Alice"}`)}
-	var u User
-	err := r.Bind(&u)
+	var parsedUser User
+	err := r.Bind(&parsedUser)
 	if err != nil {
 		t.Fatalf("Bind error: %v", err)
 	}
-	if u.Name != "Alice" {
-		t.Errorf("Name = %s, want Alice", u.Name)
+	if parsedUser.Name != "Alice" {
+		t.Errorf("Name = %s, want Alice", parsedUser.Name)
 	}
 }
 

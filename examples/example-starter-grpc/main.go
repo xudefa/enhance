@@ -31,6 +31,7 @@ import (
 type GreeterServer struct {
 }
 
+// SayHello 实现 gRPC Greeter 服务的 SayHello 方法。
 func (s *GreeterServer) SayHello(ctx context.Context, req *HelloRequest) (*HelloReply, error) {
 	return &HelloReply{
 		Message: fmt.Sprintf("Hello, %s!", req.Name),

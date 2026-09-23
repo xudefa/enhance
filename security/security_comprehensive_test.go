@@ -2,10 +2,9 @@ package security
 
 import (
 	"context"
+	"github.com/xudefa/enhance/log"
 	"sync"
 	"testing"
-
-	"github.com/xudefa/enhance/log"
 )
 
 func TestSecurityContextComprehensive(t *testing.T) {
@@ -88,153 +87,461 @@ func TestContextWithAuthentication(t *testing.T) {
 	})
 }
 
-func TestCorsFilter(t *testing.T) {
+func TestUsernamePasswordAuthentication(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NewUsernamePasswordAuthenticationToken", func(t *testing.T) {
+		t.Parallel()
+		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
+		if auth.Principal() != "user" {
+			t.Errorf("expected principal 'user', got '%v'", auth.Principal())
+		}
+		if auth.Credentials() != "pass" {
+			t.Errorf("expected credentials 'pass', got '%v'", auth.Credentials())
+		}
+		if auth.Authenticated() {
+			t.Error("expected not authenticated")
+		}
+	})
+
+	t.Run("NewAuthenticatedUsernamePasswordAuthenticationToken", func(t *testing.T) {
+		t.Parallel()
+		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
+		if !auth.Authenticated() {
+			t.Error("expected authenticated")
+		}
+		if len(auth.Authorities()) != 1 {
+			t.Errorf("expected 1 authority, got %d", len(auth.Authorities()))
+		}
+	})
+
+	t.Run("SetAuthenticated and SetAuthorities", func(t *testing.T) {
+		t.Parallel()
+		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
+		auth.SetAuthenticated(true)
+		if !auth.Authenticated() {
+			t.Error("expected authenticated after SetAuthenticated(true)")
+		}
+		auth.SetAuthorities([]string{"ROLE_USER", "ROLE_ADMIN"})
+		if len(auth.Authorities()) != 2 {
+			t.Errorf("expected 2 authorities, got %d", len(auth.Authorities()))
+		}
+	})
+
+	t.Run("Name returns principal string", func(t *testing.T) {
+		t.Parallel()
+		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
+		if auth.Name() != "user" {
+			t.Errorf("expected name 'user', got '%s'", auth.Name())
+		}
+	})
+}
+
+func TestPasswordEncoderInterface(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NoOpPasswordEncoder roundtrip", func(t *testing.T) {
+		t.Parallel()
+		enc := NewNoOpPasswordEncoder()
+		encoded := enc.Encode("mypassword")
+		if encoded != "mypassword" {
+			t.Errorf("NoOp should return same string, got '%s'", encoded)
+		}
+		if !enc.Matches("mypassword", "mypassword") {
+			t.Error("expected match")
+		}
+		if enc.Matches("mypassword", "wrongpassword") {
+			t.Error("expected no match")
+		}
+	})
+}
+
+func TestSecurityRequestResponseMock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("mock request methods", func(t *testing.T) {
+		t.Parallel()
+		req := &mockSecurityRequest{method: "POST", uri: "/test"}
+		req.SetHeader("X-Custom", "value123")
+		req.SetAttribute("key", "val")
+
+		if req.GetMethod() != "POST" {
+			t.Errorf("expected POST, got %s", req.GetMethod())
+		}
+		if req.GetHeader("X-Custom") != "value123" {
+			t.Errorf("expected value123, got %s", req.GetHeader("X-Custom"))
+		}
+		if req.GetHeader("X-Missing") != "" {
+			t.Error("expected empty string for missing header")
+		}
+
+		attributeValue, ok := req.GetAttribute("key")
+		if !ok || attributeValue != "val" {
+			t.Errorf("expected attribute 'val', got %v (exists=%v)", attributeValue, ok)
+		}
+	})
+
+	t.Run("mock response methods", func(t *testing.T) {
+		t.Parallel()
+		resp := &mockSecurityResponse{headers: map[string]string{}}
+		resp.SetStatusCode(404)
+		resp.SetHeader("X-Test", "hello")
+
+		if resp.statusCode != 404 {
+			t.Errorf("expected 404, got %d", resp.statusCode)
+		}
+		if resp.headers["X-Test"] != "hello" {
+			t.Errorf("expected 'hello', got '%s'", resp.headers["X-Test"])
+		}
+	})
+}
+
+func TestFilterChainProxy(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SecurityFilterChainAdapter adapts filterChainProxy", func(t *testing.T) {
+		t.Parallel()
+		chain := newFilterChainProxy([]SecurityFilter{}, &DefaultSecurityFilterChain{})
+		adapter := securityFilterChainAdapter{proxy: chain}
+
+		filters := adapter.GetFilters()
+		if len(filters) != 0 {
+			t.Errorf("expected empty filters, got %d", len(filters))
+		}
+	})
+}
+
+// ==================== Security Benchmark Tests ====================
+
+// benchAuthManager 测试用认证管理器
+type benchAuthManager struct{}
+
+func (m *benchAuthManager) Authenticate(ctx context.Context, token AuthenticationToken) (Authentication, error) {
+	return &testAuth{principal: "bench"}, nil
+}
+
+// benchUserDetails 测试用用户详情
+type benchUserDetails struct {
+	username string
+	password string
+	roles    []string
+}
+
+func (u *benchUserDetails) Username() string            { return u.username }
+func (u *benchUserDetails) Password() string            { return u.password }
+func (u *benchUserDetails) Authorities() []string       { return u.roles }
+func (u *benchUserDetails) Enabled() bool               { return true }
+func (u *benchUserDetails) AccountNonExpired() bool     { return true }
+func (u *benchUserDetails) AccountNonLocked() bool      { return true }
+func (u *benchUserDetails) CredentialsNonExpired() bool { return true }
+
+// benchUserDetailsService 测试用用户详情服务
+type benchUserDetailsService struct{}
+
+func (s *benchUserDetailsService) LoadUserByUsername(ctx context.Context, username string) (UserDetails, error) {
+	return &benchUserDetails{
+		username: username,
+		password: "password",
+		roles:    []string{"USER", "ADMIN"},
+	}, nil
+}
+
+// BenchmarkSecurityFilterChain_Build 测试过滤器链构建性能
+func BenchmarkSecurityFilterChain_Build(b *testing.B) {
+	authManager := &benchAuthManager{}
+	userDetailsService := &benchUserDetailsService{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			Build()
+	}
+}
+
+// BenchmarkSecurityFilterChain_Configure 测试配置应用性能
+func BenchmarkSecurityFilterChain_Configure(b *testing.B) {
+	config := NewSecurityBuilder().
+		AuthenticationManager(&benchAuthManager{}).
+		UserDetailsService(&benchUserDetailsService{}).
+		Build()
+
+	http := NewHttpSecurity()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = config.Configure(http)
+	}
+}
+
+// BenchmarkPasswordEncoder_NoOp 测试无操作密码编码器性能
+func BenchmarkPasswordEncoder_NoOp(b *testing.B) {
+	encoder := NewNoOpPasswordEncoder()
+	password := "test-password-123"
+
+	b.Run("Encode", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = encoder.Encode(password)
+		}
+	})
+
+	b.Run("Matches", func(b *testing.B) {
+		hashed := encoder.Encode(password)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = encoder.Matches(password, hashed)
+		}
+	})
+}
+
+// BenchmarkSecurityBuilder_DifferentConfigs 测试不同配置的性能
+func benchSecurityBuilderSimple(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithCSRF(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableCsrf().
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithFormLogin(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableFormLogin("/login", "/home").
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithHttpBasic(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableHttpBasic().
+			Build()
+	}
+}
+
+func benchSecurityBuilderWithLogout(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableLogout("/logout").
+			Build()
+	}
+}
+
+func benchSecurityBuilderFullConfig(b *testing.B, authManager *benchAuthManager, userDetailsService *benchUserDetailsService) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = NewSecurityBuilder().
+			AuthenticationManager(authManager).
+			UserDetailsService(userDetailsService).
+			EnableCsrf().
+			EnableFormLogin("/login", "/home").
+			EnableHttpBasic().
+			EnableLogout("/logout").
+			EnableAnonymous().
+			Build()
+	}
+}
+
+func BenchmarkSecurityBuilder_DifferentConfigs(b *testing.B) {
+	authManager := &benchAuthManager{}
+	userDetailsService := &benchUserDetailsService{}
+
+	b.Run("Simple", func(b *testing.B) { benchSecurityBuilderSimple(b, authManager, userDetailsService) })
+	b.Run("WithCSRF", func(b *testing.B) { benchSecurityBuilderWithCSRF(b, authManager, userDetailsService) })
+	b.Run("WithFormLogin", func(b *testing.B) { benchSecurityBuilderWithFormLogin(b, authManager, userDetailsService) })
+	b.Run("WithHttpBasic", func(b *testing.B) { benchSecurityBuilderWithHttpBasic(b, authManager, userDetailsService) })
+	b.Run("WithLogout", func(b *testing.B) { benchSecurityBuilderWithLogout(b, authManager, userDetailsService) })
+	b.Run("Full-Config", func(b *testing.B) { benchSecurityBuilderFullConfig(b, authManager, userDetailsService) })
+}
+
+func testCorsAllowAllWildcard(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-
-	t.Run("AllowAll wildcard origin", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins: []string{"*"},
-		})
-		req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
-
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if resp.headers["Access-Control-Allow-Origin"] != "http://example.com" {
-			t.Errorf("expected Allow-Origin header, got %s", resp.headers["Access-Control-Allow-Origin"])
-		}
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins: []string{"*"},
 	})
+	req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("preflight OPTIONS request", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins: []string{"http://example.com"},
-		})
-		req := &mockSecurityRequest{method: "OPTIONS", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
+	err := filter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.headers["Access-Control-Allow-Origin"] != "http://example.com" {
+		t.Errorf("expected Allow-Origin header, got %s", resp.headers["Access-Control-Allow-Origin"])
+	}
+}
 
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if chain.called {
-			t.Error("filter chain should not be called for preflight")
-		}
-		if resp.statusCode != 204 {
-			t.Errorf("expected status 204, got %d", resp.statusCode)
-		}
-		if resp.headers["Access-Control-Allow-Methods"] == "" {
-			t.Error("expected Allow-Methods header")
-		}
+func testCorsPreflightOptions(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins: []string{"http://example.com"},
 	})
+	req := &mockSecurityRequest{method: "OPTIONS", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("blocked origin", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins: []string{"http://allowed.com"},
-		})
-		req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://evil.com"}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
+	err := filter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if chain.called {
+		t.Error("filter chain should not be called for preflight")
+	}
+	if resp.statusCode != 204 {
+		t.Errorf("expected status 204, got %d", resp.statusCode)
+	}
+	if resp.headers["Access-Control-Allow-Methods"] == "" {
+		t.Error("expected Allow-Methods header")
+	}
+}
 
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if resp.headers["Access-Control-Allow-Origin"] == "http://evil.com" {
-			t.Error("blocked origin should not be allowed")
-		}
+func testCorsBlockedOrigin(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins: []string{"http://allowed.com"},
 	})
+	req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://evil.com"}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("no Origin header skips CORS", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins: []string{"*"},
-		})
-		req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
+	err := filter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.headers["Access-Control-Allow-Origin"] == "http://evil.com" {
+		t.Error("blocked origin should not be allowed")
+	}
+}
 
-		err := filter.DoFilter(ctx, req, resp, chain)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !chain.called {
-			t.Error("chain should be called when no Origin")
-		}
+func testCorsNoOriginHeader(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins: []string{"*"},
 	})
+	req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("invalid ctx type returns error", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
-		err := filter.DoFilter("not-a-context", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
-		if err == nil {
-			t.Error("expected error for invalid context type")
-		}
+	err := filter.DoFilter(ctx, req, resp, chain)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !chain.called {
+		t.Error("chain should be called when no Origin")
+	}
+}
+
+func testCorsInvalidCtx(t *testing.T) {
+	t.Parallel()
+	filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
+	err := filter.DoFilter("not-a-context", &mockSecurityRequest{}, &mockSecurityResponse{}, &mockSecurityFilterChain{})
+	if err == nil {
+		t.Error("expected error for invalid context type")
+	}
+}
+
+func testCorsInvalidRequest(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
+	err := filter.DoFilter(ctx, "not-a-request", &mockSecurityResponse{}, &mockSecurityFilterChain{})
+	if err == nil {
+		t.Error("expected error for invalid request type")
+	}
+}
+
+func testCorsInvalidResponse(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
+	err := filter.DoFilter(ctx, &mockSecurityRequest{}, "not-a-response", &mockSecurityFilterChain{})
+	if err == nil {
+		t.Error("expected error for invalid response type")
+	}
+}
+
+func testCorsAllowCredentials(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins:   []string{"http://example.com"},
+		AllowCredentials: true,
 	})
+	req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("invalid request type returns error", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
-		err := filter.DoFilter(ctx, "not-a-request", &mockSecurityResponse{}, &mockSecurityFilterChain{})
-		if err == nil {
-			t.Error("expected error for invalid request type")
-		}
+	_ = filter.DoFilter(ctx, req, resp, chain)
+	if resp.headers["Access-Control-Allow-Credentials"] != "true" {
+		t.Error("expected Allow-Credentials header")
+	}
+}
+
+func testCorsExactOriginMatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	filter := NewCorsFilter(CorsConfig{
+		AllowedOrigins: []string{"https://example.com"},
 	})
+	req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "https://example.com"}}
+	resp := &mockSecurityResponse{headers: map[string]string{}}
+	chain := &mockSecurityFilterChain{}
 
-	t.Run("invalid response type returns error", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{AllowedOrigins: []string{"*"}})
-		err := filter.DoFilter(ctx, &mockSecurityRequest{}, "not-a-response", &mockSecurityFilterChain{})
-		if err == nil {
-			t.Error("expected error for invalid response type")
-		}
-	})
+	_ = filter.DoFilter(ctx, req, resp, chain)
+	if resp.headers["Access-Control-Allow-Origin"] != "https://example.com" {
+		t.Errorf("expected origin allowed, got %s", resp.headers["Access-Control-Allow-Origin"])
+	}
+}
 
-	t.Run("AllowCredentials header", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins:   []string{"http://example.com"},
-			AllowCredentials: true,
-		})
-		req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "http://example.com"}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
+func testCorsOrder(t *testing.T) {
+	t.Parallel()
+	filter := NewCorsFilter(CorsConfig{})
+	if filter.Order() != -100 {
+		t.Errorf("expected order -100, got %d", filter.Order())
+	}
+}
 
-		_ = filter.DoFilter(ctx, req, resp, chain)
-		if resp.headers["Access-Control-Allow-Credentials"] != "true" {
-			t.Error("expected Allow-Credentials header")
-		}
-	})
+func TestCorsFilter(t *testing.T) {
+	t.Parallel()
 
-	t.Run("exact origin match", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{
-			AllowedOrigins: []string{"https://example.com"},
-		})
-		req := &mockSecurityRequest{method: "GET", uri: "/api", headers: map[string]string{"Origin": "https://example.com"}}
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		chain := &mockSecurityFilterChain{}
-
-		_ = filter.DoFilter(ctx, req, resp, chain)
-		if resp.headers["Access-Control-Allow-Origin"] != "https://example.com" {
-			t.Errorf("expected origin allowed, got %s", resp.headers["Access-Control-Allow-Origin"])
-		}
-	})
-
-	t.Run("Order returns -100", func(t *testing.T) {
-		t.Parallel()
-		filter := NewCorsFilter(CorsConfig{})
-		if filter.Order() != -100 {
-			t.Errorf("expected order -100, got %d", filter.Order())
-		}
-	})
+	t.Run("AllowAll wildcard origin", testCorsAllowAllWildcard)
+	t.Run("preflight OPTIONS request", testCorsPreflightOptions)
+	t.Run("blocked origin", testCorsBlockedOrigin)
+	t.Run("no Origin header skips CORS", testCorsNoOriginHeader)
+	t.Run("invalid ctx type returns error", testCorsInvalidCtx)
+	t.Run("invalid request type returns error", testCorsInvalidRequest)
+	t.Run("invalid response type returns error", testCorsInvalidResponse)
+	t.Run("AllowCredentials header", testCorsAllowCredentials)
+	t.Run("exact origin match", testCorsExactOriginMatch)
+	t.Run("Order returns -100", testCorsOrder)
 }
 
 func TestSecurityBuilder(t *testing.T) {
@@ -252,7 +559,7 @@ func TestSecurityBuilder(t *testing.T) {
 	t.Run("builder setters return self", func(t *testing.T) {
 		t.Parallel()
 		b := NewSecurityBuilder()
-		result := b.
+		returnedBuilder := b.
 			AuthenticationManager(nil).
 			UserDetailsService(nil).
 			PasswordEncoder(nil).
@@ -262,7 +569,7 @@ func TestSecurityBuilder(t *testing.T) {
 			EnableFormLogin("/login").
 			EnableHttpBasic().
 			EnableLogout("/logout")
-		if result == nil {
+		if returnedBuilder == nil {
 			t.Fatal("builder setters should return self")
 		}
 	})
@@ -327,121 +634,75 @@ func TestCsrfFilterEdgeCases(t *testing.T) {
 	})
 }
 
+func testUserDetailsInMemory(t *testing.T) {
+	t.Parallel()
+	details := NewInMemoryUserDetails("user1", "pass1", []string{"ROLE_USER"})
+	if details.Username() != "user1" {
+		t.Errorf("expected username 'user1', got '%s'", details.Username())
+	}
+	if details.Password() != "pass1" {
+		t.Errorf("expected password 'pass1', got '%s'", details.Password())
+	}
+	roles := details.Authorities()
+	if len(roles) != 1 || roles[0] != "ROLE_USER" {
+		t.Errorf("expected [ROLE_USER], got %v", roles)
+	}
+	if !details.Enabled() {
+		t.Error("expected enabled")
+	}
+	if !details.AccountNonExpired() {
+		t.Error("expected account non-expired")
+	}
+	if !details.CredentialsNonExpired() {
+		t.Error("expected credentials non-expired")
+	}
+	if !details.AccountNonLocked() {
+		t.Error("expected account non-locked")
+	}
+}
+
+func testUserDetailsServiceCRUD(t *testing.T) {
+	t.Parallel()
+	svc := NewInMemoryUserDetailsService()
+
+	svc.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
+
+	ctx := context.Background()
+	details, err := svc.LoadUserByUsername(ctx, "admin")
+	if err != nil {
+		t.Fatalf("failed to load user: %v", err)
+	}
+	if details.Username() != "admin" {
+		t.Errorf("expected 'admin', got '%s'", details.Username())
+	}
+
+	_, err = svc.LoadUserByUsername(ctx, "nonexistent")
+	if err == nil {
+		t.Error("expected error for nonexistent user")
+	}
+}
+
+func testUserDetailsServiceDelete(t *testing.T) {
+	t.Parallel()
+	svc := NewInMemoryUserDetailsService()
+	svc.CreateUser("user1", "pass", []string{"ROLE_USER"})
+
+	if svc.UserCount() != 1 {
+		t.Errorf("expected 1 user, got %d", svc.UserCount())
+	}
+
+	svc.DeleteUser("user1")
+	if svc.UserCount() != 0 {
+		t.Errorf("expected 0 users after delete, got %d", svc.UserCount())
+	}
+}
+
 func TestUserDetailsService(t *testing.T) {
 	t.Parallel()
 
-	t.Run("InMemoryUserDetails", func(t *testing.T) {
-		t.Parallel()
-		details := NewInMemoryUserDetails("user1", "pass1", []string{"ROLE_USER"})
-		if details.Username() != "user1" {
-			t.Errorf("expected username 'user1', got '%s'", details.Username())
-		}
-		if details.Password() != "pass1" {
-			t.Errorf("expected password 'pass1', got '%s'", details.Password())
-		}
-		roles := details.Authorities()
-		if len(roles) != 1 || roles[0] != "ROLE_USER" {
-			t.Errorf("expected [ROLE_USER], got %v", roles)
-		}
-		if !details.Enabled() {
-			t.Error("expected enabled")
-		}
-		if !details.AccountNonExpired() {
-			t.Error("expected account non-expired")
-		}
-		if !details.CredentialsNonExpired() {
-			t.Error("expected credentials non-expired")
-		}
-		if !details.AccountNonLocked() {
-			t.Error("expected account non-locked")
-		}
-	})
-
-	t.Run("InMemoryUserDetailsService CRUD", func(t *testing.T) {
-		t.Parallel()
-		svc := NewInMemoryUserDetailsService()
-
-		svc.CreateUser("admin", "admin123", []string{"ROLE_ADMIN"})
-
-		ctx := context.Background()
-		details, err := svc.LoadUserByUsername(ctx, "admin")
-		if err != nil {
-			t.Fatalf("failed to load user: %v", err)
-		}
-		if details.Username() != "admin" {
-			t.Errorf("expected 'admin', got '%s'", details.Username())
-		}
-
-		_, err = svc.LoadUserByUsername(ctx, "nonexistent")
-		if err == nil {
-			t.Error("expected error for nonexistent user")
-		}
-	})
-
-	t.Run("DeleteUser", func(t *testing.T) {
-		t.Parallel()
-		svc := NewInMemoryUserDetailsService()
-		svc.CreateUser("user1", "pass", []string{"ROLE_USER"})
-
-		if svc.UserCount() != 1 {
-			t.Errorf("expected 1 user, got %d", svc.UserCount())
-		}
-
-		svc.DeleteUser("user1")
-		if svc.UserCount() != 0 {
-			t.Errorf("expected 0 users after delete, got %d", svc.UserCount())
-		}
-	})
-}
-
-func TestUsernamePasswordAuthentication(t *testing.T) {
-	t.Parallel()
-
-	t.Run("NewUsernamePasswordAuthenticationToken", func(t *testing.T) {
-		t.Parallel()
-		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
-		if auth.Principal() != "user" {
-			t.Errorf("expected principal 'user', got '%v'", auth.Principal())
-		}
-		if auth.Credentials() != "pass" {
-			t.Errorf("expected credentials 'pass', got '%v'", auth.Credentials())
-		}
-		if auth.Authenticated() {
-			t.Error("expected not authenticated")
-		}
-	})
-
-	t.Run("NewAuthenticatedUsernamePasswordAuthenticationToken", func(t *testing.T) {
-		t.Parallel()
-		auth := NewAuthenticatedUsernamePasswordAuthenticationToken("admin", []string{"ROLE_ADMIN"})
-		if !auth.Authenticated() {
-			t.Error("expected authenticated")
-		}
-		if len(auth.Authorities()) != 1 {
-			t.Errorf("expected 1 authority, got %d", len(auth.Authorities()))
-		}
-	})
-
-	t.Run("SetAuthenticated and SetAuthorities", func(t *testing.T) {
-		t.Parallel()
-		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
-		auth.SetAuthenticated(true)
-		if !auth.Authenticated() {
-			t.Error("expected authenticated after SetAuthenticated(true)")
-		}
-		auth.SetAuthorities([]string{"ROLE_USER", "ROLE_ADMIN"})
-		if len(auth.Authorities()) != 2 {
-			t.Errorf("expected 2 authorities, got %d", len(auth.Authorities()))
-		}
-	})
-
-	t.Run("Name returns principal string", func(t *testing.T) {
-		t.Parallel()
-		auth := NewUsernamePasswordAuthenticationToken("user", "pass")
-		if auth.Name() != "user" {
-			t.Errorf("expected name 'user', got '%s'", auth.Name())
-		}
-	})
+	t.Run("InMemoryUserDetails", testUserDetailsInMemory)
+	t.Run("InMemoryUserDetailsService CRUD", testUserDetailsServiceCRUD)
+	t.Run("DeleteUser", testUserDetailsServiceDelete)
 }
 
 func TestBasicAuthFilterEdgeCases(t *testing.T) {
@@ -490,80 +751,6 @@ func TestBasicAuthFilterEdgeCases(t *testing.T) {
 	})
 }
 
-func TestPasswordEncoderInterface(t *testing.T) {
-	t.Parallel()
-
-	t.Run("NoOpPasswordEncoder roundtrip", func(t *testing.T) {
-		t.Parallel()
-		enc := NewNoOpPasswordEncoder()
-		encoded := enc.Encode("mypassword")
-		if encoded != "mypassword" {
-			t.Errorf("NoOp should return same string, got '%s'", encoded)
-		}
-		if !enc.Matches("mypassword", "mypassword") {
-			t.Error("expected match")
-		}
-		if enc.Matches("mypassword", "wrongpassword") {
-			t.Error("expected no match")
-		}
-	})
-}
-
-func TestSecurityRequestResponseMock(t *testing.T) {
-	t.Parallel()
-
-	t.Run("mock request methods", func(t *testing.T) {
-		t.Parallel()
-		req := &mockSecurityRequest{method: "POST", uri: "/test"}
-		req.SetHeader("X-Custom", "value123")
-		req.SetAttribute("key", "val")
-
-		if req.GetMethod() != "POST" {
-			t.Errorf("expected POST, got %s", req.GetMethod())
-		}
-		if req.GetHeader("X-Custom") != "value123" {
-			t.Errorf("expected value123, got %s", req.GetHeader("X-Custom"))
-		}
-		if req.GetHeader("X-Missing") != "" {
-			t.Error("expected empty string for missing header")
-		}
-
-		val, ok := req.GetAttribute("key")
-		if !ok || val != "val" {
-			t.Errorf("expected attribute 'val', got %v (exists=%v)", val, ok)
-		}
-	})
-
-	t.Run("mock response methods", func(t *testing.T) {
-		t.Parallel()
-		resp := &mockSecurityResponse{headers: map[string]string{}}
-		resp.SetStatusCode(404)
-		resp.SetHeader("X-Test", "hello")
-
-		if resp.statusCode != 404 {
-			t.Errorf("expected 404, got %d", resp.statusCode)
-		}
-		if resp.headers["X-Test"] != "hello" {
-			t.Errorf("expected 'hello', got '%s'", resp.headers["X-Test"])
-		}
-	})
-}
-
-func TestFilterChainProxy(t *testing.T) {
-	t.Parallel()
-
-	t.Run("SecurityFilterChainAdapter adapts filterChainProxy", func(t *testing.T) {
-		t.Parallel()
-		chain := newFilterChainProxy([]SecurityFilter{}, &DefaultSecurityFilterChain{})
-		adapter := securityFilterChainAdapter{proxy: chain}
-
-		filters := adapter.GetFilters()
-		if len(filters) != 0 {
-			t.Errorf("expected empty filters, got %d", len(filters))
-		}
-	})
-}
-
 func TestLogoutFilterEdgeCases(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -598,17 +785,17 @@ func TestCsrfTokenManagerEdgeCases(t *testing.T) {
 
 	t.Run("validate with wrong user", func(t *testing.T) {
 		t.Parallel()
-		m := NewCsrfTokenManager()
-		token, _ := m.GenerateToken("user1")
-		if m.ValidateToken("user2", token) {
+		tokenManager := NewCsrfTokenManager()
+		token, _ := tokenManager.GenerateToken("user1")
+		if tokenManager.ValidateToken("user2", token) {
 			t.Error("token should not validate for different user")
 		}
 	})
 
 	t.Run("generate token is non-empty", func(t *testing.T) {
 		t.Parallel()
-		m := NewCsrfTokenManager()
-		token, err := m.GenerateToken("user1")
+		tokenManager := NewCsrfTokenManager()
+		token, err := tokenManager.GenerateToken("user1")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

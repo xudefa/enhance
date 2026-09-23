@@ -84,12 +84,12 @@ func TestConsistentHash_Next(t *testing.T) {
 		{URL: "http://backend2", ID: "2"},
 	}
 
-	result, err := ch.Next(backends)
+	backend, err := ch.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -101,12 +101,12 @@ func TestConsistentHash_NextByKey(t *testing.T) {
 		{URL: "http://backend2", ID: "2"},
 	}
 
-	result, err := ch.NextByKey(backends, "user-123")
+	backend, err := ch.NextByKey(backends, "user-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
-		t.Fatal("expected non-nil result")
+	if backend == nil {
+		t.Fatal("expected non-nil backend")
 	}
 }
 
@@ -148,12 +148,12 @@ func TestIPHash_Next(t *testing.T) {
 		{URL: "http://backend1", ID: "1"},
 	}
 
-	result, err := ih.Next(backends)
+	backend, err := ih.Next(backends)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 
@@ -175,12 +175,12 @@ func TestIPHash_NextByIP(t *testing.T) {
 		{URL: "http://backend3", ID: "3"},
 	}
 
-	result, err := ih.NextByIP(backends, "192.168.1.1")
+	backend, err := ih.NextByIP(backends, "192.168.1.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result == nil {
-		t.Fatal("expected non-nil result")
+	if backend == nil {
+		t.Fatal("expected non-nil backend")
 	}
 }
 
@@ -191,12 +191,12 @@ func TestIPHash_NextByIP_EmptyIP(t *testing.T) {
 		{URL: "http://backend1", ID: "1"},
 	}
 
-	result, err := ih.NextByIP(backends, "")
+	backend, err := ih.NextByIP(backends, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.URL != "http://backend1" {
-		t.Errorf("expected http://backend1, got %s", result.URL)
+	if backend.URL != "http://backend1" {
+		t.Errorf("expected http://backend1, got %s", backend.URL)
 	}
 }
 

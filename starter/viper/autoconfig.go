@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ViperAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ViperEnabled, ConditionTrue),
+			// 约定优于配置：当 viper.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ViperEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)
@@ -48,27 +49,27 @@ func (c *ViperAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	c.config = cfg
 
-	v := viper.New()
-	v.SetConfigName(cfg.ConfigName)
-	v.SetConfigType(cfg.ConfigType)
-	v.AddConfigPath(cfg.ConfigPath)
+	viperInstance := viper.New()
+	viperInstance.SetConfigName(cfg.ConfigName)
+	viperInstance.SetConfigType(cfg.ConfigType)
+	viperInstance.AddConfigPath(cfg.ConfigPath)
 
 	if cfg.WatchChanges {
-		v.WatchConfig()
-		v.OnConfigChange(func(e fsnotify.Event) {
+		viperInstance.WatchConfig()
+		viperInstance.OnConfigChange(func(e fsnotify.Event) {
 			c.logger.Info(ctx.Context(), "config file changed",
 				log.KeyValue{Key: "file", Value: e.Name},
 			)
 		})
 	}
 
-	if err := v.ReadInConfig(); err != nil {
+	if err := viperInstance.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return fmt.Errorf("failed to read config file: %w", err)
 		}
 	}
 
-	c.viper = v
+	c.viper = viperInstance
 
 	if err := ctx.Container().RegisterInstance(c.viper, reflect.TypeFor[*viper.Viper]()); err != nil {
 		return fmt.Errorf("failed to register Viper instance: %w", err)

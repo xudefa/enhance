@@ -83,12 +83,16 @@ package casbingorm
 // ==================== 配置键常量 ====================
 
 const (
-	// Casbin GORM 配置
-	CasbinGormEnabled         = "security.casbin.enabled"
-	CasbinGormPolicyType      = "security.casbin.policy-type"
+	// CasbinGormEnabled 是否启用 Casbin GORM 集成。
+	CasbinGormEnabled = "security.casbin.enabled"
+	// CasbinGormPolicyType Casbin 策略存储类型。
+	CasbinGormPolicyType = "security.casbin.policy-type"
+	// CasbinGormAutoCreateTable 是否自动创建策略表。
 	CasbinGormAutoCreateTable = "security.casbin.auto-create-table"
-	CasbinGormTableName       = "security.casbin.table-name"
-	CasbinGormDatabasePrefix  = "security.casbin.database-prefix"
+	// CasbinGormTableName 策略表名。
+	CasbinGormTableName = "security.casbin.table-name"
+	// CasbinGormDatabasePrefix 数据库前缀。
+	CasbinGormDatabasePrefix = "security.casbin.database-prefix"
 
 	// 日志字段常量
 	LogFieldPolicyType = "policy-type"
@@ -97,11 +101,14 @@ const (
 // ==================== 默认值常量 ====================
 
 const (
-	// Casbin GORM 默认值
-	DefaultCasbinGormPolicyType      = "gorm"
+	// DefaultCasbinGormPolicyType 默认策略存储类型。
+	DefaultCasbinGormPolicyType = "gorm"
+	// DefaultCasbinGormAutoCreateTable 默认是否自动创建策略表。
 	DefaultCasbinGormAutoCreateTable = true
-	DefaultCasbinGormTableName       = "casbin_rule"
-	DefaultCasbinGormDatabasePrefix  = ""
+	// DefaultCasbinGormTableName 默认策略表名。
+	DefaultCasbinGormTableName = "casbin_rule"
+	// DefaultCasbinGormDatabasePrefix 默认数据库前缀。
+	DefaultCasbinGormDatabasePrefix = ""
 
 	// 条件值常量
 	ConditionTrue = "true"

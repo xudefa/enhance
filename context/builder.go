@@ -121,6 +121,32 @@ func (b *ApplicationContextBuilder) Bean(t reflect.Type, opts ...core.BeanOption
 
 // Build 构建应用上下文
 func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
+	b.setupDefaults()
+
+	ctx := b.createContext()
+
+	// 注册阶段监听器
+	for _, listener := range b.phaseListeners {
+		ctx.lifecycle.AddListener(listener)
+	}
+
+	// 注册事件监听器
+	for eventType, listeners := range b.eventListeners {
+		for _, listener := range listeners {
+			ctx.events.Subscribe(eventType, listener)
+		}
+	}
+
+	// 注册Beans
+	if err := b.registerBeans(ctx); err != nil {
+		return nil, fmt.Errorf("register beans: %w", err)
+	}
+
+	return ctx, nil
+}
+
+// setupDefaults 创建默认的容器、环境和事件总线，并应用 Profiles。
+func (b *ApplicationContextBuilder) setupDefaults() {
 	// 创建默认容器
 	if b.container == nil {
 		b.container = core.NewContainer()
@@ -140,9 +166,11 @@ func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
 	if b.eventBus == nil {
 		b.eventBus = event.NewEventBusWithOrdering()
 	}
+}
 
-	// 创建应用上下文
-	ctx := NewApplicationContext(b.container, b.env, b.refreshOpts...)
+// createContext 创建应用上下文并替换自定义的事件总线、生命周期与刷新作用域管理器。
+func (b *ApplicationContextBuilder) createContext() *DefaultApplicationContext {
+	ctx := NewApplicationContext(b.container, b.env, b.refreshOpts...).(*DefaultApplicationContext)
 
 	// 替换事件总线（如果自定义）
 	if b.eventBus != nil {
@@ -160,19 +188,11 @@ func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
 		ctx.refreshScopeMgr = b.refreshScopeMgr
 	}
 
-	// 注册阶段监听器
-	for _, listener := range b.phaseListeners {
-		ctx.lifecycle.AddListener(listener)
-	}
+	return ctx
+}
 
-	// 注册事件监听器
-	for eventType, listeners := range b.eventListeners {
-		for _, listener := range listeners {
-			ctx.events.Subscribe(eventType, listener)
-		}
-	}
-
-	// 注册Beans
+// registerBeans 注册所有 Bean 定义到容器。
+func (b *ApplicationContextBuilder) registerBeans(ctx ApplicationContext) error {
 	for t, opts := range b.beans {
 		def := registry.BeanDef{
 			Type: t,
@@ -180,13 +200,12 @@ func (b *ApplicationContextBuilder) Build() (ApplicationContext, error) {
 		for _, opt := range opts {
 			opt(&def)
 		}
-		if err := ctx.container.RegisterBean(def); err != nil {
-			beanID := ctx.container.Generate(t)
-			return nil, fmt.Errorf("failed to register bean %s: %w", beanID, err)
+		if err := ctx.Container().RegisterBean(def); err != nil {
+			beanID := ctx.Container().Generate(t)
+			return fmt.Errorf("failed to register bean %s: %w", beanID, err)
 		}
 	}
-
-	return ctx, nil
+	return nil
 }
 
 // MustBuild 构建应用上下文，失败则panic
@@ -212,7 +231,7 @@ func NewApplicationContextHelper(ctx ApplicationContext) *ApplicationContextHelp
 func (h *ApplicationContextHelper) GetBeanByType(t reflect.Type) (any, error) {
 	instances, err := h.ctx.Container().Get(t)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("按类型获取 Bean 失败: %w", err)
 	}
 	if len(instances) == 0 {
 		return nil, core.ErrBeanNotFound
@@ -222,11 +241,11 @@ func (h *ApplicationContextHelper) GetBeanByType(t reflect.Type) (any, error) {
 
 // GetBeanByTypeOrDefault 按类型获取Bean，如果不存在返回默认值
 func (h *ApplicationContextHelper) GetBeanByTypeOrDefault(t reflect.Type, defaultVal any) any {
-	val, err := h.ctx.Container().Get(t)
-	if err != nil || len(val) == 0 {
+	instances, err := h.ctx.Container().Get(t)
+	if err != nil || len(instances) == 0 {
 		return defaultVal
 	}
-	return val[0]
+	return instances[0]
 }
 
 // HasBeanByType 检查指定类型的Bean是否存在

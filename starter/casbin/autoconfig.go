@@ -194,26 +194,7 @@ func (c *CasbinAutoConfiguration) startAutoReload(enforcer security.CasbinEnforc
 		log.KeyValue{Key: "interval", Value: fmt.Sprintf("%d min", interval)},
 	)
 
-	go func() {
-		defer recoverLog("casbin policy auto-reload", c.ctx, c.logger)
-		ticker := time.NewTicker(time.Duration(interval) * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := enforcer.LoadPolicy(c.ctx); err != nil {
-					c.logger.Warn(c.ctx, "failed to auto-reload Casbin policy",
-						log.KeyValue{Key: "error", Value: err.Error()},
-					)
-					continue
-				}
-				c.logger.Info(c.ctx, "Casbin policy auto-reloaded")
-			case <-c.ctx.Done():
-				return
-			}
-		}
-	}()
+	go c.casbinPolicyReloadLoop(enforcer, interval)
 }
 
 // Close 停止自动刷新定时器，释放 goroutine 资源。
@@ -223,11 +204,33 @@ func (c *CasbinAutoConfiguration) Close() {
 	}
 }
 
+// casbinPolicyReloadLoop 定时重载策略的循环。
+func (c *CasbinAutoConfiguration) casbinPolicyReloadLoop(enforcer security.CasbinEnforcer, interval int) {
+	defer recoverLog("casbin policy auto-reload", c.ctx, c.logger)
+	ticker := time.NewTicker(time.Duration(interval) * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := enforcer.LoadPolicy(c.ctx); err != nil {
+				c.logger.Warn(c.ctx, "failed to auto-reload Casbin policy",
+					log.KeyValue{Key: "error", Value: err.Error()},
+				)
+				continue
+			}
+			c.logger.Info(c.ctx, "Casbin policy auto-reloaded")
+		case <-c.ctx.Done():
+			return
+		}
+	}
+}
+
 // recoverLog recovers from panic and logs the error.
 func recoverLog(component string, ctx context.Context, logger log.Logger) {
-	if r := recover(); r != nil {
+	if panicVal := recover(); panicVal != nil {
 		logger.Error(ctx, fmt.Sprintf("%s panic recovered", component),
-			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", r)},
+			log.KeyValue{Key: "panic", Value: fmt.Sprintf("%v", panicVal)},
 		)
 	}
 }

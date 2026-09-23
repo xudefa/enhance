@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -102,17 +103,17 @@ type simpleHistogram struct {
 
 // NewSimpleHistogram 创建新的简单直方图
 func NewSimpleHistogram(name string, tags map[string]string) Histogram {
-	h := &simpleHistogram{
+	histogram := &simpleHistogram{
 		name: name,
 		tags: copyTags(tags),
 	}
 	for i := 0; i < 8; i++ {
-		h.shards[i] = &histogramShard{
+		histogram.shards[i] = &histogramShard{
 			min: math.MaxFloat64,
 			max: math.Inf(-1),
 		}
 	}
-	return h
+	return histogram
 }
 
 // getShard 获取分片（使用 goroutine ID 简单分片）
@@ -229,11 +230,11 @@ func parseTags(tags []string) map[string]string {
 	if len(tags)%2 != 0 {
 		panic("metrics: tags must be provided as key/value pairs, got odd count " + strconv.Itoa(len(tags)))
 	}
-	result := make(map[string]string, len(tags)/2)
+	tagMap := make(map[string]string, len(tags)/2)
 	for i := 0; i < len(tags); i += 2 {
-		result[tags[i]] = tags[i+1]
+		tagMap[tags[i]] = tags[i+1]
 	}
-	return result
+	return tagMap
 }
 
 // metricKey 生成指标唯一键，由名称和标签组成
@@ -303,17 +304,17 @@ func (r *simpleRegistry) Counter(name string, tags ...string) Counter {
 func (r *simpleRegistry) Gauge(name string, tags ...string) Gauge {
 	parsedTags := parseTags(tags)
 	key := metricKey(name, parsedTags)
-	if g, ok := r.gauges.Load(key); ok {
-		return g.(*simpleGauge)
+	if gaugeVal, ok := r.gauges.Load(key); ok {
+		return gaugeVal.(*simpleGauge)
 	}
-	g := &simpleGauge{}
-	if actual, loaded := r.gauges.LoadOrStore(key, g); loaded {
+	gauge := &simpleGauge{}
+	if actual, loaded := r.gauges.LoadOrStore(key, gauge); loaded {
 		return actual.(*simpleGauge)
 	}
 	if len(tags) > 0 {
 		r.tags.Store(key, parsedTags)
 	}
-	return g
+	return gauge
 }
 
 // Histogram 获取或创建指定名称的直方图
@@ -322,17 +323,17 @@ func (r *simpleRegistry) Gauge(name string, tags ...string) Gauge {
 func (r *simpleRegistry) Histogram(name string, tags ...string) Histogram {
 	parsedTags := parseTags(tags)
 	key := metricKey(name, parsedTags)
-	if h, ok := r.histograms.Load(key); ok {
-		return h.(*simpleHistogram)
+	if hist, ok := r.histograms.Load(key); ok {
+		return hist.(*simpleHistogram)
 	}
-	h := NewSimpleHistogram(name, parsedTags)
-	if actual, loaded := r.histograms.LoadOrStore(key, h); loaded {
+	histogram := NewSimpleHistogram(name, parsedTags)
+	if actual, loaded := r.histograms.LoadOrStore(key, histogram); loaded {
 		return actual.(*simpleHistogram)
 	}
 	if len(tags) > 0 {
 		r.tags.Store(key, parsedTags)
 	}
-	return h
+	return histogram
 }
 
 // metricNameFromKey 从 metricKey 中提取纯指标名称
@@ -370,61 +371,52 @@ func (r *simpleRegistry) Collect() []Metric {
 	metrics := make([]Metric, 0)
 	now := time.Now().UnixMilli()
 
+	metrics = append(metrics, r.collectCounters(now)...)
+	metrics = append(metrics, r.collectGauges(now)...)
+	metrics = append(metrics, r.collectHistograms(now)...)
+
+	return metrics
+}
+
+// collectCounters 收集所有计数器的快照。
+func (r *simpleRegistry) collectCounters(now int64) []Metric {
+	metrics := make([]Metric, 0)
 	r.counters.Range(func(key, value any) bool {
-		k := key.(string)
-		c := value.(*simpleCounter)
-		m := Metric{
-			Name:      metricNameFromKey(k),
-			Value:     c.Value(),
+		counterKey := key.(string)
+		counter := value.(*simpleCounter)
+		metric := Metric{
+			Name:      metricNameFromKey(counterKey),
+			Value:     counter.Value(),
 			Type:      "counter",
 			Timestamp: now,
 		}
-		if tags, ok := r.tags.Load(k); ok {
-			m.Tags = copyTags(tags.(map[string]string))
+		if tags, ok := r.tags.Load(counterKey); ok {
+			metric.Tags = copyTags(tags.(map[string]string))
 		}
-		metrics = append(metrics, m)
+		metrics = append(metrics, metric)
 		return true
 	})
+	return metrics
+}
 
+// collectGauges 收集所有仪表盘的快照。
+func (r *simpleRegistry) collectGauges(now int64) []Metric {
+	metrics := make([]Metric, 0)
 	r.gauges.Range(func(key, value any) bool {
-		k := key.(string)
-		g := value.(*simpleGauge)
-		m := Metric{
-			Name:      metricNameFromKey(k),
-			Value:     g.Value(),
+		gaugeKey := key.(string)
+		gauge := value.(*simpleGauge)
+		metric := Metric{
+			Name:      metricNameFromKey(gaugeKey),
+			Value:     gauge.Value(),
 			Type:      "gauge",
 			Timestamp: now,
 		}
-		if tags, ok := r.tags.Load(k); ok {
-			m.Tags = copyTags(tags.(map[string]string))
+		if tags, ok := r.tags.Load(gaugeKey); ok {
+			metric.Tags = copyTags(tags.(map[string]string))
 		}
-		metrics = append(metrics, m)
+		metrics = append(metrics, metric)
 		return true
 	})
-
-	r.histograms.Range(func(key, value any) bool {
-		k := key.(string)
-		h := value.(*simpleHistogram)
-		count := h.Count()
-		var avg float64
-		if count > 0 {
-			avg = h.Sum() / float64(count)
-		}
-		m := Metric{
-			Name:      metricNameFromKey(k),
-			Value:     avg,
-			Type:      "histogram",
-			Timestamp: now,
-			Count:     count,
-			Sum:       h.Sum(),
-		}
-		if tags := h.tagsSnapshot(); len(tags) > 0 {
-			m.Tags = tags
-		}
-		metrics = append(metrics, m)
-		return true
-	})
-
 	return metrics
 }
 
@@ -455,7 +447,7 @@ func (r *simpleRegistry) Export() error {
 	r.exportMu.RUnlock()
 	for _, exporter := range exporters {
 		if err := exporter.Export(metrics); err != nil {
-			return err
+			return fmt.Errorf("导出指标失败: %w", err)
 		}
 	}
 	return nil
@@ -480,10 +472,12 @@ func (r *simpleRegistry) Reset() {
 // ConsoleExporter 控制台导出器
 type ConsoleExporter struct{}
 
+// NewConsoleExporter 创建控制台导出器。
 func NewConsoleExporter() Exporter {
 	return &ConsoleExporter{}
 }
 
+// Export 导出指标到控制台。
 func (e *ConsoleExporter) Export(metrics []Metric) error {
 	return nil
 }

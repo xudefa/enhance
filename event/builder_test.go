@@ -191,6 +191,7 @@ func TestHelperFunctions(t *testing.T) {
 
 	for _, tt := range events {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			event := tt.event.Build()
 
 			if event.EventType == "" {

@@ -48,16 +48,16 @@ func TestIntegration_HTTPMiddleware(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	w := httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 
-	middleware(nextHandler).ServeHTTP(w, req)
+	middleware(nextHandler).ServeHTTP(rec, req)
 
-	if w.Code != 500 {
-		t.Errorf("Expected status 500, got %d", w.Code)
+	if rec.Code != 500 {
+		t.Errorf("Expected status 500, got %d", rec.Code)
 	}
 
 	var resp ErrorResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
@@ -77,7 +77,7 @@ func TestIntegration_CustomResolver(t *testing.T) {
 			return ok
 		},
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(418, "Custom error handled", "", "", nil)
+			return NewErrorResponse(418, "Custom error handled")
 		},
 	}
 
@@ -129,7 +129,7 @@ func TestIntegration_HandlerFuncRegistration(t *testing.T) {
 
 	handler.RegisterHandlerFunc(errType,
 		func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(422, "Unprocessable Entity", "", "", nil)
+			return NewErrorResponse(422, "Unprocessable Entity")
 		})
 
 	response := &mockResponseWriter{}
@@ -148,7 +148,7 @@ func TestIntegration_ResolverChainPriority(t *testing.T) {
 		order:    10,
 		supports: func(err error) bool { return errors.Is(err, ErrNotFound) },
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(404, "Priority 10", "", "", nil)
+			return NewErrorResponse(404, "Priority 10")
 		},
 	}
 
@@ -156,7 +156,7 @@ func TestIntegration_ResolverChainPriority(t *testing.T) {
 		order:    5,
 		supports: func(err error) bool { return errors.Is(err, ErrNotFound) },
 		resolve: func(ctx context.Context, err error) *ErrorResponse {
-			return NewErrorResponse(404, "Priority 5", "", "", nil)
+			return NewErrorResponse(404, "Priority 5")
 		},
 	}
 

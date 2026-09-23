@@ -7,7 +7,7 @@ import (
 
 func TestIsRequiredValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	tests := []struct {
 		name     string
@@ -27,10 +27,10 @@ func TestIsRequiredValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.value)
-			result := v.isRequiredValid(val)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v", tt.expected, result)
+			rv := reflect.ValueOf(tt.value)
+			got := validator.isRequiredValid(rv)
+			if got != tt.expected {
+				t.Errorf("expected %v, got %v", tt.expected, got)
 			}
 		})
 	}
@@ -38,34 +38,34 @@ func TestIsRequiredValid(t *testing.T) {
 
 func TestIsMinValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if !v.isMinValid(val, "3") {
+		rv := reflect.ValueOf("hello")
+		if !validator.isMinValid(rv, "3") {
 			t.Error("expected min valid for string length >= 3")
 		}
-		if v.isMinValid(val, "10") {
+		if validator.isMinValid(rv, "10") {
 			t.Error("expected min invalid for string length < 10")
 		}
 	})
 
 	t.Run("int value", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if !v.isMinValid(val, "10") {
+		rv := reflect.ValueOf(42)
+		if !validator.isMinValid(rv, "10") {
 			t.Error("expected min valid for int >= 10")
 		}
-		if v.isMinValid(val, "50") {
+		if validator.isMinValid(rv, "50") {
 			t.Error("expected min invalid for int < 50")
 		}
 	})
 
 	t.Run("invalid min value", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if v.isMinValid(val, "abc") {
+		rv := reflect.ValueOf(42)
+		if validator.isMinValid(rv, "abc") {
 			t.Error("expected min invalid for non-numeric value")
 		}
 	})
@@ -73,26 +73,26 @@ func TestIsMinValid(t *testing.T) {
 
 func TestIsMaxValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hi")
-		if !v.isMaxValid(val, "5") {
+		rv := reflect.ValueOf("hi")
+		if !validator.isMaxValid(rv, "5") {
 			t.Error("expected max valid for string length <= 5")
 		}
-		if v.isMaxValid(val, "1") {
+		if validator.isMaxValid(rv, "1") {
 			t.Error("expected max invalid for string length > 1")
 		}
 	})
 
 	t.Run("int value", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if !v.isMaxValid(val, "50") {
+		rv := reflect.ValueOf(42)
+		if !validator.isMaxValid(rv, "50") {
 			t.Error("expected max valid for int <= 50")
 		}
-		if v.isMaxValid(val, "10") {
+		if validator.isMaxValid(rv, "10") {
 			t.Error("expected max invalid for int > 10")
 		}
 	})
@@ -100,23 +100,23 @@ func TestIsMaxValid(t *testing.T) {
 
 func TestIsLenValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if !v.isLenValid(val, "5") {
+		rv := reflect.ValueOf("hello")
+		if !validator.isLenValid(rv, "5") {
 			t.Error("expected len valid for string length == 5")
 		}
-		if v.isLenValid(val, "3") {
+		if validator.isLenValid(rv, "3") {
 			t.Error("expected len invalid for string length != 3")
 		}
 	})
 
 	t.Run("slice length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf([]int{1, 2, 3})
-		if !v.isLenValid(val, "3") {
+		rv := reflect.ValueOf([]int{1, 2, 3})
+		if !validator.isLenValid(rv, "3") {
 			t.Error("expected len valid for slice length == 3")
 		}
 	})
@@ -124,7 +124,7 @@ func TestIsLenValid(t *testing.T) {
 
 func TestIsEmailValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	tests := []struct {
 		email    string
@@ -138,18 +138,18 @@ func TestIsEmailValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.email, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.email)
-			result := v.isEmailValid(val)
-			if result != tt.expected {
-				t.Errorf("email %s: expected %v, got %v", tt.email, tt.expected, result)
+			rv := reflect.ValueOf(tt.email)
+			got := validator.isEmailValid(rv)
+			if got != tt.expected {
+				t.Errorf("email %s: expected %v, got %v", tt.email, tt.expected, got)
 			}
 		})
 	}
 
 	t.Run("non-string", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if v.isEmailValid(val) {
+		rv := reflect.ValueOf(42)
+		if validator.isEmailValid(rv) {
 			t.Error("expected email invalid for non-string")
 		}
 	})
@@ -157,28 +157,28 @@ func TestIsEmailValid(t *testing.T) {
 
 func TestIsRegexpValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("valid pattern", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello123")
-		if !v.isRegexpValid(val, `^[a-z]+\d+$`) {
+		rv := reflect.ValueOf("hello123")
+		if !validator.isRegexpValid(rv, `^[a-z]+\d+$`) {
 			t.Error("expected regexp valid")
 		}
 	})
 
 	t.Run("invalid pattern", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if v.isRegexpValid(val, `^\d+$`) {
+		rv := reflect.ValueOf("hello")
+		if validator.isRegexpValid(rv, `^\d+$`) {
 			t.Error("expected regexp invalid")
 		}
 	})
 
 	t.Run("invalid regex", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if v.isRegexpValid(val, `[invalid`) {
+		rv := reflect.ValueOf("hello")
+		if validator.isRegexpValid(rv, `[invalid`) {
 			t.Error("expected regexp invalid for bad pattern")
 		}
 	})
@@ -186,26 +186,26 @@ func TestIsRegexpValid(t *testing.T) {
 
 func TestIsGtValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if !v.isGtValid(val, "3") {
+		rv := reflect.ValueOf("hello")
+		if !validator.isGtValid(rv, "3") {
 			t.Error("expected gt valid for string length > 3")
 		}
-		if v.isGtValid(val, "5") {
+		if validator.isGtValid(rv, "5") {
 			t.Error("expected gt invalid for string length == 5")
 		}
 	})
 
 	t.Run("int value", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if !v.isGtValid(val, "10") {
+		rv := reflect.ValueOf(42)
+		if !validator.isGtValid(rv, "10") {
 			t.Error("expected gt valid for int > 10")
 		}
-		if v.isGtValid(val, "50") {
+		if validator.isGtValid(rv, "50") {
 			t.Error("expected gt invalid for int < 50")
 		}
 	})
@@ -213,20 +213,20 @@ func TestIsGtValid(t *testing.T) {
 
 func TestIsGteValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hello")
-		if !v.isGteValid(val, "5") {
+		rv := reflect.ValueOf("hello")
+		if !validator.isGteValid(rv, "5") {
 			t.Error("expected gte valid for string length >= 5")
 		}
 	})
 
 	t.Run("int value", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(42)
-		if !v.isGteValid(val, "42") {
+		rv := reflect.ValueOf(42)
+		if !validator.isGteValid(rv, "42") {
 			t.Error("expected gte valid for int == 42")
 		}
 	})
@@ -234,15 +234,15 @@ func TestIsGteValid(t *testing.T) {
 
 func TestIsLtValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hi")
-		if !v.isLtValid(val, "5") {
+		rv := reflect.ValueOf("hi")
+		if !validator.isLtValid(rv, "5") {
 			t.Error("expected lt valid for string length < 5")
 		}
-		if v.isLtValid(val, "2") {
+		if validator.isLtValid(rv, "2") {
 			t.Error("expected lt invalid for string length == 2")
 		}
 	})
@@ -250,12 +250,12 @@ func TestIsLtValid(t *testing.T) {
 
 func TestIsLteValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string length", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("hi")
-		if !v.isLteValid(val, "2") {
+		rv := reflect.ValueOf("hi")
+		if !validator.isLteValid(rv, "2") {
 			t.Error("expected lte valid for string length <= 2")
 		}
 	})
@@ -263,7 +263,7 @@ func TestIsLteValid(t *testing.T) {
 
 func TestIsURLValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	tests := []struct {
 		url      string
@@ -277,10 +277,10 @@ func TestIsURLValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.url, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.url)
-			result := v.isURLValid(val)
-			if result != tt.expected {
-				t.Errorf("url %s: expected %v, got %v", tt.url, tt.expected, result)
+			rv := reflect.ValueOf(tt.url)
+			got := validator.isURLValid(rv)
+			if got != tt.expected {
+				t.Errorf("url %s: expected %v, got %v", tt.url, tt.expected, got)
 			}
 		})
 	}
@@ -288,7 +288,7 @@ func TestIsURLValid(t *testing.T) {
 
 func TestIsIPValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	tests := []struct {
 		ip       string
@@ -303,10 +303,10 @@ func TestIsIPValid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.ip, func(t *testing.T) {
 			t.Parallel()
-			val := reflect.ValueOf(tt.ip)
-			result := v.isIPValid(val)
-			if result != tt.expected {
-				t.Errorf("ip %s: expected %v, got %v", tt.ip, tt.expected, result)
+			rv := reflect.ValueOf(tt.ip)
+			got := validator.isIPValid(rv)
+			if got != tt.expected {
+				t.Errorf("ip %s: expected %v, got %v", tt.ip, tt.expected, got)
 			}
 		})
 	}
@@ -314,23 +314,23 @@ func TestIsIPValid(t *testing.T) {
 
 func TestIsOneOfValid(t *testing.T) {
 	t.Parallel()
-	v := &TagValidator{}
+	validator := &TagValidator{}
 
 	t.Run("string options", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf("admin")
-		if !v.isOneOfValid(val, "admin user guest") {
+		rv := reflect.ValueOf("admin")
+		if !validator.isOneOfValid(rv, "admin user guest") {
 			t.Error("expected oneof valid")
 		}
-		if v.isOneOfValid(val, "user guest") {
+		if validator.isOneOfValid(rv, "user guest") {
 			t.Error("expected oneof invalid")
 		}
 	})
 
 	t.Run("int options", func(t *testing.T) {
 		t.Parallel()
-		val := reflect.ValueOf(1)
-		if !v.isOneOfValid(val, "1 2 3") {
+		rv := reflect.ValueOf(1)
+		if !validator.isOneOfValid(rv, "1 2 3") {
 			t.Error("expected oneof valid")
 		}
 	})

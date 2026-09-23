@@ -9,6 +9,7 @@ import (
 )
 
 func TestRateLimiterConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-ratelimiter", environment.PriorityNormal, map[string]any{
 		"ratelimiter.enabled": "true",
@@ -38,6 +39,7 @@ func TestRateLimiterConfig_LoadConfig(t *testing.T) {
 }
 
 func TestRateLimiterConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &RateLimiterConfig{
 		Rate:  DefaultRate,
 		Burst: DefaultBurst,
@@ -52,6 +54,7 @@ func TestRateLimiterConfig_DefaultValues(t *testing.T) {
 }
 
 func TestRateLimiter_Allow(t *testing.T) {
+	tt.Parallel()
 	cfg := &RateLimiterConfig{
 		Rate:  100.0,
 		Burst: 10,

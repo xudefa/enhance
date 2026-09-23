@@ -7,6 +7,7 @@ import (
 )
 
 func TestChiConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-chi", environment.PriorityNormal, map[string]any{
 		"chi.enabled":        "true",
@@ -44,6 +45,7 @@ func TestChiConfig_LoadConfig(t *testing.T) {
 }
 
 func TestChiConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &ChiConfig{
 		Host:            "0.0.0.0",
 		Port:            8080,

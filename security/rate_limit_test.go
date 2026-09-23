@@ -1,12 +1,8 @@
 package security
 
 import (
-	"context"
 	"testing"
 	"time"
-
-	"github.com/xudefa/enhance/security/authorization"
-	"github.com/xudefa/enhance/security/filter"
 )
 
 func TestSlidingWindowRateLimiter(t *testing.T) {
@@ -164,274 +160,6 @@ func TestStrategyRateLimiterAdapter(t *testing.T) {
 	}
 }
 
-func TestEnhancedRateLimitFilter_Allow(t *testing.T) {
-	t.Parallel()
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	filter := NewEnhancedRateLimitFilter(adapter)
-
-	req := &mockSecurityRequest{
-		uri:    "/api/test",
-		method: "GET",
-		headers: map[string]string{
-			"X-Real-IP": "192.168.1.1",
-		},
-	}
-	resp := &mockSecurityResponse{}
-	chain := &mockSecurityFilterChain{}
-
-	err := filter.DoFilter(context.Background(), req, resp, chain)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !chain.called {
-		t.Error("expected chain to be called")
-	}
-}
-
-func TestEnhancedRateLimitFilter_ExcludePath(t *testing.T) {
-	t.Parallel()
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	filter := NewEnhancedRateLimitFilter(adapter,
-		WithExcludePaths("/health", "/metrics"),
-	)
-
-	req := &mockSecurityRequest{
-		uri:    "/health",
-		method: "GET",
-	}
-	resp := &mockSecurityResponse{}
-	chain := &mockSecurityFilterChain{}
-
-	err := filter.DoFilter(context.Background(), req, resp, chain)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !chain.called {
-		t.Error("expected excluded path to bypass rate limiting")
-	}
-}
-
-func TestEnhancedRateLimitFilter_RateLimited(t *testing.T) {
-	t.Parallel()
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	filter := NewEnhancedRateLimitFilter(adapter)
-
-	req := &mockSecurityRequest{
-		uri:    "/api/test",
-		method: "GET",
-		headers: map[string]string{
-			"X-Real-IP": "192.168.1.1",
-		},
-	}
-	resp := &mockSecurityResponse{}
-	chain := &mockSecurityFilterChain{}
-
-	err := filter.DoFilter(context.Background(), req, resp, chain)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if resp.statusCode != 429 {
-		t.Errorf("expected status 429, got %d", resp.statusCode)
-	}
-	if chain.called {
-		t.Error("expected chain not to be called when rate limited")
-	}
-}
-
-func TestEnhancedRateLimitFilter_CustomCallback(t *testing.T) {
-	t.Parallel()
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 0)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	callbackCalled := false
-	filter := NewEnhancedRateLimitFilter(adapter,
-		WithOnRateLimit(func(ctx context.Context, request SecurityRequest, response SecurityResponse) {
-			callbackCalled = true
-			response.SetStatusCode(503)
-		}),
-	)
-
-	req := &mockSecurityRequest{
-		uri:    "/api/test",
-		method: "GET",
-	}
-	resp := &mockSecurityResponse{}
-	chain := &mockSecurityFilterChain{}
-
-	_ = filter.DoFilter(context.Background(), req, resp, chain)
-
-	if !callbackCalled {
-		t.Error("expected custom callback to be called")
-	}
-	if resp.statusCode != 503 {
-		t.Errorf("expected status 503 from callback, got %d", resp.statusCode)
-	}
-}
-
-func TestSecurityBuilder_BasicConfig(t *testing.T) {
-	t.Parallel()
-	authManager := &testAuthManager{}
-	userDetailsService := &testUserDetailsService{}
-	passwordEncoder := NewNoOpPasswordEncoder()
-
-	config := NewSecurityBuilder().
-		AuthenticationManager(authManager).
-		UserDetailsService(userDetailsService).
-		PasswordEncoder(passwordEncoder).
-		EnableAnonymous().
-		EnableHttpBasic().
-		Build()
-
-	if config == nil {
-		t.Fatal("expected non-nil config")
-	}
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-}
-
-func TestSecurityBuilder_WithFilters(t *testing.T) {
-	t.Parallel()
-	filter1 := &testSecurityFilter{}
-	filter2 := &testSecurityFilter{}
-
-	config := NewSecurityBuilder().
-		AuthenticationManager(&testAuthManager{}).
-		AddFilter(filter1).
-		AddFilterAfter(filter2, filter1).
-		Build()
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-}
-
-func TestSecurityBuilder_FormLogin(t *testing.T) {
-	t.Parallel()
-	config := NewSecurityBuilder().
-		AuthenticationManager(&testAuthManager{}).
-		EnableFormLogin("/login", "/home").
-		EnableCsrf().
-		EnableLogout("/logout").
-		Build()
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	chain, err := http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-	if chain == nil {
-		t.Error("expected non-nil filter chain")
-	}
-}
-
-func TestSecurityBuilder_LogoutWithHandler(t *testing.T) {
-	t.Parallel()
-	handler := &testLogoutSuccessHandler{}
-	config := NewSecurityBuilder().
-		AuthenticationManager(&testAuthManager{}).
-		EnableLogout("/logout", handler).
-		Build()
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	chain, err := http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-	if chain == nil {
-		t.Error("expected non-nil filter chain")
-	}
-}
-
-func TestSecurityBuilder_AddFilterBefore(t *testing.T) {
-	t.Parallel()
-	filter1 := &testSecurityFilter{}
-	filter2 := &testSecurityFilter{}
-
-	config := NewSecurityBuilder().
-		AuthenticationManager(&testAuthManager{}).
-		AddFilter(filter1).
-		AddFilterBefore(filter2, filter1).
-		Build()
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-}
-
-func TestSecurityBuilder_AccessDecisionManager(t *testing.T) {
-	t.Parallel()
-	accessDecisionMgr := &testAccessDecisionManager{}
-	config := NewSecurityBuilder().
-		AuthenticationManager(&testAuthManager{}).
-		AccessDecisionManager(accessDecisionMgr).
-		Build()
-
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = http.Build()
-	if err != nil {
-		t.Errorf("unexpected build error: %v", err)
-	}
-}
-
-func TestSecurityBuilder_EmptyBuild(t *testing.T) {
-	t.Parallel()
-	config := NewSecurityBuilder().Build()
-	http := NewHttpSecurity()
-	err := config.Configure(http)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	_, err = http.Build()
-	if err == nil {
-		t.Error("expected build to fail without auth manager")
-	}
-}
-
 func TestTokenBucket_Take(t *testing.T) {
 	t.Parallel()
 	bucket := NewTokenBucket(5, 10)
@@ -469,35 +197,6 @@ func TestTokenBucket_IsExpired(t *testing.T) {
 	}
 }
 
-func TestNewRateLimitFilter(t *testing.T) {
-	t.Parallel()
-	config := RateLimitConfig{
-		Enabled: true,
-		Rate:    10,
-		Burst:   20,
-	}
-
-	f := NewRateLimitFilter(config)
-	if f == nil {
-		t.Error("expected non-nil filter")
-	}
-}
-
-func TestRateLimitFilter_Order(t *testing.T) {
-	t.Parallel()
-	config := RateLimitConfig{
-		Enabled: true,
-		Rate:    10,
-		Burst:   20,
-	}
-
-	f := NewRateLimitFilter(config)
-	order := f.Order()
-	if order != 0 {
-		t.Errorf("expected order 0, got %d", order)
-	}
-}
-
 func TestParseTrustedProxies(t *testing.T) {
 	t.Parallel()
 	// 测试解析可信代理列表
@@ -525,55 +224,6 @@ func TestIsTrustedProxy(t *testing.T) {
 	if isTrustedProxy("172.16.0.1", proxies) {
 		t.Error("expected 172.16.0.1 to not be trusted")
 	}
-}
-
-// 测试模拟实现
-
-type testAuth struct {
-	principal   string
-	credentials string
-}
-
-func (a *testAuth) Principal() any        { return a.principal }
-func (a *testAuth) Credentials() any      { return a.credentials }
-func (a *testAuth) Authorities() []string { return []string{"ROLE_USER"} }
-func (a *testAuth) Authenticated() bool   { return true }
-
-type testAuthManager struct{}
-
-func (m *testAuthManager) Authenticate(ctx context.Context, auth AuthenticationToken) (Authentication, error) {
-	return &testAuth{principal: "testuser", credentials: "testpass"}, nil
-}
-
-type testUserDetailsService struct{}
-
-func (s *testUserDetailsService) LoadUserByUsername(ctx context.Context, username string) (UserDetails, error) {
-	return nil, nil
-}
-
-type testAccessDecisionManager struct{}
-
-func (m *testAccessDecisionManager) Decide(ctx context.Context, auth authorization.Authentication, resource string, attrs []string) error {
-	return nil
-}
-
-func (m *testAccessDecisionManager) Supports(attribute string) bool {
-	return true
-}
-
-type testSecurityFilter struct{}
-
-func (f *testSecurityFilter) DoFilter(ctx interface{}, req interface{}, resp interface{}, chain filter.FilterChain) error {
-	return chain.DoFilter(ctx, req, resp)
-}
-
-func (f *testSecurityFilter) Order() int { return 0 }
-
-type testLogoutSuccessHandler struct{}
-
-func (h *testLogoutSuccessHandler) OnLogoutSuccess(ctx context.Context, req SecurityRequest, resp SecurityResponse, auth Authentication) {
-	resp.SetStatusCode(302)
-	resp.SetHeader("Location", "/login")
 }
 
 // TestLeakyBucketRateLimiter_ZeroCapacity 测试 capacity=0 时拒绝所有请求
@@ -642,86 +292,6 @@ func TestFixedWindowCounterRateLimiter_WindowBoundary(t *testing.T) {
 	}
 }
 
-func TestRateLimitFilter_CloseAndOrder(t *testing.T) {
-	t.Parallel()
-
-	filter := NewRateLimitFilter(RateLimitConfig{
-		Enabled: true,
-		Burst:   10,
-		Rate:    1.0,
-	})
-
-	// 验证Close不会panic
-	filter.Close()
-
-	// 多次调用Close应该安全
-	filter.Close()
-
-	// 验证Order
-	if filter.Order() != 0 {
-		t.Errorf("expected order 0, got %d", filter.Order())
-	}
-}
-
-func TestRateLimitFilter_ExcludePaths(t *testing.T) {
-	t.Parallel()
-
-	filter := NewRateLimitFilter(RateLimitConfig{
-		Enabled:      true,
-		Burst:        10,
-		Rate:         1.0,
-		ExcludePaths: []string{"/health", "/metrics"},
-		Log:          &mockLogger{},
-	})
-
-	req := &mockSecurityRequest{
-		uri:    "/health",
-		method: "GET",
-	}
-	resp := &mockSecurityResponse{}
-	chain := &mockSecurityFilterChain{}
-
-	err := filter.DoFilter(context.Background(), req, resp, chain)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !chain.called {
-		t.Error("expected excluded path to bypass rate limiting")
-	}
-}
-
-func TestEnhancedRateLimitFilter_WithTrustedProxies(t *testing.T) {
-	t.Parallel()
-
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	filter := NewEnhancedRateLimitFilter(adapter,
-		WithTrustedProxies("10.0.0.0/8", "192.168.1.100"),
-	)
-
-	if !filter.trustProxyHeaders {
-		t.Error("expected trustProxyHeaders to be true")
-	}
-	if len(filter.trustedProxyNets) == 0 {
-		t.Error("expected trustedProxyNets to be populated")
-	}
-}
-
-func TestEnhancedRateLimitFilter_Order(t *testing.T) {
-	t.Parallel()
-
-	limiter := NewSlidingWindowRateLimiter(1*time.Second, 100)
-	adapter := NewStrategyRateLimiterAdapter(limiter)
-
-	filter := NewEnhancedRateLimitFilter(adapter)
-
-	// Order应该返回0
-	if filter.Order() != 0 {
-		t.Errorf("expected order 0, got %d", filter.Order())
-	}
-}
-
 func TestLeakyBucketRateLimiter_Close(t *testing.T) {
 	t.Parallel()
 
@@ -740,116 +310,153 @@ func TestFixedWindowCounterRateLimiter_Close(t *testing.T) {
 	limiter.Close()
 }
 
-func TestRateLimitFilter_CleanupBuckets(t *testing.T) {
+// ==================== Rate Limit Algorithms Additional Tests ====================
+
+func TestNewLeakyBucketRateLimiter(t *testing.T) {
 	t.Parallel()
 
-	// 创建一个带很短空闲超时的过滤器，以便快速清理
-	filter := NewRateLimitFilter(RateLimitConfig{
-		Enabled:           true,
-		Burst:             10,
-		Rate:              1.0,
-		BucketIdleTimeout: 50 * time.Millisecond,
-		CleanupInterval:   100 * time.Millisecond,
-		Log:               &mockLogger{},
-	})
-
-	// 手动添加一些桶到buckets中
-	filter.buckets.Store("192.168.1.1", NewTokenBucket(10, 1.0))
-	filter.buckets.Store("192.168.1.2", NewTokenBucket(10, 1.0))
-
-	// 等待超过空闲超时
-	time.Sleep(100 * time.Millisecond)
-
-	// 手动调用cleanupBuckets
-	filter.cleanupBuckets()
-
-	// 验证桶已被清理
-	count := 0
-	filter.buckets.Range(func(key, value any) bool {
-		count++
-		return true
-	})
-
-	if count != 0 {
-		t.Errorf("expected 0 buckets after cleanup, got %d", count)
+	limiter := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
+	if limiter == nil {
+		t.Fatal("expected non-nil limiter")
 	}
-
-	filter.Close()
+	defer limiter.Close()
 }
 
-func TestRateLimitFilter_GetClientIP(t *testing.T) {
+func TestNewLeakyBucketRateLimiter_Defaults(t *testing.T) {
 	t.Parallel()
 
-	t.Run("from remote address", func(t *testing.T) {
-		t.Parallel()
+	limiter := NewLeakyBucketRateLimiter(0, 0)
+	if limiter == nil {
+		t.Fatal("expected non-nil limiter")
+	}
+	defer limiter.Close()
 
-		filter := NewRateLimitFilter(RateLimitConfig{
-			Enabled: true,
-			Burst:   10,
-			Rate:    1.0,
-			Log:     &mockLogger{},
-		})
+	if limiter.capacity != 100 {
+		t.Errorf("expected default capacity 100, got %d", limiter.capacity)
+	}
+	if limiter.rate != 100*time.Millisecond {
+		t.Errorf("expected default rate 100ms, got %v", limiter.rate)
+	}
+}
 
-		req := &mockSecurityRequest{}
+func TestLeakyBucketRateLimiter_Allow(t *testing.T) {
+	t.Parallel()
 
-		// mockSecurityRequest.RemoteAddress()返回"127.0.0.1:8080"
-		ip := filter.getClientIP(req)
-		if ip != "127.0.0.1" {
-			t.Errorf("expected IP '127.0.0.1', got '%s'", ip)
-		}
+	limiter := NewLeakyBucketRateLimiter(5, 10*time.Millisecond)
+	defer limiter.Close()
 
-		filter.Close()
-	})
+	if !limiter.Allow("key1") {
+		t.Error("expected first request to be allowed")
+	}
+}
 
-	t.Run("from X-Forwarded-For with trusted proxy", func(t *testing.T) {
-		t.Parallel()
+func TestLeakyBucketRateLimiter_Allow_Reject(t *testing.T) {
+	t.Parallel()
 
-		filter := NewRateLimitFilter(RateLimitConfig{
-			Enabled:           true,
-			Burst:             10,
-			Rate:              1.0,
-			TrustProxyHeaders: true,
-			TrustedProxies:    []string{"127.0.0.1"},
-			Log:               &mockLogger{},
-		})
+	limiter := NewLeakyBucketRateLimiter(2, 1*time.Hour)
+	defer limiter.Close()
 
-		req := &mockSecurityRequest{
-			headers: map[string]string{
-				"X-Forwarded-For": "203.0.113.50, 127.0.0.1",
-			},
-		}
+	limiter.Allow("key1")
+	limiter.Allow("key1")
+	if limiter.Allow("key1") {
+		t.Error("expected request to be rejected after capacity exceeded")
+	}
+}
 
-		// RemoteAddress返回"127.0.0.1:8080"，在TrustedProxies中
-		ip := filter.getClientIP(req)
-		if ip != "203.0.113.50" {
-			t.Errorf("expected IP '203.0.113.50', got '%s'", ip)
-		}
+func TestLeakyBucketRateLimiter_CloseMethod(t *testing.T) {
+	t.Parallel()
 
-		filter.Close()
-	})
+	limiter := NewLeakyBucketRateLimiter(10, 100*time.Millisecond)
+	limiter.Close()
 
-	t.Run("ignore headers without trusted proxy", func(t *testing.T) {
-		t.Parallel()
+	limiter.Close()
+}
 
-		filter := NewRateLimitFilter(RateLimitConfig{
-			Enabled: true,
-			Burst:   10,
-			Rate:    1.0,
-			Log:     &mockLogger{},
-		})
+func TestNewFixedWindowCounterRateLimiter(t *testing.T) {
+	t.Parallel()
 
-		req := &mockSecurityRequest{
-			headers: map[string]string{
-				"X-Forwarded-For": "203.0.113.50",
-			},
-		}
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 10)
+	if limiter == nil {
+		t.Fatal("expected non-nil limiter")
+	}
+	defer limiter.Close()
+}
 
-		// 没有启用TrustProxyHeaders，应该忽略X-Forwarded-For
-		ip := filter.getClientIP(req)
-		if ip != "127.0.0.1" {
-			t.Errorf("expected IP '127.0.0.1', got '%s'", ip)
-		}
+func TestNewFixedWindowCounterRateLimiter_Defaults(t *testing.T) {
+	t.Parallel()
 
-		filter.Close()
-	})
+	limiter := NewFixedWindowCounterRateLimiter(0, 0)
+	if limiter == nil {
+		t.Fatal("expected non-nil limiter")
+	}
+	defer limiter.Close()
+
+	if limiter.windowSize != time.Minute {
+		t.Errorf("expected default windowSize 1m, got %v", limiter.windowSize)
+	}
+	if limiter.maxRequests != 100 {
+		t.Errorf("expected default maxRequests 100, got %d", limiter.maxRequests)
+	}
+}
+
+func TestFixedWindowCounterRateLimiter_Allow(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 3)
+	defer limiter.Close()
+
+	if !limiter.Allow("key1") {
+		t.Error("expected first request to be allowed")
+	}
+	if !limiter.Allow("key1") {
+		t.Error("expected second request to be allowed")
+	}
+	if !limiter.Allow("key1") {
+		t.Error("expected third request to be allowed")
+	}
+	if limiter.Allow("key1") {
+		t.Error("expected fourth request to be rejected")
+	}
+}
+
+func TestFixedWindowCounterRateLimiter_DifferentKeys(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 1)
+	defer limiter.Close()
+
+	if !limiter.Allow("key1") {
+		t.Error("expected key1 to be allowed")
+	}
+	if !limiter.Allow("key2") {
+		t.Error("expected key2 to be allowed")
+	}
+}
+
+func TestFixedWindowCounterRateLimiter_CloseMethod(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewFixedWindowCounterRateLimiter(time.Minute, 10)
+	limiter.Close()
+	limiter.Close()
+}
+
+func TestLeakyBucketRateLimiter_CleanupFunc(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewLeakyBucketRateLimiter(10, time.Millisecond)
+	defer limiter.Close()
+
+	limiter.Allow("key1")
+	limiter.Cleanup()
+}
+
+func TestFixedWindowCounterRateLimiter_CleanupFunc(t *testing.T) {
+	t.Parallel()
+
+	limiter := NewFixedWindowCounterRateLimiter(time.Millisecond, 10)
+	defer limiter.Close()
+
+	limiter.Allow("key1")
+	limiter.Cleanup()
 }

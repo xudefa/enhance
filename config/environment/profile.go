@@ -26,12 +26,12 @@ func ParseProfiles(raw string) []string {
 		return nil
 	}
 	parts := strings.Split(raw, ",")
-	result := make([]string, 0, len(parts))
+	profiles := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			result = append(result, p)
+			profiles = append(profiles, p)
 		}
 	}
-	return result
+	return profiles
 }

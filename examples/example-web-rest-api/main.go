@@ -38,8 +38,8 @@ func main() {
 	// Recovery middleware
 	router.Use(func(ctx core.Context) {
 		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("  [recovery] Panic recovered: %v\n", r)
+			if panicVal := recover(); panicVal != nil {
+				fmt.Printf("  [recovery] Panic recovered: %v\n", panicVal)
 				ctx.JSON(http.StatusInternalServerError, map[string]any{
 					"error": "internal server error",
 				})

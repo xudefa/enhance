@@ -85,7 +85,7 @@ func (r *Registry) GetDefault() Type {
 func (r *Registry) CreateRouter() (core.Router, error) {
 	factory, err := r.Get(r.GetDefault())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get default engine: %w", err)
 	}
 	return factory.CreateRouter()
 }
@@ -94,7 +94,7 @@ func (r *Registry) CreateRouter() (core.Router, error) {
 func (r *Registry) CreateServer(opts ...ServerOption) (core.Server, error) {
 	factory, err := r.Get(r.GetDefault())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get default engine: %w", err)
 	}
 	return factory.CreateServer(opts...)
 }

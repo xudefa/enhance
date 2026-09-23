@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -38,7 +39,7 @@ func (s *singletonScope) Get(beanID string, factory func(c ...any) (any, error))
 	// 创建实例
 	instance, err := factory()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("创建单例 Bean %s 失败: %w", beanID, err)
 	}
 
 	// Store 是并发安全的，使用标准 Bean ID 存储

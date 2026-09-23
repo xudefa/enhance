@@ -18,9 +18,9 @@ func TestSecurityBuilder_AuthenticationManager(t *testing.T) {
 
 	b := NewSecurityBuilder()
 	mgr := NewProviderManager()
-	result := b.AuthenticationManager(mgr)
+	returnedBuilder := b.AuthenticationManager(mgr)
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.authManager == nil {
@@ -33,9 +33,9 @@ func TestSecurityBuilder_UserDetailsService(t *testing.T) {
 
 	b := NewSecurityBuilder()
 	service := NewInMemoryUserDetailsService()
-	result := b.UserDetailsService(service)
+	returnedBuilder := b.UserDetailsService(service)
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.userDetailsService == nil {
@@ -48,9 +48,9 @@ func TestSecurityBuilder_PasswordEncoder(t *testing.T) {
 
 	b := NewSecurityBuilder()
 	encoder := NewNoOpPasswordEncoder()
-	result := b.PasswordEncoder(encoder)
+	returnedBuilder := b.PasswordEncoder(encoder)
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.passwordEncoder == nil {
@@ -64,9 +64,9 @@ func TestSecurityBuilder_AccessDecisionManagerFunc(t *testing.T) {
 	b := NewSecurityBuilder()
 	voter := NewWebExpressionVoter()
 	mgr := NewAffirmativeBased(voter)
-	result := b.AccessDecisionManager(mgr)
+	returnedBuilder := b.AccessDecisionManager(mgr)
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.accessDecisionMgr == nil {
@@ -79,9 +79,9 @@ func TestSecurityBuilder_AddFilter(t *testing.T) {
 
 	b := NewSecurityBuilder()
 	f := NewAnonymousAuthenticationFilter()
-	result := b.AddFilter(f)
+	returnedBuilder := b.AddFilter(f)
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if len(b.filters) != 1 {
@@ -121,9 +121,9 @@ func TestSecurityBuilder_EnableAnonymous(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.EnableAnonymous()
+	returnedBuilder := b.EnableAnonymous()
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if !b.anonymous {
@@ -135,9 +135,9 @@ func TestSecurityBuilder_EnableCsrf(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.EnableCsrf()
+	returnedBuilder := b.EnableCsrf()
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if !b.csrf {
@@ -149,9 +149,9 @@ func TestSecurityBuilder_EnableFormLogin(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.EnableFormLogin("/login", "/dashboard")
+	returnedBuilder := b.EnableFormLogin("/login", "/dashboard")
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.formLogin == nil {
@@ -180,9 +180,9 @@ func TestSecurityBuilder_EnableHttpBasic(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.EnableHttpBasic()
+	returnedBuilder := b.EnableHttpBasic()
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if !b.httpBasic {
@@ -194,9 +194,9 @@ func TestSecurityBuilder_EnableLogout(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.EnableLogout("/logout")
+	returnedBuilder := b.EnableLogout("/logout")
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected builder to be returned for chaining")
 	}
 	if b.logoutConfig == nil {
@@ -230,6 +230,38 @@ func TestSecurityBuilder_Build(t *testing.T) {
 	}
 }
 
+func testBuiltSecurityConfigAssertConfigure(t *testing.T, http interface{}) {
+	t.Helper()
+	httpSecurity := http.(*httpSecurity)
+	if httpSecurity.authenticationManager == nil {
+		t.Error("expected authenticationManager to be set")
+	}
+	if httpSecurity.userDetailsService == nil {
+		t.Error("expected userDetailsService to be set")
+	}
+	if httpSecurity.passwordEncoder == nil {
+		t.Error("expected passwordEncoder to be set")
+	}
+	if httpSecurity.accessDecisionManager == nil {
+		t.Error("expected accessDecisionManager to be set")
+	}
+	if httpSecurity.anonymousFilter == nil {
+		t.Error("expected anonymousFilter to be set")
+	}
+	if !httpSecurity.csrfEnabled {
+		t.Error("expected csrfEnabled to be true")
+	}
+	if !httpSecurity.formLoginEnabled {
+		t.Error("expected formLoginEnabled to be true")
+	}
+	if !httpSecurity.httpBasicEnabled {
+		t.Error("expected httpBasicEnabled to be true")
+	}
+	if httpSecurity.logoutUrl == "" {
+		t.Error("expected logoutUrl to be set")
+	}
+}
+
 func TestBuiltSecurityConfig_Configure(t *testing.T) {
 	t.Parallel()
 
@@ -258,34 +290,7 @@ func TestBuiltSecurityConfig_Configure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	h := http.(*httpSecurity)
-	if h.authenticationManager == nil {
-		t.Error("expected authenticationManager to be set")
-	}
-	if h.userDetailsService == nil {
-		t.Error("expected userDetailsService to be set")
-	}
-	if h.passwordEncoder == nil {
-		t.Error("expected passwordEncoder to be set")
-	}
-	if h.accessDecisionManager == nil {
-		t.Error("expected accessDecisionManager to be set")
-	}
-	if h.anonymousFilter == nil {
-		t.Error("expected anonymousFilter to be set")
-	}
-	if !h.csrfEnabled {
-		t.Error("expected csrfEnabled to be true")
-	}
-	if !h.formLoginEnabled {
-		t.Error("expected formLoginEnabled to be true")
-	}
-	if !h.httpBasicEnabled {
-		t.Error("expected httpBasicEnabled to be true")
-	}
-	if h.logoutUrl == "" {
-		t.Error("expected logoutUrl to be set")
-	}
+	testBuiltSecurityConfigAssertConfigure(t, http)
 }
 
 func TestBuiltSecurityConfig_Configure_FormLoginDefaultUrl(t *testing.T) {
@@ -301,9 +306,9 @@ func TestBuiltSecurityConfig_Configure_FormLoginDefaultUrl(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	h := http.(*httpSecurity)
-	if h.loginProcessingUrl != "/login" {
-		t.Errorf("expected /login, got %s", h.loginProcessingUrl)
+	httpSecurity := http.(*httpSecurity)
+	if httpSecurity.loginProcessingUrl != "/login" {
+		t.Errorf("expected /login, got %s", httpSecurity.loginProcessingUrl)
 	}
 }
 
@@ -321,8 +326,8 @@ func TestBuiltSecurityConfig_Configure_LogoutWithHandler(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	h := http.(*httpSecurity)
-	if h.logoutSuccessHandler == nil {
+	httpSecurity := http.(*httpSecurity)
+	if httpSecurity.logoutSuccessHandler == nil {
 		t.Error("expected successHandler to be set")
 	}
 }
@@ -331,7 +336,7 @@ func TestSecurityBuilder_Chaining(t *testing.T) {
 	t.Parallel()
 
 	b := NewSecurityBuilder()
-	result := b.
+	returnedBuilder := b.
 		AuthenticationManager(NewProviderManager()).
 		UserDetailsService(NewInMemoryUserDetailsService()).
 		PasswordEncoder(NewNoOpPasswordEncoder()).
@@ -342,7 +347,7 @@ func TestSecurityBuilder_Chaining(t *testing.T) {
 		EnableHttpBasic().
 		EnableLogout("/logout")
 
-	if result != b {
+	if returnedBuilder != b {
 		t.Error("expected chaining to return same builder")
 	}
 	if b.filters == nil || len(b.filters) == 0 {

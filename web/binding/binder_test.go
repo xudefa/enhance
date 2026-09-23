@@ -117,22 +117,22 @@ func TestBinder_BindJSON(t *testing.T) {
 	req := httptest.NewRequest("POST", "/test", body)
 	req.Header.Set("Content-Type", "application/json")
 
-	var data testJSON
-	err := binder.BindJSON(req, &data)
+	var payload testJSON
+	err := binder.BindJSON(req, &payload)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if data.Name != "John" {
-		t.Errorf("expected name 'John', got %s", data.Name)
+	if payload.Name != "John" {
+		t.Errorf("expected name 'John', got %s", payload.Name)
 	}
 
-	if data.Email != "john@example.com" {
-		t.Errorf("expected email 'john@example.com', got %s", data.Email)
+	if payload.Email != "john@example.com" {
+		t.Errorf("expected email 'john@example.com', got %s", payload.Email)
 	}
 
-	if data.Age != 30 {
-		t.Errorf("expected age 30, got %d", data.Age)
+	if payload.Age != 30 {
+		t.Errorf("expected age 30, got %d", payload.Age)
 	}
 }
 
@@ -353,6 +353,16 @@ func TestBinder_ParseFormError(t *testing.T) {
 	}
 }
 
+type errorReader struct{}
+
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func (e *errorReader) Close() error {
+	return nil
+}
+
 func TestBinder_IntOverflowReturnsError(t *testing.T) {
 	t.Parallel()
 	binder := NewBinder()
@@ -564,16 +574,6 @@ func TestBinder_RequiredFieldRejectsEmptyValue(t *testing.T) {
 	}
 }
 
-type errorReader struct{}
-
-func (e *errorReader) Read(p []byte) (n int, err error) {
-	return 0, nil
-}
-
-func (e *errorReader) Close() error {
-	return nil
-}
-
 func BenchmarkBinder_Bind(b *testing.B) {
 	binder := NewBinder()
 
@@ -611,7 +611,7 @@ func BenchmarkBinder_BindJSON(b *testing.B) {
 		req := httptest.NewRequest("POST", "/test", body)
 		req.Header.Set("Content-Type", "application/json")
 
-		var data testJSON
-		_ = binder.BindJSON(req, &data)
+		var target testJSON
+		_ = binder.BindJSON(req, &target)
 	}
 }

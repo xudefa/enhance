@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,8 +116,8 @@ func TestNew_LoadFunctionError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from load function")
 	}
-	if err.Error() != "load failed" {
-		t.Errorf("expected error message 'load failed', got '%s'", err.Error())
+	if !strings.Contains(err.Error(), "load failed") {
+		t.Errorf("expected error message to contain 'load failed', got '%s'", err.Error())
 	}
 }
 

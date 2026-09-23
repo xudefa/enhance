@@ -73,7 +73,7 @@ go mod tidy
 |------|------|----------|
 | `master` | 主分支，保持稳定 | — |
 | `feature/*` | 功能开发 | `feature/ioc-container` |
-| `fix/*` | Bug 修复 | `fix/aop-pointcut-match` |
+| `fix/*` | Bug 修复 | `fix/pointcut-match` |
 | `docs/*` | 文档更新 | `docs/readme-update` |
 | `release/*` | 发布准备 | `release/v1.0.0` |
 
@@ -94,7 +94,7 @@ go mod tidy
 | 类型 | 说明 | 示例 |
 |------|------|------|
 | `feat` | 新功能 | `feat(core): implement singleton scope` |
-| `fix` | Bug 修复 | `fix(aop): resolve pointcut matching issue` |
+| `fix` | Bug 修复 | `fix(container): resolve bean registration issue` |
 | `docs` | 文档更新 | `docs(readme): add installation instructions` |
 | `refactor` | 代码重构 | `refactor(container): simplify registration` |
 | `test` | 测试相关 | `test(core): add container lifecycle tests` |

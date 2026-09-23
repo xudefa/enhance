@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // ConfigModel 配置模型。
 //
@@ -72,7 +75,7 @@ func New(load func(*ConfigModel) error, opts ...ConfigOption) (*ConfigModel, err
 
 	if load != nil {
 		if err := load(model); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load config model: %w", err)
 		}
 	}
 

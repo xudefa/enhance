@@ -11,6 +11,7 @@ import (
 
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/condition"
+	coreioc "github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/log"
 	"github.com/xudefa/enhance/web/core"
 )
@@ -85,17 +86,17 @@ func WithHandler(handler http.Handler) WebStarterOption {
 
 // NewWebStarter 创建新的 Web 启动器
 func NewWebStarter(opts ...WebStarterOption) *WebStarter {
-	s := &WebStarter{
+	starter := &WebStarter{
 		config: DefaultConfig(),
 		name:   "web",
 		logger: log.Build(),
 	}
 
 	for _, opt := range opts {
-		opt(s)
+		opt(starter)
 	}
 
-	return s
+	return starter
 }
 
 // SetRouter 设置路由器（支持扩展，可替换为 gin/hertz 等）
@@ -190,57 +191,58 @@ func injectControllerDependencies(ctx boot.ApplicationContext, ctrl core.Control
 	ctrlType := ctrlValue.Type()
 	container := ctx.Container()
 
-	// 遍历所有字段
 	for i := 0; i < ctrlValue.NumField(); i++ {
-		field := ctrlType.Field(i)
-		fieldValue := ctrlValue.Field(i)
-
-		// 跳过未导出的字段
-		if !fieldValue.CanSet() {
-			continue
-		}
-
-		// 仅注入带有 inject 标签的字段
-		if _, ok := field.Tag.Lookup("inject"); !ok {
-			continue
-		}
-
-		// 跳过已经设置的字段
-		switch fieldValue.Kind() {
-		case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
-			if !fieldValue.IsNil() {
-				continue
-			}
-		}
-
-		// 尝试从容器中获取依赖
-		fieldType := field.Type
-		beans, err := container.Get(fieldType)
-		if err != nil || len(beans) == 0 {
-			continue
-		}
-
-		// 注入值必须与字段类型兼容，避免类型不匹配时 panic
-		bean := reflect.ValueOf(beans[0])
-		if !bean.IsValid() || !bean.Type().AssignableTo(fieldType) {
-			continue
-		}
-
-		// 设置字段值
-		fieldValue.Set(bean)
+		injectSingleField(container, ctrlType, ctrlValue, i)
 	}
 
 	return nil
 }
 
+// injectSingleField 尝试从容器注入单个控制器字段。
+func injectSingleField(container coreioc.Container, ctrlType reflect.Type, ctrlValue reflect.Value, i int) {
+	field := ctrlType.Field(i)
+	fieldValue := ctrlValue.Field(i)
+
+	// 跳过未导出的字段
+	if !fieldValue.CanSet() {
+		return
+	}
+
+	// 仅注入带有 inject 标签的字段
+	if _, ok := field.Tag.Lookup("inject"); !ok {
+		return
+	}
+
+	// 跳过已经设置的字段
+	if isAlreadySet(fieldValue) {
+		return
+	}
+
+	// 尝试从容器中获取依赖
+	beans, err := container.Get(field.Type)
+	if err != nil || len(beans) == 0 {
+		return
+	}
+
+	// 注入值必须与字段类型兼容，避免类型不匹配时 panic
+	bean := reflect.ValueOf(beans[0])
+	if bean.IsValid() && bean.Type().AssignableTo(field.Type) {
+		fieldValue.Set(bean)
+	}
+}
+
+// isAlreadySet 判断指针/接口/切片/map 类型的字段是否已有值。
+func isAlreadySet(fieldValue reflect.Value) bool {
+	switch fieldValue.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map:
+		return !fieldValue.IsNil()
+	}
+	return false
+}
+
 // Start 启动阶段调用
 func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
-	var sCtx context.Context
-	if ctx != nil {
-		sCtx = ctx.Context()
-	} else {
-		sCtx = context.Background()
-	}
+	sCtx := s.resolveContext(ctx)
 	s.logger.Info(sCtx, "开始启动 Web 服务器...")
 
 	// 创建默认路由器（如果未提供）
@@ -248,19 +250,8 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 		return fmt.Errorf("router is required")
 	}
 
-	// 应用中间件（必须先于控制器注册，路由注册时会快照当前中间件链）
-	for _, mw := range s.middlewares {
-		s.router.Use(mw)
-	}
-
-	// 注册所有控制器
-	controllers := GetControllers()
-	for _, ctrl := range controllers {
-		ctrl.Routes(s.router)
-		s.logger.Info(sCtx, "控制器已注册",
-			log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
-		)
-	}
+	// 应用中间件并注册所有控制器（中间件必须先于控制器注册，路由注册时会快照当前中间件链）
+	s.applyMiddlewaresAndRegisterControllers(sCtx)
 
 	s.logger.Debug(sCtx, "中间件已应用",
 		log.KeyValue{Key: "count", Value: len(s.middlewares)},
@@ -271,26 +262,14 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 		return fmt.Errorf("server is required")
 	}
 
-	// 如果服务器支持 SetContext，传递应用上下文用于日志记录
-	type contextSetter interface {
-		SetContext(ctx context.Context)
-	}
-	if cs, ok := s.server.(contextSetter); ok {
-		cs.SetContext(sCtx)
-	}
+	s.applyServerContext(sCtx)
 
 	// 设置处理器
-	if s.handler != nil {
-		s.server.SetHandler(s.handler)
-		s.logger.Debug(sCtx, "使用自定义处理器")
-	} else {
-		rt, ok := s.router.(http.Handler)
-		if !ok {
-			return fmt.Errorf("router %T does not implement http.Handler", s.router)
-		}
-		s.server.SetHandler(rt)
-		s.logger.Debug(sCtx, "使用默认路由器")
+	handler, err := s.resolveHandler(sCtx)
+	if err != nil {
+		return fmt.Errorf("resolve handler: %w", err)
 	}
+	s.server.SetHandler(handler)
 
 	// 启动服务器
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
@@ -299,19 +278,74 @@ func (s *WebStarter) Start(ctx boot.ApplicationContext) error {
 	)
 
 	// 在后台启动服务器，错误可观测
-	s.errCh = make(chan error, 1)
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		if err := s.server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			select {
-			case s.errCh <- err:
-			default:
-			}
-		}
-	}()
+	s.startServerInBackground()
 
 	return nil
+}
+
+// resolveContext 获取应用上下文，context 为 nil 时返回 background。
+func (s *WebStarter) resolveContext(ctx boot.ApplicationContext) context.Context {
+	if ctx != nil {
+		return ctx.Context()
+	}
+	return context.Background()
+}
+
+// applyMiddlewaresAndRegisterControllers 应用中间件并注册所有控制器。
+func (s *WebStarter) applyMiddlewaresAndRegisterControllers(sCtx context.Context) {
+	for _, mw := range s.middlewares {
+		s.router.Use(mw)
+	}
+
+	controllers := GetControllers()
+	for _, ctrl := range controllers {
+		ctrl.Routes(s.router)
+		s.logger.Info(sCtx, "控制器已注册",
+			log.KeyValue{Key: "controller", Value: fmt.Sprintf("%T", ctrl)},
+		)
+	}
+}
+
+// applyServerContext 若服务器支持 SetContext 则传递应用上下文。
+func (s *WebStarter) applyServerContext(sCtx context.Context) {
+	type contextSetter interface {
+		SetContext(ctx context.Context)
+	}
+	if cs, ok := s.server.(contextSetter); ok {
+		cs.SetContext(sCtx)
+	}
+}
+
+// resolveHandler 返回使用的 HTTP 处理器：优先使用自定义 handler，否则使用 router。
+func (s *WebStarter) resolveHandler(sCtx context.Context) (http.Handler, error) {
+	if s.handler != nil {
+		s.logger.Debug(sCtx, "使用自定义处理器")
+		return s.handler, nil
+	}
+	rt, ok := s.router.(http.Handler)
+	if !ok {
+		return nil, fmt.Errorf("router %T does not implement http.Handler", s.router)
+	}
+	s.logger.Debug(sCtx, "使用默认路由器")
+	return rt, nil
+}
+
+// startServerInBackground 在后台启动服务器。
+func (s *WebStarter) startServerInBackground() {
+	s.errCh = make(chan error, 1)
+	s.wg.Add(1)
+	go s.runServer()
+}
+
+// runServer 在独立 goroutine 中运行服务器（WaitGroup 保护）。
+func (s *WebStarter) runServer() {
+	defer s.wg.Done()
+	if err := s.server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		select {
+		case s.errCh <- err:
+		default:
+		}
+	}
 }
 
 // Stop 停止阶段调用
@@ -330,7 +364,7 @@ func (s *WebStarter) Stop(ctx boot.ApplicationContext) error {
 			s.logger.Error(sCtx, "Web 服务器停止失败",
 				log.KeyValue{Key: "error", Value: err.Error()},
 			)
-			return err
+			return fmt.Errorf("failed to stop web server: %w", err)
 		}
 		s.logger.Info(sCtx, "Web 服务器已停止")
 	}
@@ -348,7 +382,7 @@ func (s *WebStarter) Wait() error {
 	}
 	select {
 	case err := <-s.errCh:
-		return err
+		return fmt.Errorf("wait for server: %w", err)
 	}
 }
 

@@ -32,6 +32,7 @@ type slidingWindow struct {
 	requests []time.Time
 }
 
+// NewSlidingWindowRateLimiter 创建滑动窗口限流器，自动补齐默认参数并启动后台清理。
 func NewSlidingWindowRateLimiter(windowSize time.Duration, maxRequests int) *SlidingWindowRateLimiter {
 	if windowSize <= 0 {
 		windowSize = 1 * time.Minute
@@ -48,15 +49,15 @@ func NewSlidingWindowRateLimiter(windowSize time.Duration, maxRequests int) *Sli
 		}
 	}
 
-	l := &SlidingWindowRateLimiter{
+	limiter := &SlidingWindowRateLimiter{
 		windowSize:  windowSize,
 		maxRequests: maxRequests,
 		shards:      shards,
 		shardCount:  shardCount,
 		done:        make(chan struct{}),
 	}
-	newSlidingWindowCleanup(l)
-	return l
+	newSlidingWindowCleanup(limiter)
+	return limiter
 }
 
 // getShard 根据 key 获取对应的分片
@@ -69,24 +70,26 @@ func (r *SlidingWindowRateLimiter) getShard(key string) *slidingWindowShard {
 	return r.shards[hash%uint64(r.shardCount)]
 }
 
-func newSlidingWindowCleanup(l *SlidingWindowRateLimiter) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("[rate_limit] sliding window cleanup panic: %v\n", r)
-			}
-		}()
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				l.Cleanup()
-			case <-l.done:
-				return
-			}
+func newSlidingWindowCleanup(limiter *SlidingWindowRateLimiter) {
+	go limiter.slidingWindowCleanupLoop()
+}
+
+func (r *SlidingWindowRateLimiter) slidingWindowCleanupLoop() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			fmt.Printf("[rate_limit] sliding window cleanup panic: %v\n", rec)
 		}
 	}()
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			r.Cleanup()
+		case <-r.done:
+			return
+		}
+	}
 }
 
 // Allow 检查指定 key 的请求是否允许通过（滑动窗口算法）。
@@ -174,6 +177,7 @@ type StrategyRateLimiterAdapter struct {
 	limiter RateLimiter
 }
 
+// NewStrategyRateLimiterAdapter 创建委托内部限流器的适配器。
 func NewStrategyRateLimiterAdapter(limiter RateLimiter) *StrategyRateLimiterAdapter {
 	return &StrategyRateLimiterAdapter{limiter: limiter}
 }
@@ -192,14 +196,17 @@ type EnhancedRateLimitFilter struct {
 	trustedProxyNets  []*net.IPNet
 }
 
+// EnhancedRateLimitOption 增强版限流过滤器配置选项函数。
 type EnhancedRateLimitOption func(*EnhancedRateLimitFilter)
 
+// WithExcludePaths 设置不做限流的排除路径。
 func WithExcludePaths(paths ...string) EnhancedRateLimitOption {
 	return func(f *EnhancedRateLimitFilter) {
 		f.excludePaths = append(f.excludePaths, paths...)
 	}
 }
 
+// WithOnRateLimit 设置触发限流时的回调函数。
 func WithOnRateLimit(fn func(ctx context.Context, request SecurityRequest, response SecurityResponse)) EnhancedRateLimitOption {
 	return func(f *EnhancedRateLimitFilter) {
 		f.onRateLimit = fn
@@ -215,14 +222,15 @@ func WithTrustedProxies(proxies ...string) EnhancedRateLimitOption {
 	}
 }
 
+// NewEnhancedRateLimitFilter 创建增强版限流过滤器并应用选项。
 func NewEnhancedRateLimitFilter(strategy RateLimitStrategy, opts ...EnhancedRateLimitOption) *EnhancedRateLimitFilter {
-	f := &EnhancedRateLimitFilter{
+	enhancedFilter := &EnhancedRateLimitFilter{
 		strategy: strategy,
 	}
 	for _, opt := range opts {
-		opt(f)
+		opt(enhancedFilter)
 	}
-	return f
+	return enhancedFilter
 }
 
 // DoFilter 实现 filter.Filter 接口

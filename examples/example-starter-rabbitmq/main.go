@@ -59,7 +59,7 @@ func main() {
 
 	// Demo 1: Declare a queue
 	fmt.Println("--- Demo 1: Declare Queue ---")
-	q, err := ch.QueueDeclare(
+	queue, err := ch.QueueDeclare(
 		"enhance-queue", // name
 		true,            // durable
 		false,           // delete when unused
@@ -71,16 +71,16 @@ func main() {
 		fmt.Printf("Failed to declare queue: %v\n", err)
 		return
 	}
-	fmt.Printf("Queue declared: %s (messages: %d, consumers: %d)\n", q.Name, q.Messages, q.Consumers)
+	fmt.Printf("Queue declared: %s (messages: %d, consumers: %d)\n", queue.Name, queue.Messages, queue.Consumers)
 
 	// Demo 2: Publish a message
 	fmt.Println("\n--- Demo 2: Publish Message ---")
 	body := `{"type": "user.created", "data": {"user_id": 123, "name": "John Doe"}}`
 	err = ch.PublishWithContext(ctx,
-		"",     // exchange
-		q.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
+		"",         // exchange
+		queue.Name, // routing key
+		false,      // mandatory
+		false,      // immediate
 		amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
@@ -104,7 +104,7 @@ func main() {
 	for i, msg := range messages {
 		err = ch.PublishWithContext(ctx,
 			"",
-			q.Name,
+			queue.Name,
 			false,
 			false,
 			amqp.Publishing{
@@ -122,13 +122,13 @@ func main() {
 	// Demo 4: Consume messages
 	fmt.Println("\n--- Demo 4: Consume Messages ---")
 	msgs, err := ch.Consume(
-		q.Name, // queue
-		"",     // consumer
-		true,   // auto-ack
-		false,  // exclusive
-		false,  // no-local
-		false,  // no-wait
-		nil,    // args
+		queue.Name, // queue
+		"",         // consumer
+		true,       // auto-ack
+		false,      // exclusive
+		false,      // no-local
+		false,      // no-wait
+		nil,        // args
 	)
 	if err != nil {
 		fmt.Printf("Failed to consume messages: %v\n", err)
@@ -160,7 +160,7 @@ func main() {
 done:
 	// Demo 5: Get queue info
 	fmt.Println("\n--- Demo 5: Queue Info ---")
-	queue, err := ch.QueueInspect("enhance-queue")
+	queue, err = ch.QueueInspect("enhance-queue")
 	if err != nil {
 		fmt.Printf("Failed to get queue info: %v\n", err)
 		return

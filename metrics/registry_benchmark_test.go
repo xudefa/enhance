@@ -66,11 +66,11 @@ func BenchmarkSimpleGauge_Add(b *testing.B) {
 }
 
 func BenchmarkSimpleGauge_Value(b *testing.B) {
-	g := NewSimpleGauge()
-	g.Set(100.5)
+	gauge := NewSimpleGauge()
+	gauge.Set(100.5)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = g.Value()
+		_ = gauge.Value()
 	}
 }
 
@@ -149,18 +149,18 @@ func BenchmarkSimpleRegistry_ConcurrentGauge(b *testing.B) {
 }
 
 func BenchmarkSimpleRegistry_ConcurrentMixed(b *testing.B) {
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
 			op := i % 3
 			switch op {
 			case 0:
-				r.Counter(fmt.Sprintf("counter.%d", i%50)).Inc()
+				registry.Counter(fmt.Sprintf("counter.%d", i%50)).Inc()
 			case 1:
-				r.Gauge(fmt.Sprintf("gauge.%d", i%50)).Set(float64(i))
+				registry.Gauge(fmt.Sprintf("gauge.%d", i%50)).Set(float64(i))
 			case 2:
-				r.Histogram(fmt.Sprintf("histogram.%d", i%50)).Record(float64(i))
+				registry.Histogram(fmt.Sprintf("histogram.%d", i%50)).Record(float64(i))
 			}
 			i++
 		}
@@ -168,21 +168,21 @@ func BenchmarkSimpleRegistry_ConcurrentMixed(b *testing.B) {
 }
 
 func BenchmarkSimpleRegistry_Collect(b *testing.B) {
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	for i := 0; i < 100; i++ {
-		r.Counter(fmt.Sprintf("counter.%d", i)).Add(float64(i))
-		r.Gauge(fmt.Sprintf("gauge.%d", i)).Set(float64(i))
-		r.Histogram(fmt.Sprintf("histogram.%d", i)).Record(float64(i))
+		registry.Counter(fmt.Sprintf("counter.%d", i)).Add(float64(i))
+		registry.Gauge(fmt.Sprintf("gauge.%d", i)).Set(float64(i))
+		registry.Histogram(fmt.Sprintf("histogram.%d", i)).Record(float64(i))
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = r.Collect()
+		_ = registry.Collect()
 	}
 }
 
 func TestSimpleRegistry_ConcurrentCounter(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	var wg sync.WaitGroup
 	const goroutines = 50
 
@@ -191,14 +191,14 @@ func TestSimpleRegistry_ConcurrentCounter(t *testing.T) {
 		go func(gid int) {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				r.Counter(fmt.Sprintf("counter.%d", gid)).Inc()
+				registry.Counter(fmt.Sprintf("counter.%d", gid)).Inc()
 			}
 		}(g)
 	}
 
 	wg.Wait()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != goroutines {
 		t.Errorf("expected %d metrics, got %d", goroutines, len(metrics))
 	}
@@ -215,7 +215,7 @@ func TestSimpleRegistry_ConcurrentCounter(t *testing.T) {
 
 func TestSimpleRegistry_ConcurrentGauge(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	var wg sync.WaitGroup
 	const goroutines = 50
 
@@ -224,14 +224,14 @@ func TestSimpleRegistry_ConcurrentGauge(t *testing.T) {
 		go func(gid int) {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				r.Gauge(fmt.Sprintf("gauge.%d", gid)).Set(float64(i))
+				registry.Gauge(fmt.Sprintf("gauge.%d", gid)).Set(float64(i))
 			}
 		}(g)
 	}
 
 	wg.Wait()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != goroutines {
 		t.Errorf("expected %d metrics, got %d", goroutines, len(metrics))
 	}
@@ -239,7 +239,7 @@ func TestSimpleRegistry_ConcurrentGauge(t *testing.T) {
 
 func TestSimpleRegistry_ConcurrentMixed(t *testing.T) {
 	t.Parallel()
-	r := NewSimpleRegistry()
+	registry := NewSimpleRegistry()
 	var wg sync.WaitGroup
 	const goroutines = 50
 
@@ -251,11 +251,11 @@ func TestSimpleRegistry_ConcurrentMixed(t *testing.T) {
 				op := (gid + i) % 3
 				switch op {
 				case 0:
-					r.Counter(fmt.Sprintf("counter.%d", gid)).Inc()
+					registry.Counter(fmt.Sprintf("counter.%d", gid)).Inc()
 				case 1:
-					r.Gauge(fmt.Sprintf("gauge.%d", gid)).Set(float64(i))
+					registry.Gauge(fmt.Sprintf("gauge.%d", gid)).Set(float64(i))
 				case 2:
-					r.Histogram(fmt.Sprintf("histogram.%d", gid)).Record(float64(i))
+					registry.Histogram(fmt.Sprintf("histogram.%d", gid)).Record(float64(i))
 				}
 			}
 		}(g)
@@ -263,7 +263,7 @@ func TestSimpleRegistry_ConcurrentMixed(t *testing.T) {
 
 	wg.Wait()
 
-	metrics := r.Collect()
+	metrics := registry.Collect()
 	if len(metrics) != goroutines*3 {
 		t.Errorf("expected %d metrics, got %d", goroutines*3, len(metrics))
 	}

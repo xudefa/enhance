@@ -2,6 +2,7 @@ package boot
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 
 // appCtxAdapter 适配 DefaultApplicationContext 到 boot.ApplicationContext
 //
-// DefaultApplicationContext.EventBus() 返回 *event.EventBus，
+// DefaultApplicationContext.EventBus() 返回 event.EventBus，
 // 而 boot.ApplicationContext.EventBus() 要求返回 interface{ Publish(...) }，
 // 在 Go 中这被视为不同签名，需要显式适配。
 type appCtxAdapter struct {
@@ -49,7 +50,7 @@ func (a *appCtxAdapter) Register(t reflect.Type, opts ...core.BeanOption) error 
 func (a *appCtxAdapter) GetByType(t reflect.Type) (any, error) {
 	instances, err := a.ctx.Container().Get(t)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("按类型获取 Bean 失败: %w", err)
 	}
 	if len(instances) == 0 {
 		return nil, core.ErrBeanNotFound

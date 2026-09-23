@@ -24,7 +24,8 @@ var prometheusAutoConfig = &PrometheusAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(prometheusAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(PrometheusEnabled, ConditionTrue),
+			// 约定优于配置：当 prometheus.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(PrometheusEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityMonitoringLayer)),
 	)
@@ -96,17 +97,20 @@ func (c *PrometheusAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 	if c.server == nil {
 		return nil
 	}
-	go func() {
-		if err := c.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			c.logger.Error(context.Background(), "prometheus metrics server error",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
-		}
-	}()
+	go c.servePrometheus()
 	c.logger.Info(ctx.Context(), "prometheus metrics server started",
 		log.KeyValue{Key: "addr", Value: c.server.Addr},
 	)
 	return nil
+}
+
+// servePrometheus 在独立 goroutine 中运行 Prometheus 监控服务器。
+func (c *PrometheusAutoConfiguration) servePrometheus() {
+	if err := c.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		c.logger.Error(context.Background(), "prometheus metrics server error",
+			log.KeyValue{Key: "error", Value: err.Error()},
+		)
+	}
 }
 
 // Stop 停止 Prometheus 监控服务器。
@@ -134,7 +138,7 @@ func (c *PrometheusAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *PrometheusAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(PrometheusEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(PrometheusEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetRegistry 获取 Prometheus Registry 实例。

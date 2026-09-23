@@ -55,11 +55,11 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 
 	totalWeight := 0
 	for _, b := range backends {
-		w := b.Weight
-		if w <= 0 {
-			w = 1
+		weight := b.Weight
+		if weight <= 0 {
+			weight = 1
 		}
-		totalWeight += w
+		totalWeight += weight
 	}
 
 	if totalWeight <= 0 {
@@ -70,11 +70,11 @@ func (wrr *WeightedRoundRobin) Next(backends []*ServiceInstance) (*ServiceInstan
 
 	accumulated := int64(0)
 	for _, b := range backends {
-		w := int64(b.Weight)
-		if w <= 0 {
-			w = 1
+		weight := int64(b.Weight)
+		if weight <= 0 {
+			weight = 1
 		}
-		accumulated += w
+		accumulated += weight
 		if current < accumulated {
 			return b, nil
 		}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestFiberConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-fiber", environment.PriorityNormal, map[string]any{
 		"fiber.enabled":    "true",
@@ -43,6 +44,7 @@ func TestFiberConfig_LoadConfig(t *testing.T) {
 }
 
 func TestFiberConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &FiberConfig{
 		Host:        "0.0.0.0",
 		Port:        3000,

@@ -135,6 +135,9 @@ import (
 	"github.com/xudefa/enhance/core/registry"
 )
 
+// BeanGet Bean 获取接口。
+//
+// 提供按类型和名称获取 Bean 实例的能力。
 type BeanGet interface {
 	// Get 获取指定类型的 Bean 实例列表。
 	//
@@ -165,7 +168,12 @@ type BeanGet interface {
 	// 返回:
 	//   - []any: Bean 实例列表
 	GetAll() []any
+}
 
+// BeanExistenceChecker Bean 存在性检查接口。
+//
+// 提供检查容器中是否存在指定 Bean 的能力。
+type BeanExistenceChecker interface {
 	// Has 检查容器中是否存在指定类型和名称组合的 Bean。
 	//
 	// 参数:
@@ -184,7 +192,12 @@ type BeanGet interface {
 	// 返回:
 	//   - bool: 是否存在
 	HasType(typ reflect.Type) bool
+}
 
+// BeanLister Bean 列表接口。
+//
+// 提供列出容器中所有 Bean 类型和定义的能力。
+type BeanLister interface {
 	// Types 返回容器中所有已注册的 Bean 类型列表。
 	Types() []reflect.Type
 
@@ -257,6 +270,8 @@ type BeanIDGenerator interface {
 //   - 内部使用 reflect.Type 存储类型信息
 type Container interface {
 	BeanGet
+	BeanExistenceChecker
+	BeanLister
 	BeanRegister
 	BeanIDGenerator
 	BeanCreator

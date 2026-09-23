@@ -7,6 +7,7 @@ import (
 )
 
 func TestEntConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-ent", environment.PriorityNormal, map[string]any{
 		"ent.enabled":  "true",
@@ -38,6 +39,7 @@ func TestEntConfig_LoadConfig(t *testing.T) {
 }
 
 func TestEntConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &EntConfig{
 		Driver:   DefaultDriver,
 		DSN:      DefaultDSN,

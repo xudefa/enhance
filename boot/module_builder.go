@@ -29,20 +29,20 @@ import (
 //	    boot.Starter(&MigrationStarter{}),
 //	)
 func NewModule(args ...any) *ModuleBuilder {
-	b := &ModuleBuilder{}
+	builder := &ModuleBuilder{}
 	for _, arg := range args {
-		switch v := arg.(type) {
+		switch typedArg := arg.(type) {
 		case string:
-			b.name = v
+			builder.name = typedArg
 		case BeanProvider:
-			b.beans = append(b.beans, v)
+			builder.beans = append(builder.beans, typedArg)
 		case Starter:
-			b.starters = append(b.starters, v)
+			builder.starters = append(builder.starters, typedArg)
 		case condition.Condition:
-			b.conditions = append(b.conditions, v)
+			builder.conditions = append(builder.conditions, typedArg)
 		}
 	}
-	return b
+	return builder
 }
 
 // ModuleBuilder 模块构建器，支持链式调用
@@ -87,7 +87,7 @@ func (b *ModuleBuilder) Invoke(fn any) *ModuleBuilder {
 			paramType := fnType.In(i)
 			instances, err := c.Get(paramType)
 			if err != nil {
-				return err
+				return fmt.Errorf("注入调用参数失败: %w", err)
 			}
 			if len(instances) == 0 {
 				return core.ErrBeanNotFound
@@ -99,7 +99,7 @@ func (b *ModuleBuilder) Invoke(fn any) *ModuleBuilder {
 		if fnType.NumOut() >= 1 {
 			if !isNilReflectValue(results[len(results)-1]) {
 				if err, ok := results[len(results)-1].Interface().(error); ok {
-					return err
+					return fmt.Errorf("execute initializer: %w", err)
 				}
 			}
 		}

@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Get the Viper instance from container
-	v, err := core.GetByName[*viper.Viper](app.Container(), "")
+	viperInstance, err := core.GetByName[*viper.Viper](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get viper: %v\n", err)
 		return
@@ -53,35 +53,35 @@ func main() {
 	fmt.Println("--- Configuration Access ---")
 
 	// Read app configuration
-	appName := v.GetString("app.name")
-	appVersion := v.GetString("app.version")
+	appName := viperInstance.GetString("app.name")
+	appVersion := viperInstance.GetString("app.version")
 	fmt.Printf("App Name: %s\n", appName)
 	fmt.Printf("App Version: %s\n", appVersion)
 
 	// Read server configuration
-	host := v.GetString("server.host")
-	port := v.GetInt("server.port")
+	host := viperInstance.GetString("server.host")
+	port := viperInstance.GetInt("server.port")
 	fmt.Printf("Server: %s:%d\n", host, port)
 
 	// Read database configuration
-	dbHost := v.GetString("database.host")
-	dbPort := v.GetInt("database.port")
-	dbName := v.GetString("database.name")
+	dbHost := viperInstance.GetString("database.host")
+	dbPort := viperInstance.GetInt("database.port")
+	dbName := viperInstance.GetString("database.name")
 	fmt.Printf("Database: %s:%d/%s\n", dbHost, dbPort, dbName)
 
 	// Read logging configuration
-	logLevel := v.GetString("logging.level")
-	logFormat := v.GetString("logging.format")
+	logLevel := viperInstance.GetString("logging.level")
+	logFormat := viperInstance.GetString("logging.format")
 	fmt.Printf("Logging: level=%s, format=%s\n", logLevel, logFormat)
 
 	// Demonstrate default values
 	fmt.Println("\n--- Default Values ---")
-	nonExistent := v.GetString("non.existent.key")
+	nonExistent := viperInstance.GetString("non.existent.key")
 	fmt.Printf("Non-existent key (with default): %q\n", nonExistent)
 
 	// Demonstrate configuration map
 	fmt.Println("\n--- Configuration Map ---")
-	allSettings := v.AllSettings()
+	allSettings := viperInstance.AllSettings()
 	for key, value := range allSettings {
 		fmt.Printf("%s: %v\n", key, value)
 	}

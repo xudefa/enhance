@@ -76,37 +76,57 @@ package gorm
 // ==================== 配置键常量 ====================
 
 const (
-	// GORM 配置
-	GORMEnabled         = "db.gorm.enabled"
-	GORMHost            = "db.gorm.host"
-	GORMPort            = "db.gorm.port"
-	GORMUsername        = "db.gorm.username"
-	GORMPassword        = "db.gorm.password"
-	GORMDatabase        = "db.gorm.database"
-	GORMCharset         = "db.gorm.charset"
-	GORMMaxOpenConns    = "db.gorm.max-open-conns"
-	GORMMaxIdleConns    = "db.gorm.max-idle-conns"
+	// GORMEnabled 是否启用 GORM。
+	GORMEnabled = "db.gorm.enabled"
+	// GORMHost 数据库主机地址。
+	GORMHost = "db.gorm.host"
+	// GORMPort 数据库端口。
+	GORMPort = "db.gorm.port"
+	// GORMUsername 数据库用户名。
+	GORMUsername = "db.gorm.username"
+	// GORMPassword 数据库密码。
+	GORMPassword = "db.gorm.password"
+	// GORMDatabase 数据库名称。
+	GORMDatabase = "db.gorm.database"
+	// GORMCharset 字符集。
+	GORMCharset = "db.gorm.charset"
+	// GORMMaxOpenConns 最大打开连接数。
+	GORMMaxOpenConns = "db.gorm.max-open-conns"
+	// GORMMaxIdleConns 最大空闲连接数。
+	GORMMaxIdleConns = "db.gorm.max-idle-conns"
+	// GORMConnMaxLifetime 连接最大生命周期。
 	GORMConnMaxLifetime = "db.gorm.conn-max-lifetime"
 
 	// 日志字段常量
-	LogFieldHost     = "host"
-	LogFieldPort     = "port"
+	LogFieldHost = "host"
+	// LogFieldPort 日志字段：端口。
+	LogFieldPort = "port"
+	// LogFieldDatabase 日志字段：数据库。
 	LogFieldDatabase = "database"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	// GORM 默认值
-	DefaultGORMDriver          = "mysql"
-	DefaultGORMHost            = "localhost"
-	DefaultGORMPort            = 3306
-	DefaultGORMUsername        = "scott"
-	DefaultGORMPassword        = "123456"
-	DefaultGORMDatabase        = "demo"
-	DefaultGORMCharset         = "utf8mb4"
-	DefaultGORMMaxOpenConns    = 100
-	DefaultGORMMaxIdleConns    = 10
+	// DefaultGORMDriver 默认数据库驱动。
+	DefaultGORMDriver = "mysql"
+	// DefaultGORMHost 默认数据库主机。
+	DefaultGORMHost = "localhost"
+	// DefaultGORMPort 默认数据库端口。
+	DefaultGORMPort = 3306
+	// DefaultGORMUsername 默认数据库用户名。
+	DefaultGORMUsername = "scott"
+	// DefaultGORMPassword 默认数据库密码。
+	DefaultGORMPassword = "123456"
+	// DefaultGORMDatabase 默认数据库名称。
+	DefaultGORMDatabase = "demo"
+	// DefaultGORMCharset 默认字符集。
+	DefaultGORMCharset = "utf8mb4"
+	// DefaultGORMMaxOpenConns 默认最大打开连接数。
+	DefaultGORMMaxOpenConns = 100
+	// DefaultGORMMaxIdleConns 默认最大空闲连接数。
+	DefaultGORMMaxIdleConns = 10
+	// DefaultGORMConnMaxLifetime 默认连接最大生命周期。
 	DefaultGORMConnMaxLifetime = 3600
 
 	// 条件值常量

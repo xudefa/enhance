@@ -52,7 +52,7 @@
 |------|------|------|
 | 全部小写 | 不使用大写或混合 | `container` ✅, `Container` ❌ |
 | 无下划线 | 不使用下划线分隔 | `userservice` ✅, `user_service` ❌ |
-| 简洁语义 | 包名应简短且有意义 | `core`, `aop`, `boot` |
+| 简洁语义 | 包名应简短且有意义 | `core`, `boot` |
 | 目录一致 | 包名与最内层目录名一致 | `user-service/` → `package userservice` |
 
 ### 2.2 标识符命名
@@ -151,6 +151,78 @@ func (c *DefaultContainer) resolve(name string) (any, error) { ... }
 func validateName(name string) error { ... }
 ```
 
+#### 统一的代码组织结构
+
+**核心原则**：每个 Go 文件必须严格遵循以下顺序组织代码：
+
+```
+常量 → 变量 → 类型定义 → 构造函数 → 公共方法 → 私有方法 → 辅助函数
+```
+
+**详细说明**：
+
+1. **常量（const）**：所有常量声明必须在文件顶部（import 之后）
+   - 包括配置常量、枚举值、默认值等
+   - 使用 `const` 块声明多个相关常量
+
+2. **变量（var）**：所有全局变量声明必须在常量之后、类型定义之前
+   - 包括哨兵错误（`ErrXxx`）、全局实例、配置变量等
+   - 使用 `var` 块声明多个相关变量
+
+3. **类型定义（type）**：所有类型定义必须集中在变量之后
+   - 接口定义（interface）优先
+   - 结构体定义（struct）次之
+   - 类型别名（type alias）最后
+   - **禁止**：type func type func 交替出现
+
+4. **构造函数（func New...）**：所有构造函数必须集中在类型定义之后
+   - 函数名以 `New` 开头
+   - 返回接口类型或指针类型
+   - 多个构造函数按字母或逻辑顺序排列
+
+5. **公共方法（func (t *Type) PublicMethod）**：所有公共方法按类型分组
+   - 同一个类型的方法必须连续排列
+   - 不同类别的方法之间用空行分隔
+   - 方法按字母或逻辑顺序排列
+
+6. **私有方法（func (t *Type) privateMethod）**：所有私有方法在公共方法之后
+   - 小写开头的方法
+   - 同样按类型分组
+
+7. **辅助函数（func helperFunction）**：所有非方法函数在文件最后
+   - 不属于任何类型的独立函数
+   - 通常是工具函数或内部实现细节
+
+**错误示例**（❌ 禁止 type func type func 交替）：
+
+```go
+// ❌ 错误：类型和函数交替出现
+type Foo struct { ... }
+func NewFoo() *Foo { ... }
+type Bar struct { ... }
+func NewBar() *Bar { ... }
+func (f *Foo) Method() { ... }
+```
+
+**正确示例**（✅ 类型集中、构造函数集中、方法分组）：
+
+```go
+// ✅ 正确：所有类型定义集中
+type Foo struct { ... }
+type Bar struct { ... }
+
+// ✅ 正确：所有构造函数集中
+func NewFoo() *Foo { ... }
+func NewBar() *Bar { ... }
+
+// ✅ 正确：Foo 的方法集中
+func (f *Foo) Method1() { ... }
+func (f *Foo) Method2() { ... }
+
+// ✅ 正确：Bar 的方法集中
+func (b *Bar) Method1() { ... }
+func (b *Bar) Method2() { ... }
+
 ### 3.2 文件长度限制
 
 | 限制 | 值 | 说明 |
@@ -210,6 +282,71 @@ import (
 - ❌ 禁止未使用的导入
 - ❌ 禁止核心框架引入外部依赖
 - ❌ 禁止使用 `_` 导入（除非明确需要 `init()` 副作用）
+
+### 3.5 接口实现文件拆分
+
+> **核心规则**：每个接口实现类必须独占一个文件，禁止将多个实现类混放在同一个文件中。
+
+#### 文件分配原则
+
+| 规则 | 说明 | 示例 |
+|------|------|------|
+| 一实现一文件 | 每个接口实现类是一个独立的文件 | `lru.go` 只包含 `LRUCache` 及其方法 |
+| 文件以实现类命名 | 文件名使用小写蛇形，与实现类名对应 | `LRUCache` → `lru.go`，`DefaultContainer` → `default_container.go` |
+| 方法跟随实现类 | 实现类的所有方法都放在该文件内 | `lru.go` 包含 `LRUCache` 的所有方法 |
+| 禁止混放 | 不同实现类不得放在同一文件中 | ❌ 一个文件同时包含 `LRUCache` 和 `FIFOCache` |
+
+#### 正确示例（✅）
+
+```
+cache/
+├── doc.go          # 接口定义 + 公共类型（Cache 接口、配置类型等）
+├── lru.go          # LRUCache 实现（struct 定义 + 全部方法）
+├── lfu.go          # LFUCache 实现（struct 定义 + 全部方法）
+├── fifo.go         # FIFOCache 实现（struct 定义 + 全部方法）
+└── cache_test.go   # 测试文件
+```
+
+#### 错误示例（❌）
+
+```go
+// ❌ 错误：一个文件包含了多个实现类
+// cache/implementations.go
+
+type LRUCache struct { ... }
+func (c *LRUCache) Get(key string) (any, error) { ... }
+
+type FIFOCache struct { ... }
+func (c *FIFOCache) Get(key string) (any, error) { ... }
+```
+
+#### 单个实现类文件结构
+
+```go
+// lru.go — LRUCache 实现
+
+// 1. 类型定义
+type LRUCache struct { ... }
+
+// 2. 构造函数
+func NewLRUCache(capacity int) *LRUCache { ... }
+
+// 3. 接口实现方法（按字母或逻辑分组）
+func (c *LRUCache) Get(key string) (any, error) { ... }
+func (c *LRUCache) Put(key string, value any) error { ... }
+
+// 4. 私有方法
+func (c *LRUCache) evict() { ... }
+func (c *LRUCache) moveToFront(node *node) { ... }
+```
+
+#### 例外情况
+
+| 场景 | 处理方式 | 示例 |
+|------|----------|------|
+| 辅助类型绑定实现类 | 允许放在同一文件 | `lru.go` 可包含 `node` 结构体（LRUCache 的内部辅助类型） |
+| 测试辅助实现（mock） | 可放在 `_test.go` 文件 | `cache_test.go` 可包含 `mockCache` |
+| 函数式实现（Function Adapter） | 可放在 `doc.go` 或独立文件 | `cache.go` 的 `CacheFunc` 适配器 |
 
 ---
 
@@ -285,7 +422,7 @@ func CalculateDiscount(basePrice float64, quantity int, tiers []DiscountTier) (f
 ### 4.4 注释语言
 
 - **使用中文注释**
-- 技术术语保留英文（IoC, AOP, Bean, DI）
+- 技术术语保留英文（IoC, Bean, DI）
 - 注释应说明"为什么这样做"而非"做了什么"
 
 ### 4.5 特殊标记
@@ -412,6 +549,42 @@ if status == StatusPending {
 }
 ```
 
+### 5.5 嵌套深度限制
+
+- 嵌套深度不得超过 **17 层**（if/for/switch/select 嵌套计数）
+- 超过时使用早期返回、卫语句、提取子函数消除嵌套
+- 算法的时间复杂度与空间复杂度**不能同时 ≥ O(n²)**；若需优化，使用空间换时间或时间换空间策略
+
+```go
+// ✅ 正确：早期返回消除嵌套
+func process(ctx context.Context, req *Request) (*Response, error) {
+    if req == nil {
+        return nil, ErrInvalidRequest
+    }
+    if !req.IsValid() {
+        return nil, ErrValidation
+    }
+    data, err := fetch(ctx, req.ID)
+    if err != nil {
+        return nil, fmt.Errorf("fetch: %w", err)
+    }
+    return transform(data), nil
+}
+
+// ❌ 错误：深层嵌套（超过 17 层时极难维护）
+func process(ctx context.Context, req *Request) (*Response, error) {
+    if req != nil {
+        if req.IsValid() {
+            data, err := fetch(ctx, req.ID)
+            if err == nil {
+                // 继续嵌套...
+            }
+        }
+    }
+    return nil, nil
+}
+```
+
 ---
 
 ## 6. 函数设计
@@ -420,10 +593,12 @@ if status == StatusPending {
 
 | 指标 | 限制 | 说明 |
 |------|------|------|
-| 函数行数 | ≤ 50 行 | 超过时提取子函数 |
+| 函数行数 | ≤ 80 行（不含注释和空行） | 超过时提取子函数 |
 | 参数数量 | ≤ 4 个 | 超过时使用选项模式 |
 | 返回值数量 | ≤ 3 个 | 通常为 `(result, error)` |
+| 嵌套深度 | ≤ 17 层 | 超过时用早期返回/卫语句消除 |
 | 圈复杂度 | ≤ 10 | 超过时拆分逻辑 |
+| 时间+空间复杂度 | 不能同时 ≥ O(n²) | 优化算法或使用空间换时间/时间换空间策略 |
 
 ### 6.2 参数顺序
 
@@ -869,7 +1044,7 @@ func TestContainer_Register_WithFactory(t *testing.T) {
 
 | 模块 | 目标覆盖率 | 说明 |
 |------|-----------|------|
-| 核心框架 | 90%+ | IoC, AOP, Config 等 |
+| 核心框架 | 90%+ | IoC, Config 等 |
 | 工具函数 | 95%+ | 字符串、类型转换等 |
 | 集成测试 | 覆盖主要流程 | 端到端场景 |
 

@@ -139,11 +139,11 @@ func main() {
 	// Metrics endpoint
 	engine.GET("/metrics", func(c *gin.Context) {
 		allMetrics := registry.Collect()
-		result := make(map[string]any)
+		metricsMap := make(map[string]any)
 		for _, m := range allMetrics {
-			result[m.Name] = m.Value
+			metricsMap[m.Name] = m.Value
 		}
-		c.JSON(http.StatusOK, result)
+		c.JSON(http.StatusOK, metricsMap)
 	})
 
 	fmt.Println("Routes:")

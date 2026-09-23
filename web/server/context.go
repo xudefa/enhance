@@ -66,11 +66,11 @@ func (c *DefaultContext) Query(name string) string {
 
 // QueryDefault 获取查询参数（带默认值）
 func (c *DefaultContext) QueryDefault(name, defaultVal string) string {
-	val := c.request.URL.Query().Get(name)
-	if val == "" {
+	paramValue := c.request.URL.Query().Get(name)
+	if paramValue == "" {
 		return defaultVal
 	}
-	return val
+	return paramValue
 }
 
 // Header 获取请求头
@@ -109,7 +109,7 @@ func (c *DefaultContext) JSON(code int, data any) error {
 		// 序列化失败时直接返回 500，避免客户端收到空的 200 响应
 		c.writer.WriteHeader(http.StatusInternalServerError)
 		_, _ = c.writer.Write([]byte(`{"error": "json marshal failed"}`))
-		return err
+		return fmt.Errorf("failed to marshal JSON response: %w", err)
 	}
 	c.writer.WriteHeader(code)
 	_, _ = c.writer.Write(body)

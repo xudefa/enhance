@@ -92,8 +92,10 @@ type ComponentHealth struct {
 // ApplicationRegistry 应用注册中心
 // 使用 sync.Map 优化读多写少场景的并发性能
 type ApplicationRegistry struct {
-	applications sync.Map // map[string]*Application
-	instances    sync.Map // map[string]*ApplicationInstance
+	applications sync.Map     // map[string]*Application
+	instances    sync.Map     // map[string]*ApplicationInstance
+	appCount     atomic.Int64 // 应用数量，O(1) 替代 Range 遍历
+	instCount    atomic.Int64 // 实例数量，O(1) 替代 Range 遍历
 }
 
 // NewApplicationRegistry 创建应用注册中心
@@ -105,15 +107,19 @@ func NewApplicationRegistry() *ApplicationRegistry {
 func (r *ApplicationRegistry) Register(instance *ApplicationInstance) {
 	// 注册实例（无锁）
 	r.instances.Store(instance.ID, instance)
+	r.instCount.Add(1)
 
 	// 查找或创建应用（使用 LoadOrStore 避免竞态）
-	appValue, _ := r.applications.LoadOrStore(instance.ApplicationID, &Application{
+	appValue, loaded := r.applications.LoadOrStore(instance.ApplicationID, &Application{
 		ID:        instance.ApplicationID,
 		Name:      instance.Name,
 		Instances: make([]*ApplicationInstance, 0),
 		Status:    StatusUnknown,
 		Metadata:  make(map[string]string),
 	})
+	if !loaded {
+		r.appCount.Add(1)
+	}
 	app, _ := appValue.(*Application)
 
 	// 添加实例到应用（需要应用级别的锁）
@@ -136,6 +142,7 @@ func (r *ApplicationRegistry) Deregister(instanceID string) {
 
 	// 从实例列表中移除
 	r.instances.Delete(instanceID)
+	r.instCount.Add(-1)
 
 	// 从应用中移除实例
 	appValue, exists := r.applications.Load(instance.ApplicationID)
@@ -163,6 +170,7 @@ func (r *ApplicationRegistry) Deregister(instanceID string) {
 	app.mu.RUnlock()
 	if empty {
 		r.applications.Delete(app.ID)
+		r.appCount.Add(-1)
 	}
 }
 

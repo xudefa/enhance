@@ -40,7 +40,7 @@ func NewServer(opts ...engine.ServerOption) *Server {
 	writeTimeout := time.Duration(config.WriteTimeout) * time.Second
 	idleTimeout := time.Duration(config.IdleTimeout) * time.Second
 
-	s := &Server{
+	stdlibServer := &Server{
 		host:         addr,
 		readTimeout:  readTimeout,
 		writeTimeout: writeTimeout,
@@ -50,14 +50,14 @@ func NewServer(opts ...engine.ServerOption) *Server {
 		middlewares:  make([]func(http.Handler) http.Handler, 0),
 	}
 
-	s.server = &http.Server{
+	stdlibServer.server = &http.Server{
 		Addr:         addr,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
 	}
 
-	return s
+	return stdlibServer
 }
 
 // Start 启动 HTTP 服务器。

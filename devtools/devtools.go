@@ -31,17 +31,17 @@ type hotReloaderImpl struct {
 
 // computeFileHash 计算文件 MD5 哈希值。
 func computeFileHash(path string) (string, error) {
-	f, err := os.Open(path)
+	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("打开文件 %s 失败: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	hasher := md5.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", fmt.Errorf("计算文件 %s 哈希失败: %w", path, err)
 	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 // WithWatchDirs 设置监控目录。
@@ -196,7 +196,18 @@ func (r *hotReloaderImpl) checkForChanges() {
 
 	// 在锁内收集事件并更新状态
 	r.mu.Lock()
+	events := r.diffFileHashes(currentFiles)
+	r.fileHashes = currentFiles
+	r.mu.Unlock()
 
+	// 在锁外触发回调，避免锁内执行用户代码
+	for i := range events {
+		r.triggerCallbacks(events[i])
+	}
+}
+
+// diffFileHashes 对比文件哈希快照，生成文件变更事件。
+func (r *hotReloaderImpl) diffFileHashes(currentFiles map[string]string) []ReloadEvent {
 	var events []ReloadEvent
 
 	for file, oldHash := range r.fileHashes {
@@ -230,13 +241,7 @@ func (r *hotReloaderImpl) checkForChanges() {
 		}
 	}
 
-	r.fileHashes = currentFiles
-	r.mu.Unlock()
-
-	// 在锁外触发回调，避免锁内执行用户代码
-	for i := range events {
-		r.triggerCallbacks(events[i])
-	}
+	return events
 }
 
 // scanFiles 扫描所有文件。
@@ -302,8 +307,8 @@ func (r *hotReloaderImpl) triggerCallbacks(event ReloadEvent) {
 		go func(cb ReloadCallback) {
 			defer r.callbackWg.Done()
 			defer func() {
-				if r := recover(); r != nil {
-					fmt.Printf("[devtools] hot reload callback panic: %v\n", r)
+				if rec := recover(); rec != nil {
+					fmt.Printf("[devtools] hot reload callback panic: %v\n", rec)
 				}
 			}()
 			cb(event)

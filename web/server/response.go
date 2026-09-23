@@ -1,6 +1,13 @@
 // Package server 提供 HTTP 服务器功能，用于 enhance 框架。
 package server
 
+const (
+	// minServerErrorStatus 服务端错误状态码下界（5xx 起点）。
+	minServerErrorStatus = 500
+	// maxServerErrorStatus 服务端错误状态码上界（5xx 终点，不含）。
+	maxServerErrorStatus = 600
+)
+
 // IsSuccess 判断响应是否为成功状态码 (2xx)。
 func (r *HTTPResponse) IsSuccess() bool {
 	return r.StatusCode >= 200 && r.StatusCode < 300
@@ -18,7 +25,7 @@ func (r *HTTPResponse) IsClientError() bool {
 
 // IsServerError 判断响应是否为服务端错误状态码 (5xx)。
 func (r *HTTPResponse) IsServerError() bool {
-	return r.StatusCode >= 500 && r.StatusCode < 600
+	return r.StatusCode >= minServerErrorStatus && r.StatusCode < maxServerErrorStatus
 }
 
 // Bind 绑定响应体到目标结构体。

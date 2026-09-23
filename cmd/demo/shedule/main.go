@@ -75,7 +75,6 @@ func main() {
 
 	fmt.Println("Scheduler started. Press Ctrl+C to stop.")
 
-	// 等待5秒后注销一个任务
 	go func() {
 		time.Sleep(5 * time.Second)
 		fmt.Println("\n=== Unregistering fixed-rate-task ===")

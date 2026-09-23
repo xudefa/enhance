@@ -128,12 +128,11 @@ func TestSecurityFilterChainManager_GetSecurityFilterChain(t *testing.T) {
 	manager.AddSecurityFilterChain(chain1)
 	manager.AddSecurityFilterChain(chain2)
 
-	result := manager.GetSecurityFilterChain("test")
-	if result == nil {
-		t.Error("expected a security filter chain, got nil")
+	chain := manager.GetSecurityFilterChain("test")
+	if chain == nil {
+		t.Fatal("expected non-nil chain")
 	}
-
-	if result != chain1 {
+	if chain != chain1 {
 		t.Error("expected chain1 to be returned")
 	}
 }
@@ -145,8 +144,8 @@ func TestSecurityFilterChainManager_NoMatch(t *testing.T) {
 	manager := NewSecurityFilterChainManager()
 	manager.AddSecurityFilterChain(chain1)
 
-	result := manager.GetSecurityFilterChain("test")
-	if result != nil {
+	chain := manager.GetSecurityFilterChain("test")
+	if chain != nil {
 		t.Error("expected nil, got a security filter chain")
 	}
 }
@@ -277,9 +276,9 @@ func TestSecurityFilterChainManager_EmptyManager(t *testing.T) {
 	t.Parallel()
 
 	manager := NewSecurityFilterChainManager()
-	result := manager.GetSecurityFilterChain("test")
-	if result != nil {
-		t.Error("expected nil for empty manager")
+	chain := manager.GetSecurityFilterChain("test")
+	if chain != nil {
+		t.Error("expected nil for missing chain")
 	}
 
 	chains := manager.GetSecurityFilterChains()

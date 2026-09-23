@@ -6,13 +6,22 @@ import (
 )
 
 var (
-	ErrNotFound       = errors.New("resource not found")
-	ErrBadRequest     = errors.New("bad request")
-	ErrUnauthorized   = errors.New("unauthorized access")
-	ErrForbidden      = errors.New("forbidden")
-	ErrConflict       = errors.New("resource conflict")
+	// ErrNotFound 资源不存在错误。
+	ErrNotFound = errors.New("resource not found")
+	// ErrBadRequest 请求参数非法错误。
+	ErrBadRequest = errors.New("bad request")
+	// ErrUnauthorized 未认证访问错误。
+	ErrUnauthorized = errors.New("unauthorized access")
+	// ErrForbidden 无权限访问错误。
+	ErrForbidden = errors.New("forbidden")
+	// ErrConflict 资源冲突错误。
+	ErrConflict = errors.New("resource conflict")
+	// ErrInternalServer 服务器内部错误。
 	ErrInternalServer = errors.New("internal server error")
 )
+
+// defaultResolverOrder 默认解析器的 Order 值，数值最大所以最后兜底。
+const defaultResolverOrder = 1000
 
 // DefaultExceptionResolver 默认异常解析器（兜底）
 //
@@ -31,7 +40,7 @@ func NewDefaultExceptionResolver() ExceptionResolver {
 //
 // 无论什么异常，都返回 500 Internal Server Error。
 func (r *DefaultExceptionResolver) Resolve(ctx context.Context, err error) *ErrorResponse {
-	return NewErrorResponse(500, "Internal Server Error", "", "", nil)
+	return NewErrorResponse(500, "Internal Server Error")
 }
 
 // Supports 支持所有异常
@@ -45,7 +54,7 @@ func (r *DefaultExceptionResolver) Supports(err error) bool {
 //
 // 返回 1000，确保在其他解析器都不匹配时才使用这个解析器。
 func (r *DefaultExceptionResolver) Order() int {
-	return 1000
+	return defaultResolverOrder
 }
 
 // BuiltinExceptionResolver 内置异常解析器
@@ -72,19 +81,19 @@ func NewBuiltinExceptionResolver() ExceptionResolver {
 func (r *BuiltinExceptionResolver) Resolve(ctx context.Context, err error) *ErrorResponse {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		return NewErrorResponse(404, "Resource not found", "", "", nil)
+		return NewErrorResponse(404, "Resource not found")
 	case errors.Is(err, ErrBadRequest):
-		return NewErrorResponse(400, "Bad request", "", "", nil)
+		return NewErrorResponse(400, "Bad request")
 	case errors.Is(err, ErrUnauthorized):
-		return NewErrorResponse(401, "Unauthorized", "", "", nil)
+		return NewErrorResponse(401, "Unauthorized")
 	case errors.Is(err, ErrForbidden):
-		return NewErrorResponse(403, "Forbidden", "", "", nil)
+		return NewErrorResponse(403, "Forbidden")
 	case errors.Is(err, ErrConflict):
-		return NewErrorResponse(409, "Conflict", "", "", nil)
+		return NewErrorResponse(409, "Conflict")
 	case errors.Is(err, ErrInternalServer):
-		return NewErrorResponse(500, "Internal server error", "", "", nil)
+		return NewErrorResponse(500, "Internal server error")
 	default:
-		return NewErrorResponse(500, "Internal Server Error", "", "", nil)
+		return NewErrorResponse(500, "Internal Server Error")
 	}
 }
 

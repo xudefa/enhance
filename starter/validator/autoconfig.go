@@ -45,12 +45,20 @@ import (
 	"github.com/xudefa/enhance/log"
 )
 
+// 验证规则常量
+const (
+	phoneLength     = 11 // 中国大陆手机号长度
+	idcardLength    = 18 // 身份证号长度
+	idcardPrefixLen = 17 // 身份证前缀数字位数
+)
+
 // init 注册 Validator 自动配置类。
 // 当配置 validator.enabled=true 时自动触发配置。
 func init() {
 	boot.RegisterAutoConfigWith(&ValidatorAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ValidatorEnabled, ConditionTrue),
+			// 约定优于配置：当 validator.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ValidatorEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)
@@ -174,7 +182,7 @@ func (c *ValidatorAutoConfiguration) registerCustomValidators(ctx context.Contex
 	// 验证规则：11 位数字，前缀为 13x-19x
 	if err := c.validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
 		phone := fl.Field().String()
-		if len(phone) != 11 {
+		if len(phone) != phoneLength {
 			return false
 		}
 		// 验证所有位均为数字
@@ -200,11 +208,11 @@ func (c *ValidatorAutoConfiguration) registerCustomValidators(ctx context.Contex
 	// 验证规则：前 17 位为数字，最后一位为数字或 X
 	if err := c.validate.RegisterValidation("idcard", func(fl validator.FieldLevel) bool {
 		idcard := fl.Field().String()
-		if len(idcard) != 18 {
+		if len(idcard) != idcardLength {
 			return false
 		}
 		// 验证前 17 位为数字
-		for i := 0; i < 17; i++ {
+		for i := 0; i < idcardPrefixLen; i++ {
 			if idcard[i] < '0' || idcard[i] > '9' {
 				return false
 			}

@@ -17,6 +17,8 @@ type DefaultRouter struct {
 	mu          *sync.RWMutex // 共享的mutex，父子router共享
 	// 性能优化：缓存路由模式，避免每次请求都遍历
 	routePatterns *[]routePattern
+	// 性能优化：按HTTP方法索引路由模式，将O(n)全量扫描降为O(k)方法内扫描
+	methodPatterns *map[string][]int // method -> indices into routePatterns
 	// 路由注册时的中间件链（子路由组的中间件在 handle 时绑定到路由）
 	routeMiddleware map[string][]core.MiddlewareFunc
 }
@@ -35,10 +37,12 @@ type routePattern struct {
 // NewRouter 创建新的路由器
 func NewRouter() *DefaultRouter {
 	patterns := make([]routePattern, 0)
+	methodIdx := make(map[string][]int)
 	return &DefaultRouter{
 		handlers:        make(map[string]core.HandlerFunc),
 		mu:              &sync.RWMutex{},
 		routePatterns:   &patterns,
+		methodPatterns:  &methodIdx,
 		routeMiddleware: make(map[string][]core.MiddlewareFunc),
 	}
 }
@@ -85,6 +89,7 @@ func (r *DefaultRouter) Group(prefix string) core.Router {
 		prefix:          r.prefix + prefix,
 		mu:              r.mu,
 		routePatterns:   r.routePatterns,
+		methodPatterns:  r.methodPatterns,
 		routeMiddleware: r.routeMiddleware,
 	}
 }
@@ -99,53 +104,13 @@ func (r *DefaultRouter) Use(middleware core.MiddlewareFunc) {
 // ServeHTTP 实现 http.Handler 接口
 func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 查找匹配的路由
-	path := req.URL.Path
-	matchPath := path
-	if r.prefix != "" {
-		// 校验请求路径确实以路由前缀开头
-		if !strings.HasPrefix(path, r.prefix) {
-			http.NotFound(w, req)
-			return
-		}
-		// 前缀必须落在路径分段边界上：/api 不能匹配 /apix
-		if len(path) > len(r.prefix) && path[len(r.prefix)] != '/' {
-			http.NotFound(w, req)
-			return
-		}
-		path = strings.TrimPrefix(path, r.prefix)
-		if path == "" {
-			path = "/"
-		}
-		matchPath = r.prefix + path
+	matchPath := r.resolveMatchPath(req.URL.Path)
+	if matchPath == "" {
+		http.NotFound(w, req)
+		return
 	}
 
-	// 构建完整路径用于查找（路由模式使用完整前缀+路径编译）
-	// RFC 7231 §4.3.2：无显式 HEAD 路由时，HEAD 请求由 GET 路由处理
-	method := req.Method
-	key := method + " " + matchPath
-
-	// 使用读锁保护 handlers 和 routeMiddleware 的读取
-	r.mu.RLock()
-	var params map[string]string
-	var patternKey string
-	handler, ok := r.handlers[key]
-	if !ok {
-		// HEAD 请求回退到 GET 路由
-		if method == http.MethodHead {
-			method = http.MethodGet
-			key = method + " " + matchPath
-			handler, ok = r.handlers[key]
-		}
-	}
-	if !ok {
-		handler, params, ok, patternKey = r.findHandlerWithParamsLocked(method, matchPath)
-	}
-	if patternKey != "" {
-		key = patternKey
-	}
-	middlewaresCopy := r.routeMiddleware[key]
-	r.mu.RUnlock()
-
+	handler, params, middlewaresCopy, _, ok := r.resolveRoute(req.Method, matchPath)
 	if !ok {
 		http.NotFound(w, req)
 		return
@@ -162,6 +127,54 @@ func (r *DefaultRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// 执行中间件链和处理器
 	ctx.WithMiddleware(middlewaresCopy, handler)
 	ctx.Next()
+}
+
+// resolveMatchPath 处理路由前缀，返回去前缀后的完整匹配路径；前缀校验失败返回空字符串。
+func (r *DefaultRouter) resolveMatchPath(path string) string {
+	matchPath := path
+	if r.prefix == "" {
+		return matchPath
+	}
+
+	// 校验请求路径确实以路由前缀开头
+	if !strings.HasPrefix(path, r.prefix) {
+		return ""
+	}
+	// 前缀必须落在路径分段边界上：/api 不能匹配 /apix
+	if len(path) > len(r.prefix) && path[len(r.prefix)] != '/' {
+		return ""
+	}
+	path = strings.TrimPrefix(path, r.prefix)
+	if path == "" {
+		path = "/"
+	}
+	return r.prefix + path
+}
+
+// resolveRoute 在读锁内查找路由处理器及其路径参数与中间件。
+func (r *DefaultRouter) resolveRoute(method, matchPath string) (handler core.HandlerFunc, params map[string]string, middlewares []core.MiddlewareFunc, patternKey string, ok bool) {
+	key := method + " " + matchPath
+	effectiveMethod := method
+
+	// 使用读锁保护 handlers 和 routeMiddleware 的读取
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	handler, ok = r.handlers[key]
+	if !ok && method == http.MethodHead {
+		// HEAD 请求回退到 GET 路由
+		effectiveMethod = http.MethodGet
+		key = effectiveMethod + " " + matchPath
+		handler, ok = r.handlers[key]
+	}
+	if !ok {
+		handler, params, ok, patternKey = r.findHandlerWithParamsLocked(effectiveMethod, matchPath)
+	}
+	if patternKey != "" {
+		key = patternKey
+	}
+	middlewares = r.routeMiddleware[key]
+	return
 }
 
 // handle 注册路由
@@ -185,7 +198,13 @@ func (r *DefaultRouter) handle(method, path string, handler core.HandlerFunc) {
 
 	// 性能优化：预编译路由模式
 	pattern := r.compileRoutePattern(method, fullPath, handler)
+	idx := len(*r.routePatterns)
 	*r.routePatterns = append(*r.routePatterns, pattern)
+
+	// 性能优化：维护方法索引，将O(n)全量扫描降为O(k)方法内扫描
+	if pattern.hasParams {
+		(*r.methodPatterns)[method] = append((*r.methodPatterns)[method], idx)
+	}
 
 	// 绑定路由注册时的中间件链（组中间件在此成为处理链的一部分）
 	r.routeMiddleware[key] = append([]core.MiddlewareFunc{}, r.middlewares...)
@@ -221,10 +240,41 @@ func (r *DefaultRouter) compileRoutePattern(method, path string, handler core.Ha
 // findHandlerWithParamsLocked 查找带路径参数的路由（使用预编译模式，调用方须持有读锁）
 func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (core.HandlerFunc, map[string]string, bool, string) {
 	pathParts := strings.Split(path, "/")
+	patterns := *r.routePatterns
 
-	// 使用预编译的路由模式进行匹配，避免每次都解析
-	for i := range *r.routePatterns {
-		pattern := &(*r.routePatterns)[i]
+	// 性能优化：使用方法索引只扫描对应HTTP方法的路由模式，O(k)而非O(n)
+	indices, hasMethodIndex := (*r.methodPatterns)[method]
+	if hasMethodIndex {
+		for _, i := range indices {
+			pattern := &patterns[i]
+			if len(pattern.parts) != len(pathParts) {
+				continue
+			}
+
+			matched := true
+			for j, part := range pattern.parts {
+				if part != "" && part != pathParts[j] {
+					matched = false
+					break
+				}
+			}
+
+			if matched {
+				params := make(map[string]string, len(pattern.paramNames))
+				for pi, idx := range pattern.paramIdxs {
+					if idx < len(pathParts) {
+						params[pattern.paramNames[pi]] = pathParts[idx]
+					}
+				}
+				return pattern.handler, params, true, method + " " + pattern.patternPath
+			}
+		}
+		return nil, nil, false, ""
+	}
+
+	// 降级：全量扫描（兼容无方法索引的场景）
+	for i := range patterns {
+		pattern := &patterns[i]
 		if pattern.method != method {
 			continue
 		}
@@ -235,7 +285,6 @@ func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (core.H
 			continue
 		}
 
-		// 快速路径匹配
 		matched := true
 		for j, part := range pattern.parts {
 			if part != "" && part != pathParts[j] {
@@ -245,7 +294,6 @@ func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (core.H
 		}
 
 		if matched {
-			// 提取参数
 			params := make(map[string]string, len(pattern.paramNames))
 			for pi, idx := range pattern.paramIdxs {
 				if idx < len(pathParts) {
@@ -257,49 +305,4 @@ func (r *DefaultRouter) findHandlerWithParamsLocked(method, path string) (core.H
 	}
 
 	return nil, nil, false, ""
-}
-
-// matchPath 匹配路径（支持 {param} 语法）
-func (r *DefaultRouter) matchPath(pattern, path string) bool {
-	patternParts := strings.Split(pattern, "/")
-	pathParts := strings.Split(path, "/")
-
-	if len(patternParts) != len(pathParts) {
-		return false
-	}
-
-	for i, part := range patternParts {
-		if part == "" && pathParts[i] == "" {
-			continue
-		}
-		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			continue
-		}
-		if part != pathParts[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-// extractParamsForPattern 根据给定模式提取路径参数
-func (r *DefaultRouter) extractParamsForPattern(pattern, path string) map[string]string {
-	params := make(map[string]string)
-
-	patternParts := strings.Split(pattern, "/")
-	pathParts := strings.Split(path, "/")
-
-	if len(patternParts) != len(pathParts) {
-		return params
-	}
-
-	for i, part := range patternParts {
-		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			paramName := part[1 : len(part)-1]
-			params[paramName] = pathParts[i]
-		}
-	}
-
-	return params
 }

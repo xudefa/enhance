@@ -1,7 +1,13 @@
 .PHONY: help dev build test tidy clean status \
         release create-tags delete-tags push-tags \
         create-remote-tags delete-remote-tags list-tags \
-        init-work sync-work update-deps vuln-check
+        init-work sync-work update-deps vuln-check \
+        ai-check ai-audit ai-verify ai-quick godoc-coverage \
+        ai-docs-sync ai-deps-check skill-sync skill-check \
+        doc-update \
+        deps-visualize deps-mermaid deps-json \
+        changelog-check changelog-update \
+        quality-score quality-report
 
 # ============================================================================
 # Variables
@@ -38,6 +44,31 @@ help: ## 显示帮助信息
 	@echo "  tidy            - 批量 go mod tidy"
 	@echo "  clean           - 清理构建产物"
 	@echo ""
+	@echo "AI 可维护性检查:"
+	@echo "  ai-check        - 运行 AI 可维护性检查"
+	@echo "  godoc-coverage  - 检查 godoc 覆盖率"
+	@echo "  ai-audit        - 生成 AI 可读性审计报告"
+	@echo "  ai-verify       - 运行完整 AI 验证（检查 + 审计）"
+	@echo "  ai-quick        - 运行快速 AI 检查（编译 + 测试 + 格式）"
+	@echo "  ai-docs-sync    - 检查文档与代码是否同步"
+	@echo "  ai-deps-check   - 检查依赖方向是否正确"
+	@echo ""
+	@echo "文档管理:"
+	@echo "  doc-update      - 更新文档（基于代码生成）"
+	@echo ""
+	@echo "依赖可视化:"
+	@echo "  deps-visualize  - 生成包间依赖可视化"
+	@echo "  deps-mermaid    - 生成 Mermaid 格式依赖图"
+	@echo "  deps-json       - 生成 JSON 格式依赖数据"
+	@echo ""
+	@echo "API 变更日志:"
+	@echo "  changelog-check - 检查 API 变更是否记录"
+	@echo "  changelog-update - 更新 CHANGELOG.md"
+	@echo ""
+	@echo "代码质量评分:"
+	@echo "  quality-score   - 运行代码质量评分"
+	@echo "  quality-report  - 生成代码质量报告"
+	@echo ""
 	@echo "版本发布:"
 	@echo "  release         - 完整发布流程（replace + tidy + tag + push）"
 	@echo "  create-tags     - 创建本地 git tags"
@@ -50,6 +81,9 @@ help: ## 显示帮助信息
 	@echo ""
 	@echo "示例:"
 	@echo "  make dev                           # 进入开发模式"
+	@echo "  make ai-verify                     # 运行完整 AI 验证"
+	@echo "  make quality-score                 # 运行代码质量评分"
+	@echo "  make changelog-check               # 检查 API 变更记录"
 	@echo "  make release VERSION=v0.1.0        # 发布 v0.1.0"
 	@echo "  make create-tags VERSION=v0.1.0    # 仅创建 tags"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -414,3 +448,105 @@ vuln-check: ## 检查安全漏洞
 		$(GO) -C "$$dir" list -m -vuln all 2>&1 | grep -E "(vulnerability|VULN|Found)" | head -5; \
 	done
 	@echo "✅ 检查完成"
+
+# ============================================================================
+# AI 可维护性检查
+# ============================================================================
+
+ai-check: ## 运行 AI 可维护性检查
+	@echo "=== AI 可维护性检查 ==="
+	@./scripts/ai-check.sh
+
+godoc-coverage: ## 检查 godoc 覆盖率
+	@echo "=== godoc 覆盖率 ==="
+	@total=$$(grep -rnE "^(func|type|var|const) [A-Z]" --include="*.go" --exclude-dir=vendor --exclude-dir=.git --exclude-dir=docs --exclude-dir=examples . 2>/dev/null | grep -v "_test.go" | wc -l | tr -d ' ') && \
+	doc=$$(grep -rnE "^// [A-Z]" --include="*.go" --exclude-dir=vendor --exclude-dir=.git --exclude-dir=docs --exclude-dir=examples . 2>/dev/null | grep -v "_test.go" | wc -l | tr -d ' ') && \
+	if [ "$$total" -gt 0 ]; then pct=$$((doc * 100 / total)); else pct=0; fi && \
+	echo "导出符号: $$total  文档注释: $$doc  覆盖率: $${pct}%"
+
+ai-audit: ## 生成 AI 可读性审计报告
+	@$(GO) run ./cmd/audit -dir . -out docs/AI_READABILITY_AUDIT.md
+	@echo "✅ 审计报告已生成: docs/AI_READABILITY_AUDIT.md"
+
+ai-verify: ai-check ai-audit ai-docs-sync ai-deps-check skill-check ## 运行完整 AI 验证（检查 + 审计）
+	@echo "✅ AI 验证完成"
+
+skill-sync: ## 从 AGENT_RULES.md 重新生成各平台规则文件
+	@./scripts/skill-sync.sh
+	@echo "✅ 已从 docs/AGENT_RULES.md 重新生成平台规则文件"
+
+skill-check: ## 校验各平台规则文件与源一致
+	@./scripts/skill-sync.sh check
+
+# 快速检查（仅核心检查）
+ai-quick: ## 运行快速 AI 检查（编译 + 测试 + 格式）
+	@echo "=== 快速 AI 检查 ==="
+	@$(GO) build ./...
+	@$(GO) test ./...
+	@test -z "$$(gofmt -l .)" || { echo "❌ 格式化失败"; gofmt -l .; exit 1; }
+	@echo "✅ 快速检查通过"
+
+# 文档同步检查
+ai-docs-sync: ## 检查文档与代码是否同步
+	@echo "=== 文档同步检查 ==="
+	@./scripts/doc-sync-check.sh
+	@echo "✅ 文档同步检查完成"
+
+# 依赖方向检查
+ai-deps-check: ## 检查依赖方向是否正确
+	@echo "=== 依赖方向检查 ==="
+	@$(GO) run ./cmd/depscheck
+	@echo "✅ 依赖方向检查完成"
+
+doc-update: ## 更新文档（基于代码生成）
+	@echo "=== 更新文档 ==="
+	@# 这里可以添加文档生成逻辑
+	@# 例如：从代码注释生成 API 文档
+	@echo "✅ 文档更新完成"
+
+# ============================================================================
+# 依赖可视化
+# ============================================================================
+
+deps-visualize: ## 生成包间依赖可视化
+	@echo "=== 包间依赖可视化 ==="
+	@./scripts/deps-visualize.sh ascii
+	@echo "✅ 依赖可视化完成"
+
+deps-mermaid: ## 生成 Mermaid 格式依赖图
+	@echo "=== Mermaid 依赖图 ==="
+	@./scripts/deps-visualize.sh mermaid
+	@echo "✅ Mermaid 依赖图完成"
+
+deps-json: ## 生成 JSON 格式依赖数据
+	@echo "=== JSON 依赖数据 ==="
+	@./scripts/deps-visualize.sh json
+	@echo "✅ JSON 依赖数据完成"
+
+# ============================================================================
+# API 变更日志
+# ============================================================================
+
+changelog-check: ## 检查 API 变更是否记录
+	@echo "=== API 变更检查 ==="
+	@./scripts/changelog-check.sh
+	@echo "✅ API 变更检查完成"
+
+changelog-update: ## 更新 CHANGELOG.md
+	@echo "=== 更新 CHANGELOG.md ==="
+	@# 这里可以添加自动生成变更日志的逻辑
+	@echo "✅ CHANGELOG.md 更新完成"
+
+# ============================================================================
+# 代码质量评分
+# ============================================================================
+
+quality-score: ## 运行代码质量评分
+	@echo "=== 代码质量评分 ==="
+	@./scripts/quality-score.sh
+	@echo "✅ 代码质量评分完成"
+
+quality-report: ## 生成代码质量报告
+	@echo "=== 生成代码质量报告 ==="
+	@./scripts/quality-score.sh > docs/QUALITY_REPORT.md
+	@echo "✅ 代码质量报告已生成: docs/QUALITY_REPORT.md"

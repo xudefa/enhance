@@ -10,6 +10,7 @@ import (
 )
 
 func TestTracingMiddleware_WithTracer(t *testing.T) {
+	tt.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)
@@ -49,6 +50,7 @@ func TestTracingMiddleware_WithTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithoutTracer(t *testing.T) {
+	tt.Parallel()
 	r := chi.NewRouter()
 	r.Use(TracingMiddleware(nil))
 	r.Get("/test", func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +72,7 @@ func TestTracingMiddleware_WithoutTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithError(t *testing.T) {
+	tt.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)
@@ -106,6 +109,7 @@ func TestTracingMiddleware_WithError(t *testing.T) {
 }
 
 func TestTracingMiddleware_ContextPropagation(t *testing.T) {
+	tt.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)

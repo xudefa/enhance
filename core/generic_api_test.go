@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -14,6 +15,8 @@ type TestGenericBean struct {
 type TestGenericBean2 struct {
 	Value int
 }
+
+// ==================== 基础注册和获取测试 ====================
 
 func TestRegisterDefaultFactory(t *testing.T) {
 	t.Parallel()
@@ -139,7 +142,7 @@ func TestGetByNameNotFoundGeneric(t *testing.T) {
 		t.Error("Expected error for nonexistent bean")
 	}
 
-	if err != ErrBeanNotFound {
+	if !errors.Is(err, ErrBeanNotFound) {
 		t.Errorf("Expected ErrBeanNotFound, got %v", err)
 	}
 }
@@ -153,6 +156,173 @@ func TestGetByNameWithTypeNotFound(t *testing.T) {
 		t.Error("Expected error for bean not found by type")
 	}
 }
+
+func TestGetByNameWithDestroyedContainer(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container,
+		WithName[*TestGenericBean]("testBean"),
+		WithFactory[*TestGenericBean](func(c ...any) (any, error) {
+			return &TestGenericBean{Name: "test"}, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	err = container.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	err = container.Destroy()
+	if err != nil {
+		t.Fatalf("Destroy failed: %v", err)
+	}
+
+	_, err = GetByName[*TestGenericBean](container, "testBean")
+	if err == nil {
+		t.Error("Expected error for destroyed container")
+	}
+}
+
+func TestGetByNameWithGetByTypeAndName(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container,
+		WithName[*TestGenericBean]("typedBean"),
+		WithFactory[*TestGenericBean](func(c ...any) (any, error) {
+			return &TestGenericBean{Name: "typed"}, nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	bean, err := GetByName[*TestGenericBean](container, "typedBean")
+	if err != nil {
+		t.Fatalf("GetByName failed: %v", err)
+	}
+
+	if bean.Name != "typed" {
+		t.Errorf("Expected name 'typed', got %q", bean.Name)
+	}
+}
+
+func TestRegisterWithEmptyNameGeneric(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container)
+	if err != nil {
+		t.Fatalf("Register with empty name failed: %v", err)
+	}
+
+	bean, err := GetByName[*TestGenericBean](container, "")
+	if err != nil {
+		t.Fatalf("GetByName failed: %v", err)
+	}
+
+	if bean == nil {
+		t.Error("Expected bean to be non-nil")
+	}
+}
+
+// ==================== Has 测试 ====================
+
+func TestHas(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("hasBean"))
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	if !Has[*TestGenericBean](container, "hasBean") {
+		t.Error("Expected Has to return true for registered bean")
+	}
+}
+
+func TestHasNotFound(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	if Has[*TestGenericBean](container, "nonexistent") {
+		t.Error("Expected Has to return false for nonexistent bean")
+	}
+}
+
+func TestHasWrongType(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("hasBean2"))
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+
+	if Has[*TestGenericBean2](container, "hasBean2") {
+		t.Error("Expected Has to return false for wrong type")
+	}
+}
+
+// ==================== 多类型注册测试 ====================
+
+func TestRegisterMultipleTypes(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean1"))
+	if err != nil {
+		t.Fatalf("Register bean1 failed: %v", err)
+	}
+
+	err = Register[*TestGenericBean2](container, WithName[*TestGenericBean2]("bean2"))
+	if err != nil {
+		t.Fatalf("Register bean2 failed: %v", err)
+	}
+
+	if !Has[*TestGenericBean](container, "bean1") {
+		t.Error("Expected bean1 to exist")
+	}
+
+	if !Has[*TestGenericBean2](container, "bean2") {
+		t.Error("Expected bean2 to exist")
+	}
+
+	if Has[*TestGenericBean](container, "bean2") {
+		t.Error("Expected bean2 to not match TestGenericBean type")
+	}
+}
+
+func TestRegisterAndGetMultipleBeans(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean1"))
+	if err != nil {
+		t.Fatalf("Register bean1 failed: %v", err)
+	}
+
+	err = Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean2"))
+	if err != nil {
+		t.Fatalf("Register bean2 failed: %v", err)
+	}
+
+	beans, err := container.Get(reflect.TypeOf((*TestGenericBean)(nil)))
+	if err != nil {
+		t.Fatalf("Get by type failed: %v", err)
+	}
+
+	if len(beans) != 2 {
+		t.Errorf("Expected 2 beans, got %d", len(beans))
+	}
+}
+
+// ==================== MustGet 测试 ====================
 
 func TestMustGetGeneric(t *testing.T) {
 	t.Parallel()
@@ -207,140 +377,6 @@ func TestMustGetEmptyName(t *testing.T) {
 	}
 }
 
-func TestHas(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("hasBean"))
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	if !Has[*TestGenericBean](container, "hasBean") {
-		t.Error("Expected Has to return true for registered bean")
-	}
-}
-
-func TestHasNotFound(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	if Has[*TestGenericBean](container, "nonexistent") {
-		t.Error("Expected Has to return false for nonexistent bean")
-	}
-}
-
-func TestHasWrongType(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("hasBean2"))
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	if Has[*TestGenericBean2](container, "hasBean2") {
-		t.Error("Expected Has to return false for wrong type")
-	}
-}
-
-func TestRegisterMultipleTypes(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean1"))
-	if err != nil {
-		t.Fatalf("Register bean1 failed: %v", err)
-	}
-
-	err = Register[*TestGenericBean2](container, WithName[*TestGenericBean2]("bean2"))
-	if err != nil {
-		t.Fatalf("Register bean2 failed: %v", err)
-	}
-
-	if !Has[*TestGenericBean](container, "bean1") {
-		t.Error("Expected bean1 to exist")
-	}
-
-	if !Has[*TestGenericBean2](container, "bean2") {
-		t.Error("Expected bean2 to exist")
-	}
-
-	if Has[*TestGenericBean](container, "bean2") {
-		t.Error("Expected bean2 to not match TestGenericBean type")
-	}
-}
-
-func TestRegisterAndGetMultipleBeans(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean1"))
-	if err != nil {
-		t.Fatalf("Register bean1 failed: %v", err)
-	}
-
-	err = Register[*TestGenericBean](container, WithName[*TestGenericBean]("bean2"))
-	if err != nil {
-		t.Fatalf("Register bean2 failed: %v", err)
-	}
-
-	beans, err := container.Get(reflect.TypeOf((*TestGenericBean)(nil)))
-	if err != nil {
-		t.Fatalf("Get by type failed: %v", err)
-	}
-
-	if len(beans) != 2 {
-		t.Errorf("Expected 2 beans, got %d", len(beans))
-	}
-}
-
-func TestRegisterWithNilFactoryInDef(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	def := registry.BeanDef{
-		Type:    reflect.TypeOf((*TestGenericBean)(nil)),
-		Name:    "nilFactoryBean",
-		Factory: nil,
-	}
-
-	err := container.RegisterBean(def)
-	if err == nil {
-		t.Fatal("Expected RegisterBean to fail with nil factory")
-	}
-}
-
-func TestGetByNameWithDestroyedContainer(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container,
-		WithName[*TestGenericBean]("testBean"),
-		WithFactory[*TestGenericBean](func(c ...any) (any, error) {
-			return &TestGenericBean{Name: "test"}, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	err = container.Initialize()
-	if err != nil {
-		t.Fatalf("Initialize failed: %v", err)
-	}
-
-	err = container.Destroy()
-	if err != nil {
-		t.Fatalf("Destroy failed: %v", err)
-	}
-
-	_, err = GetByName[*TestGenericBean](container, "testBean")
-	if err == nil {
-		t.Error("Expected error for destroyed container")
-	}
-}
-
 func TestMustGetWithDestroyedContainer(t *testing.T) {
 	t.Parallel()
 	container := NewContainer()
@@ -372,6 +408,24 @@ func TestMustGetWithDestroyedContainer(t *testing.T) {
 	}()
 
 	MustGet[*TestGenericBean](container, "testBean")
+}
+
+// ==================== 边界条件测试 ====================
+
+func TestRegisterWithNilFactoryInDef(t *testing.T) {
+	t.Parallel()
+	container := NewContainer()
+
+	def := registry.BeanDef{
+		Type:    reflect.TypeOf((*TestGenericBean)(nil)),
+		Name:    "nilFactoryBean",
+		Factory: nil,
+	}
+
+	err := container.RegisterBean(def)
+	if err == nil {
+		t.Fatal("Expected RegisterBean to fail with nil factory")
+	}
 }
 
 func TestRegisterWithPointerAndNonPointer(t *testing.T) {
@@ -485,48 +539,5 @@ func TestRegisterDuplicateBeanGeneric(t *testing.T) {
 	err = Register[*TestGenericBean](container, WithName[*TestGenericBean]("duplicate"))
 	if err != nil {
 		t.Errorf("Expected no error for duplicate registration, got: %v", err)
-	}
-}
-
-func TestGetByNameWithGetByTypeAndName(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container,
-		WithName[*TestGenericBean]("typedBean"),
-		WithFactory[*TestGenericBean](func(c ...any) (any, error) {
-			return &TestGenericBean{Name: "typed"}, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("Register failed: %v", err)
-	}
-
-	bean, err := GetByName[*TestGenericBean](container, "typedBean")
-	if err != nil {
-		t.Fatalf("GetByName failed: %v", err)
-	}
-
-	if bean.Name != "typed" {
-		t.Errorf("Expected name 'typed', got %q", bean.Name)
-	}
-}
-
-func TestRegisterWithEmptyNameGeneric(t *testing.T) {
-	t.Parallel()
-	container := NewContainer()
-
-	err := Register[*TestGenericBean](container)
-	if err != nil {
-		t.Fatalf("Register with empty name failed: %v", err)
-	}
-
-	bean, err := GetByName[*TestGenericBean](container, "")
-	if err != nil {
-		t.Fatalf("GetByName failed: %v", err)
-	}
-
-	if bean == nil {
-		t.Error("Expected bean to be non-nil")
 	}
 }

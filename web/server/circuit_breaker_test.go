@@ -188,8 +188,8 @@ func TestNetClient_WithMiddleware(t *testing.T) {
 		return nil
 	}
 
-	result := client.WithMiddleware(ClientMiddlewareFunc(middleware))
-	if result != client {
+	returned := client.WithMiddleware(ClientMiddlewareFunc(middleware))
+	if returned != client {
 		t.Error("expected WithMiddleware to return the same client")
 	}
 }

@@ -250,9 +250,9 @@ func TestStripPackagePath(t *testing.T) {
 		tt := tt
 		t.Run(tt.input, func(t *testing.T) {
 			t.Parallel()
-			result := stripPackagePath(tt.input)
-			if result != tt.expected {
-				t.Errorf("stripPackagePath(%q) = %q, want %q", tt.input, result, tt.expected)
+			stripped := stripPackagePath(tt.input)
+			if stripped != tt.expected {
+				t.Errorf("stripPackagePath(%q) = %q, want %q", tt.input, stripped, tt.expected)
 			}
 		})
 	}

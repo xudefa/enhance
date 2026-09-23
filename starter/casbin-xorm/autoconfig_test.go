@@ -7,6 +7,7 @@ import (
 )
 
 func TestCasbinXormConfigDefaults(t *testing.T) {
+	tt.Parallel()
 	cfg := &CasbinXormConfig{
 		ModelType:        security.DefaultCasbinModelType,
 		ModelPath:        security.DefaultCasbinModelPath,
@@ -33,6 +34,7 @@ func TestCasbinXormConfigDefaults(t *testing.T) {
 }
 
 func TestValidateConfigFileModel(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -49,6 +51,7 @@ func TestValidateConfigFileModel(t *testing.T) {
 }
 
 func TestValidateConfigStringModel(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -65,6 +68,7 @@ func TestValidateConfigStringModel(t *testing.T) {
 }
 
 func TestValidateConfigMissingModelPath(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -80,6 +84,7 @@ func TestValidateConfigMissingModelPath(t *testing.T) {
 }
 
 func TestValidateConfigMissingModelText(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -95,6 +100,7 @@ func TestValidateConfigMissingModelText(t *testing.T) {
 }
 
 func TestValidateConfigInvalidModelType(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -109,6 +115,7 @@ func TestValidateConfigInvalidModelType(t *testing.T) {
 }
 
 func TestValidateConfigMissingTableName(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &CasbinXormAutoConfiguration{}
 
 	cfg := &CasbinXormConfig{
@@ -124,6 +131,7 @@ func TestValidateConfigMissingTableName(t *testing.T) {
 }
 
 func TestConfigKeys(t *testing.T) {
+	tt.Parallel()
 	tests := []struct {
 		name     string
 		key      string
@@ -146,6 +154,7 @@ func TestConfigKeys(t *testing.T) {
 }
 
 func TestDefaultValues(t *testing.T) {
+	tt.Parallel()
 	tests := []struct {
 		name     string
 		value    interface{}

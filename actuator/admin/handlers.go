@@ -329,22 +329,12 @@ func (i *ApplicationInstance) IsHealthy() bool {
 
 // GetApplicationCount 获取应用数量
 func (r *ApplicationRegistry) GetApplicationCount() int {
-	count := 0
-	r.applications.Range(func(key, value any) bool {
-		count++
-		return true
-	})
-	return count
+	return int(r.appCount.Load())
 }
 
 // GetInstanceCount 获取实例数量
 func (r *ApplicationRegistry) GetInstanceCount() int {
-	count := 0
-	r.instances.Range(func(key, value any) bool {
-		count++
-		return true
-	})
-	return count
+	return int(r.instCount.Load())
 }
 
 // GetUpInstanceCount 获取运行中的实例数量

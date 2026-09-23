@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// maxExponentialShift 指数退避最大位移量，防止 baseDelay*(1<<shift) 左移溢出。
+const maxExponentialShift = 62
+
 // Get 发送 GET 请求（支持重试）。
 func (c *RetryableClient) Get(ctx context.Context, url string, opts ...RequestOption) (*HTTPResponse, error) {
 	return c.doWithRetry(ctx, func(ctx context.Context) (*HTTPResponse, error) {
@@ -178,19 +181,19 @@ func (c *CircuitBreakerClient) execute(ctx context.Context, fn func(context.Cont
 	if err != nil {
 		// 客户端自身的取消/超时不是服务故障，不应计入熔断（与 ShouldRetry 保持一致）
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return resp, err
+			return resp, fmt.Errorf("execute request: %w", err)
 		}
 		c.breaker.RecordFailure()
-		return resp, err
+		return resp, fmt.Errorf("execute request: %w", err)
 	}
 
 	if resp != nil && resp.IsServerError() {
 		c.breaker.RecordFailure()
-		return resp, err
+		return resp, nil
 	}
 	c.breaker.RecordSuccess()
 
-	return resp, err
+	return resp, nil
 }
 
 // ShouldRetry 判断是否应该重试。
@@ -218,8 +221,8 @@ func (e *ExponentialBackoff) ShouldRetry(resp *HTTPResponse, err error, attempt 
 func (e *ExponentialBackoff) Delay(attempt int) time.Duration {
 	// 限制位移上限，避免 baseDelay * (1<<shift) 溢出 int64 导致负延迟
 	shift := uint(attempt)
-	if shift > 62 {
-		shift = 62
+	if shift > maxExponentialShift {
+		shift = maxExponentialShift
 	}
 	if maxShift := e.maxSafeShift(); shift > maxShift {
 		shift = maxShift

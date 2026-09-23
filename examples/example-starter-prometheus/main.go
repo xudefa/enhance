@@ -68,8 +68,8 @@ func main() {
 	// Demo 3: Histogram
 	fmt.Println("\n--- Demo 3: Histogram ---")
 	requestDuration := registry.Histogram("http_request_duration_seconds")
-	requestDuration.Record(0.1) // 100ms
-	requestDuration.Record(0.2) // 200ms
+	requestDuration.Record(0.1)  // 100ms
+	requestDuration.Record(0.2)  // 200ms
 	requestDuration.Record(0.15) // 150ms
 	fmt.Printf("Histogram observations: %v\n", requestDuration.Count())
 

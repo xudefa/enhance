@@ -97,8 +97,8 @@ func TestWebStarter_Use(t *testing.T) {
 	starter := NewWebStarter()
 	middleware := func(ctx core.Context) {}
 
-	result := starter.Use(middleware)
-	if result != starter {
+	returned := starter.Use(middleware)
+	if returned != starter {
 		t.Error("expected Use to return starter for chaining")
 	}
 	if len(starter.middlewares) != 1 {
@@ -112,8 +112,8 @@ func TestWebStarter_WithServer(t *testing.T) {
 	starter := NewWebStarter()
 	mockServer := &mockServer{}
 
-	result := starter.WithServer(mockServer)
-	if result != starter {
+	returned := starter.WithServer(mockServer)
+	if returned != starter {
 		t.Error("expected WithServer to return starter for chaining")
 	}
 	if starter.server != mockServer {
@@ -127,8 +127,8 @@ func TestWebStarter_WithRouter(t *testing.T) {
 	starter := NewWebStarter()
 	mockRouter := &mockRouter{}
 
-	result := starter.WithRouter(mockRouter)
-	if result != starter {
+	returned := starter.WithRouter(mockRouter)
+	if returned != starter {
 		t.Error("expected WithRouter to return starter for chaining")
 	}
 	if starter.router != mockRouter {

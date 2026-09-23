@@ -17,26 +17,27 @@ func captureStdout(t *testing.T, fn func()) string {
 	defer stdoutMu.Unlock()
 
 	old := os.Stdout
-	r, w, err := os.Pipe()
+	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
 	}
-	os.Stdout = w
+	os.Stdout = writer
 
 	fn()
 
-	_ = w.Close()
+	_ = writer.Close()
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
+	if _, err := io.Copy(&buf, reader); err != nil {
 		t.Fatalf("failed to read pipe: %v", err)
 	}
-	_ = r.Close()
+	_ = reader.Close()
 	return buf.String()
 }
 
 func TestTextBanner_Print(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		template string
@@ -70,6 +71,7 @@ func TestTextBanner_Print(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			b := NewTextBanner(tt.template, tt.props)
 			output := captureStdout(t, func() {
 				if err := b.Print(tt.version); err != nil {
@@ -100,6 +102,7 @@ func TestTextBanner_Mode(t *testing.T) {
 }
 
 func TestTextBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewTextBanner("should not appear", nil)
 	b.(*TextBanner).SetMode(BannerModeOff)
 
@@ -115,6 +118,7 @@ func TestTextBanner_OffMode(t *testing.T) {
 }
 
 func TestASCIIArtBanner_Print(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		art     string
@@ -141,6 +145,7 @@ func TestASCIIArtBanner_Print(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			b := NewASCIIArtBanner(tt.art, tt.color)
 			output := captureStdout(t, func() {
 				if err := b.Print(tt.version); err != nil {
@@ -171,6 +176,7 @@ func TestASCIIArtBanner_Mode(t *testing.T) {
 }
 
 func TestASCIIArtBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewASCIIArtBanner("should not appear", "")
 	b.(*ASCIIArtBanner).SetMode(BannerModeOff)
 
@@ -186,7 +192,42 @@ func TestASCIIArtBanner_OffMode(t *testing.T) {
 }
 
 func TestLegacyBanner_Print(t *testing.T) {
-	tests := []struct {
+	t.Parallel()
+
+	for _, tt := range testLegacyBannerPrintCases() {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			b := NewLegacyBanner(
+				WithLines(tt.lines),
+				WithAppName(tt.appName),
+				WithProfiles(tt.profiles),
+			)
+
+			output := captureStdout(t, func() {
+				if err := b.Print(tt.version); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+
+			for _, want := range tt.want {
+				if !strings.Contains(output, want) {
+					t.Errorf("output %q does not contain %q", output, want)
+				}
+			}
+		})
+	}
+}
+
+func testLegacyBannerPrintCases() []struct {
+	name     string
+	lines    []string
+	appName  string
+	profiles []string
+	version  string
+	want     []string
+} {
+	return []struct {
 		name     string
 		lines    []string
 		appName  string
@@ -227,29 +268,6 @@ func TestLegacyBanner_Print(t *testing.T) {
 			want:     []string{"Application", "4.0.0"},
 		},
 	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			b := NewLegacyBanner(
-				WithLines(tt.lines),
-				WithAppName(tt.appName),
-				WithProfiles(tt.profiles),
-			)
-
-			output := captureStdout(t, func() {
-				if err := b.Print(tt.version); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			})
-
-			for _, want := range tt.want {
-				if !strings.Contains(output, want) {
-					t.Errorf("output %q does not contain %q", output, want)
-				}
-			}
-		})
-	}
 }
 
 func TestLegacyBanner_Mode(t *testing.T) {
@@ -267,6 +285,7 @@ func TestLegacyBanner_Mode(t *testing.T) {
 }
 
 func TestLegacyBanner_OffMode(t *testing.T) {
+	t.Parallel()
 	b := NewLegacyBanner(WithLines([]string{"should not appear"}))
 	b.(*LegacyBanner).SetMode(BannerModeOff)
 

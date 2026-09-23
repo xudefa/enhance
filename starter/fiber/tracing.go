@@ -60,6 +60,9 @@ func TracingMiddleware(tracer *tracing.Tracer) fiber.Handler {
 			c.Set(k, v)
 		}
 
-		return err
+		if err != nil {
+			return fmt.Errorf("tracing middleware failed: %w", err)
+		}
+		return nil
 	}
 }

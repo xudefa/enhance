@@ -18,7 +18,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ApolloAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ApolloEnabled, ConditionTrue),
+			// 约定优于配置：当 apollo.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ApolloEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)),
 	)
@@ -30,7 +31,7 @@ type ApolloAutoConfiguration struct {
 	client agollo.Client
 }
 
-// Configure configures Apollo configuration center client.
+// Configure 配置 Apollo 配置中心客户端。
 func (c *ApolloAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	env := ctx.Environment()
 
@@ -83,15 +84,15 @@ func (c *ApolloAutoConfiguration) GetConfig(key, namespace string) (string, erro
 		return "", fmt.Errorf("namespace %s not found", namespace)
 	}
 
-	val, err := cache.Get(key)
+	configVal, err := cache.Get(key)
 	if err != nil {
 		return "", fmt.Errorf("key %s not found: %w", key, err)
 	}
 
-	if str, ok := val.(string); ok {
+	if str, ok := configVal.(string); ok {
 		return str, nil
 	}
-	return fmt.Sprintf("%v", val), nil
+	return fmt.Sprintf("%v", configVal), nil
 }
 
 // ApolloConfig Apollo configuration center config.

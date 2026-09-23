@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ZerologAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ZeroLogEnabled, ConditionTrue),
+			// 约定优于配置：当 zerolog.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ZeroLogEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityInfrastructure)), // 基础设施层，最先执行，提供日志能力
 	)
@@ -98,12 +99,12 @@ func (c *ZerologAutoConfiguration) buildZerolog(cfg *ZerologConfig) log.Logger {
 	var output io.Writer = os.Stdout
 	var file *os.File
 	if cfg.OutputPath != "" {
-		f, err := os.OpenFile(cfg.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		logFile, err := os.OpenFile(cfg.OutputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			fmt.Printf("[Zerolog] warning: failed to open log file, using stdout: path=%s, error=%v\n", cfg.OutputPath, err)
 		} else {
-			output = f
-			file = f
+			output = logFile
+			file = logFile
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 )
 
 func TestMongoDBConfig_LoadConfig(t *testing.T) {
+	tt.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-mongodb", environment.PriorityNormal, map[string]any{
 		"mongodb.enabled":         "true",
@@ -57,6 +58,7 @@ func TestMongoDBConfig_LoadConfig(t *testing.T) {
 }
 
 func TestMongoDBConfig_DefaultValues(t *testing.T) {
+	tt.Parallel()
 	cfg := &MongoDBConfig{
 		Host:                   DefaultMongoDBHost,
 		Port:                   DefaultMongoDBPort,
@@ -86,6 +88,7 @@ func TestMongoDBConfig_DefaultValues(t *testing.T) {
 }
 
 func TestMongoDBConfig_BuildURI(t *testing.T) {
+	tt.Parallel()
 	autoConfig := &MongoDBAutoConfiguration{}
 
 	// 无认证

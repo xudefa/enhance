@@ -89,15 +89,15 @@ func BenchmarkDeadLetterQueue_Stats(b *testing.B) {
 func BenchmarkDeadLetterQueue_ConcurrentAdd(b *testing.B) {
 	dlq := NewDeadLetterQueue()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
 			dlq.Add(FailedEvent{
-				Event:       &BaseEvent{EventType: "bench.event", EventTime: time.Now().Add(time.Duration(i) * time.Nanosecond)},
+				Event:       &BaseEvent{EventType: "bench.event", EventTime: time.Now().Add(time.Duration(seq) * time.Nanosecond)},
 				RetryCount:  0,
 				MaxRetries:  3,
 				NextRetryAt: time.Now().Add(time.Second),
 			})
-			i++
+			seq++
 		}
 	})
 }
@@ -211,9 +211,9 @@ func BenchmarkDeadLetterQueue_StressMixedOperations(b *testing.B) {
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
-		i := 0
+		seq := 0
 		for pb.Next() {
-			op := i % 4
+			op := seq % 4
 			switch op {
 			case 0:
 				ts := time.Now().Add(time.Duration(counter.Add(1)) * time.Nanosecond)
@@ -230,7 +230,7 @@ func BenchmarkDeadLetterQueue_StressMixedOperations(b *testing.B) {
 			case 3:
 				_ = dlq.Stats()
 			}
-			i++
+			seq++
 		}
 	})
 }

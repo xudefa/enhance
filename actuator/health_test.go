@@ -34,9 +34,8 @@ func TestDiskSpaceHealthIndicator_Health(t *testing.T) {
 		threshold float64
 		wantUp    bool
 	}{
-		{"valid path low threshold", "/tmp", 0.01, false},
-		{"valid path high threshold", "/tmp", 0.99, true},
-		{"root path high threshold", "/", 0.99, true},
+		{"usage above threshold degrades", t.TempDir(), 0.0, false},
+		{"usage below threshold stays up", t.TempDir(), 1.0, true},
 	}
 
 	for _, tt := range tests {
@@ -44,21 +43,21 @@ func TestDiskSpaceHealthIndicator_Health(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ind := NewDiskSpaceHealthIndicator(tt.path, tt.threshold)
-			h := ind.Health(context.Background())
+			healthResult := ind.Health(context.Background())
 
-			if h.Timestamp.IsZero() {
+			if healthResult.Timestamp.IsZero() {
 				t.Error("Timestamp should not be zero")
 			}
-			if h.Details == nil {
+			if healthResult.Details == nil {
 				t.Error("Details should not be nil")
 			}
-			if _, ok := h.Details["path"]; !ok {
+			if _, ok := healthResult.Details["path"]; !ok {
 				t.Error("Details should contain path")
 			}
 
-			isUp := h.Status.String() == "UP"
+			isUp := healthResult.Status.String() == "UP"
 			if isUp != tt.wantUp {
-				t.Errorf("status = %s, wantUp = %v", h.Status, tt.wantUp)
+				t.Errorf("status = %s, wantUp = %v", healthResult.Status, tt.wantUp)
 			}
 		})
 	}
@@ -67,10 +66,10 @@ func TestDiskSpaceHealthIndicator_Health(t *testing.T) {
 func TestDiskSpaceHealthIndicator_HealthInvalidPath(t *testing.T) {
 	t.Parallel()
 	ind := NewDiskSpaceHealthIndicator("/nonexistent/path/xyz", 0.9)
-	h := ind.Health(context.Background())
+	healthResult := ind.Health(context.Background())
 
-	if h.Status != health.StatusUnknown {
-		t.Errorf("expected UNKNOWN status for invalid path, got %s", h.Status)
+	if healthResult.Status != health.StatusUnknown {
+		t.Errorf("expected UNKNOWN status for invalid path, got %s", healthResult.Status)
 	}
 }
 
@@ -106,21 +105,21 @@ func TestMemoryHealthIndicator_Health(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ind := NewMemoryHealthIndicator(tt.threshold)
-			h := ind.Health(context.Background())
+			healthResult := ind.Health(context.Background())
 
-			if h.Timestamp.IsZero() {
+			if healthResult.Timestamp.IsZero() {
 				t.Error("Timestamp should not be zero")
 			}
-			if h.Details == nil {
+			if healthResult.Details == nil {
 				t.Error("Details should not be nil")
 			}
-			if _, ok := h.Details["alloc_bytes"]; !ok {
+			if _, ok := healthResult.Details["alloc_bytes"]; !ok {
 				t.Error("should contain alloc_bytes")
 			}
-			if _, ok := h.Details["sys_bytes"]; !ok {
+			if _, ok := healthResult.Details["sys_bytes"]; !ok {
 				t.Error("should contain sys_bytes")
 			}
-			if _, ok := h.Details["heap_percent"]; !ok {
+			if _, ok := healthResult.Details["heap_percent"]; !ok {
 				t.Error("should contain heap_percent")
 			}
 		})
@@ -161,21 +160,21 @@ func TestProcessHealthIndicator_Health(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ind := NewProcessHealthIndicator(tt.threshold)
-			h := ind.Health(context.Background())
+			healthResult := ind.Health(context.Background())
 
-			if h.Timestamp.IsZero() {
+			if healthResult.Timestamp.IsZero() {
 				t.Error("Timestamp should not be zero")
 			}
-			if _, ok := h.Details["goroutines"]; !ok {
+			if _, ok := healthResult.Details["goroutines"]; !ok {
 				t.Error("should contain goroutines")
 			}
-			if _, ok := h.Details["cpu_num"]; !ok {
+			if _, ok := healthResult.Details["cpu_num"]; !ok {
 				t.Error("should contain cpu_num")
 			}
 
-			isUp := h.Status.String() == "UP"
+			isUp := healthResult.Status.String() == "UP"
 			if isUp != tt.wantUp {
-				t.Errorf("status = %s, wantUp = %v", h.Status, tt.wantUp)
+				t.Errorf("status = %s, wantUp = %v", healthResult.Status, tt.wantUp)
 			}
 		})
 	}

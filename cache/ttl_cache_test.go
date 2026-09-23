@@ -16,12 +16,12 @@ func TestTTLCache_GetSet(t *testing.T) {
 		t.Fatalf("Set failed: %v", err)
 	}
 
-	val, err := c.Get(ctx, "key1")
+	value, err := c.Get(ctx, "key1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
-	if val != "value1" {
-		t.Errorf("expected value1, got %v", val)
+	if value != "value1" {
+		t.Errorf("expected value1, got %v", value)
 	}
 }
 
@@ -33,12 +33,12 @@ func TestTTLCache_GetSet_Overwrite(t *testing.T) {
 	_ = c.Set(ctx, "key1", "original", time.Minute)
 	_ = c.Set(ctx, "key1", "updated", time.Minute)
 
-	val, err := c.Get(ctx, "key1")
+	value, err := c.Get(ctx, "key1")
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
-	if val != "updated" {
-		t.Errorf("expected 'updated', got %v", val)
+	if value != "updated" {
+		t.Errorf("expected 'updated', got %v", value)
 	}
 	if c.Size() != 1 {
 		t.Errorf("expected size 1 after overwrite, got %d", c.Size())
@@ -303,20 +303,20 @@ func TestTTLCache_LRUEviction(t *testing.T) {
 		t.Errorf("expected key1 to be evicted, got err=%v", err)
 	}
 
-	val, err := c.Get(ctx, "key2")
+	value, err := c.Get(ctx, "key2")
 	if err != nil {
 		t.Fatalf("expected key2 to exist: %v", err)
 	}
-	if val != "value2" {
-		t.Errorf("expected value2, got %v", val)
+	if value != "value2" {
+		t.Errorf("expected value2, got %v", value)
 	}
 
-	val, err = c.Get(ctx, "key3")
+	value, err = c.Get(ctx, "key3")
 	if err != nil {
 		t.Fatalf("expected key3 to exist: %v", err)
 	}
-	if val != "value3" {
-		t.Errorf("expected value3, got %v", val)
+	if value != "value3" {
+		t.Errorf("expected value3, got %v", value)
 	}
 }
 

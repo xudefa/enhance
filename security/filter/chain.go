@@ -54,9 +54,9 @@ func (c *defaultFilterChain) AddFilter(filter Filter) {
 
 // GetFilters 获取所有过滤器。
 func (c *defaultFilterChain) GetFilters() []Filter {
-	result := make([]Filter, len(c.filters))
-	copy(result, c.filters)
-	return result
+	filtersCopy := make([]Filter, len(c.filters))
+	copy(filtersCopy, c.filters)
+	return filtersCopy
 }
 
 // SortFilters 按 Order 排序过滤器。

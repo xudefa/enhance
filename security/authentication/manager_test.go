@@ -42,10 +42,10 @@ func TestProviderManager_Authenticate_NoProviders(t *testing.T) {
 func TestProviderManager_Authenticate_Success(t *testing.T) {
 	t.Parallel()
 
-	result := NewAuthenticatedUsernamePasswordToken("user", nil, []string{"ROLE_USER"})
+	authToken := NewAuthenticatedUsernamePasswordToken("user", nil, []string{"ROLE_USER"})
 	provider := &mockAuthProvider{
 		supportsToken: true,
-		authResult:    result,
+		authResult:    authToken,
 	}
 	m := NewProviderManager(provider)
 
@@ -112,12 +112,12 @@ func TestProviderManager_Authenticate_ProviderReturnsNil(t *testing.T) {
 func TestProviderManager_AddProvider(t *testing.T) {
 	t.Parallel()
 
-	m := NewProviderManager().(*ProviderManager)
+	manager := NewProviderManager().(*ProviderManager)
 	provider := &mockAuthProvider{supportsToken: true}
-	m.AddProvider(provider)
+	manager.AddProvider(provider)
 
-	if len(m.providers) != 1 {
-		t.Errorf("expected 1 provider, got %d", len(m.providers))
+	if len(manager.providers) != 1 {
+		t.Errorf("expected 1 provider, got %d", len(manager.providers))
 	}
 }
 

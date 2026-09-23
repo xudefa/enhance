@@ -22,7 +22,8 @@ var fiberAutoConfig = &FiberAutoConfiguration{}
 func init() {
 	boot.RegisterAutoConfigWith(fiberAutoConfig,
 		boot.WithConditions(
-			condition.OnProperty(FiberEnabled, ConditionTrue),
+			// 约定优于配置：当 fiber.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(FiberEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityWebLayer)),
 	)
@@ -131,16 +132,18 @@ func (c *FiberAutoConfiguration) Start(ctx boot.ApplicationContext) error {
 		log.KeyValue{Key: "addr", Value: addr},
 	)
 
-	// 在后台启动服务器，避免阻塞
-	go func() {
-		if err := c.app.Listen(addr); err != nil {
-			c.logger.Error(ctx.Context(), "Fiber Web server error",
-				log.KeyValue{Key: "error", Value: err.Error()},
-			)
-		}
-	}()
+	go c.serveFiber(addr, ctx)
 
 	return nil
+}
+
+// serveFiber 在独立 goroutine 中运行 Fiber 服务器。
+func (c *FiberAutoConfiguration) serveFiber(addr string, ctx boot.ApplicationContext) {
+	if err := c.app.Listen(addr); err != nil {
+		c.logger.Error(ctx.Context(), "Fiber Web server error",
+			log.KeyValue{Key: "error", Value: err.Error()},
+		)
+	}
 }
 
 // Stop 停止 Fiber Web 服务器。
@@ -163,7 +166,7 @@ func (c *FiberAutoConfiguration) Dependencies() []string {
 
 // GetCondition 返回启动器条件。
 func (c *FiberAutoConfiguration) GetCondition() condition.Condition {
-	return condition.OnProperty(FiberEnabled, ConditionTrue)
+	return condition.OnPropertyOrDefault(FiberEnabled, ConditionTrue, ConditionTrue)
 }
 
 // GetApp 从容器中获取 Fiber App 实例。

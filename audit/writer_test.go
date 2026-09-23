@@ -81,14 +81,14 @@ func TestFileWriter_Write(t *testing.T) {
 
 	_ = writer.Close()
 
-	data, err := os.ReadFile(tmpFile)
+	content, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
-	if len(data) == 0 {
+	if len(content) == 0 {
 		t.Error("expected data in file")
 	}
-	if !strings.Contains(string(data), "user") {
+	if !strings.Contains(string(content), "user") {
 		t.Error("expected actor 'user' in file")
 	}
 }
@@ -113,12 +113,12 @@ func TestFileWriter_WriteMultiple(t *testing.T) {
 
 	_ = writer.Close()
 
-	data, err := os.ReadFile(tmpFile)
+	content, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
 	if len(lines) != 5 {
 		t.Errorf("expected 5 lines, got %d", len(lines))
 	}
@@ -142,11 +142,11 @@ func TestFileWriter_CloseFlush(t *testing.T) {
 		t.Errorf("Close failed: %v", err)
 	}
 
-	data, err := os.ReadFile(tmpFile)
+	content, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
-	if len(data) == 0 {
+	if len(content) == 0 {
 		t.Error("expected data after flush")
 	}
 }
@@ -178,12 +178,12 @@ func TestFileWriter_ConcurrentWrite(t *testing.T) {
 
 	_ = writer.Close()
 
-	data, err := os.ReadFile(tmpFile)
+	content, err := os.ReadFile(tmpFile)
 	if err != nil {
 		t.Fatalf("ReadFile failed: %v", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
 	if len(lines) != 100 {
 		t.Errorf("expected 100 lines, got %d", len(lines))
 	}

@@ -16,24 +16,28 @@ type JwtAuthenticationFilter struct {
 	userDetailsService security.UserDetailsService
 }
 
+// NewJwtAuthenticationFilter 创建 JWT 认证过滤器。
 func NewJwtAuthenticationFilter(tokenProvider TokenProvider, opts ...JwtFilterOption) *JwtAuthenticationFilter {
-	f := &JwtAuthenticationFilter{
+	filter := &JwtAuthenticationFilter{
 		tokenProvider: tokenProvider,
 	}
 	for _, opt := range opts {
-		opt(f)
+		opt(filter)
 	}
-	return f
+	return filter
 }
 
+// JwtFilterOption JWT 过滤器函数选项。
 type JwtFilterOption func(*JwtAuthenticationFilter)
 
+// WithExcludePaths 设置排除路径。
 func WithExcludePaths(paths ...string) JwtFilterOption {
 	return func(f *JwtAuthenticationFilter) {
 		f.excludePaths = paths
 	}
 }
 
+// WithUserDetailsService 设置用户详情服务。
 func WithUserDetailsService(service security.UserDetailsService) JwtFilterOption {
 	return func(f *JwtAuthenticationFilter) {
 		f.userDetailsService = service
@@ -148,6 +152,7 @@ type SimpleUserDetails struct {
 	authorities []string
 }
 
+// NewSimpleUserDetails 创建简单用户详情实例。
 func NewSimpleUserDetails(username string, authorities []string) *SimpleUserDetails {
 	return &SimpleUserDetails{
 		username:    username,
@@ -155,10 +160,23 @@ func NewSimpleUserDetails(username string, authorities []string) *SimpleUserDeta
 	}
 }
 
-func (u *SimpleUserDetails) Username() string            { return u.username }
-func (u *SimpleUserDetails) Password() string            { return "" }
-func (u *SimpleUserDetails) Authorities() []string       { return u.authorities }
-func (u *SimpleUserDetails) Enabled() bool               { return true }
-func (u *SimpleUserDetails) AccountNonExpired() bool     { return true }
+// Username 返回用户名。
+func (u *SimpleUserDetails) Username() string { return u.username }
+
+// Password 返回密码（JWT 模式下为空）。
+func (u *SimpleUserDetails) Password() string { return "" }
+
+// Authorities 返回权限列表。
+func (u *SimpleUserDetails) Authorities() []string { return u.authorities }
+
+// Enabled 返回账户是否启用。
+func (u *SimpleUserDetails) Enabled() bool { return true }
+
+// AccountNonExpired 返回账户是否未过期。
+func (u *SimpleUserDetails) AccountNonExpired() bool { return true }
+
+// CredentialsNonExpired 返回凭证是否未过期。
 func (u *SimpleUserDetails) CredentialsNonExpired() bool { return true }
-func (u *SimpleUserDetails) AccountNonLocked() bool      { return true }
+
+// AccountNonLocked 返回账户是否未锁定。
+func (u *SimpleUserDetails) AccountNonLocked() bool { return true }

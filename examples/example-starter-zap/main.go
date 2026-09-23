@@ -13,10 +13,10 @@ package main
 import (
 	"fmt"
 
-	"go.uber.org/zap"
 	"github.com/xudefa/enhance/boot"
 	"github.com/xudefa/enhance/core"
 	"github.com/xudefa/enhance/log"
+	"go.uber.org/zap"
 
 	_ "github.com/xudefa/enhance/starter/zap"
 )

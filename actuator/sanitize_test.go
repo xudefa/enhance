@@ -7,36 +7,36 @@ import (
 func TestLooksLikeSensitiveData(t *testing.T) {
 	t.Parallel()
 	t.Run("PrivateKey", func(t *testing.T) {
-		data := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MhgHcTz6sE2I2yPB\naQDrB8g3bqVW8T3oL9k2J3f8y4x7z5w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0f\n-----END RSA PRIVATE KEY-----"
-		if !looksLikeSensitiveData(data) {
+		testData := "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MhgHcTz6sE2I2yPB\naQDrB8g3bqVW8T3oL9k2J3f8y4x7z5w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0f\n-----END RSA PRIVATE KEY-----"
+		if !looksLikeSensitiveData(testData) {
 			t.Error("expected private key to be detected as sensitive")
 		}
 	})
 
 	t.Run("RandomString", func(t *testing.T) {
-		data := "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7jKl0mNp3qRs6t!@#$"
-		if !looksLikeSensitiveData(data) {
+		testData := "Ab3dEf6hIj9lMn2pQr5tUv8xYz1bCd4fGh7jKl0mNp3qRs6t!@#$"
+		if !looksLikeSensitiveData(testData) {
 			t.Error("expected random-looking string to be detected as sensitive")
 		}
 	})
 
 	t.Run("JWTToken", func(t *testing.T) {
-		data := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.POstGetfAytaZS82wHcjoTyoqhMyxXiWdR7Nn7A29DNSl0EiXLdwJ6xC6AfgZWF1bOsS_TuYI3OG85AmiExREkrS6tDfTQ2B3WXlrr-wp5AokiRbz3_oB4OxG-W9KcEEbDRcZc"
-		if !looksLikeSensitiveData(data) {
+		testData := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.POstGetfAytaZS82wHcjoTyoqhMyxXiWdR7Nn7A29DNSl0EiXLdwJ6xC6AfgZWF1bOsS_TuYI3OG85AmiExREkrS6tDfTQ2B3WXlrr-wp5AokiRbz3_oB4OxG-W9KcEEbDRcZc"
+		if !looksLikeSensitiveData(testData) {
 			t.Error("expected JWT token to be detected as sensitive")
 		}
 	})
 
 	t.Run("ShortString", func(t *testing.T) {
-		data := "short"
-		if looksLikeSensitiveData(data) {
+		testData := "short"
+		if looksLikeSensitiveData(testData) {
 			t.Error("expected short string to not be detected as sensitive")
 		}
 	})
 
 	t.Run("NormalString", func(t *testing.T) {
-		data := "this is a normal string without any sensitive data"
-		if looksLikeSensitiveData(data) {
+		testData := "this is a normal string without any sensitive data"
+		if looksLikeSensitiveData(testData) {
 			t.Error("expected normal string to not be detected as sensitive")
 		}
 	})
@@ -83,9 +83,9 @@ func TestIsRandomLookingString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isRandomLookingString(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v for input: %s", tt.expected, result, tt.input)
+			matchResult := isRandomLookingString(tt.input)
+			if matchResult != tt.expected {
+				t.Errorf("expected %v, got %v for input: %s", tt.expected, matchResult, tt.input)
 			}
 		})
 	}
@@ -127,9 +127,9 @@ func TestIsTokenFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isTokenFormat(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v for input: %s", tt.expected, result, tt.input)
+			matchResult := isTokenFormat(tt.input)
+			if matchResult != tt.expected {
+				t.Errorf("expected %v, got %v for input: %s", tt.expected, matchResult, tt.input)
 			}
 		})
 	}
@@ -166,9 +166,9 @@ func TestIsValidBase64(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isValidBase64(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v for input: %s", tt.expected, result, tt.input)
+			matchResult := isValidBase64(tt.input)
+			if matchResult != tt.expected {
+				t.Errorf("expected %v, got %v for input: %s", tt.expected, matchResult, tt.input)
 			}
 		})
 	}
@@ -216,9 +216,9 @@ func TestSanitizer_AlwaysSensitiveStrategy(t *testing.T) {
 
 	sanitizer.AddStrategy(custom)
 
-	result := sanitizer.Sanitize("custom_field", "some_value")
-	if result != redactedValue {
-		t.Errorf("expected redacted value, got %v", result)
+	sanitizedValue := sanitizer.Sanitize("custom_field", "some_value")
+	if sanitizedValue != redactedValue {
+		t.Errorf("expected redacted value, got %v", sanitizedValue)
 	}
 }
 
@@ -243,15 +243,15 @@ func TestSanitizer_SanitizeWithCustomStrategy(t *testing.T) {
 	sanitizer.AddStrategy(strategy)
 
 	t.Run("CustomSensitiveKey", func(t *testing.T) {
-		result := sanitizer.Sanitize("custom_sensitive", "value")
-		if result != redactedValue {
-			t.Errorf("expected redacted value, got %v", result)
+		sanitizedValue := sanitizer.Sanitize("custom_sensitive", "value")
+		if sanitizedValue != redactedValue {
+			t.Errorf("expected redacted value, got %v", sanitizedValue)
 		}
 	})
 
 	t.Run("NonSensitiveKey", func(t *testing.T) {
-		result := sanitizer.Sanitize("normal_key", "value")
-		if result == redactedValue {
+		sanitizedValue := sanitizer.Sanitize("normal_key", "value")
+		if sanitizedValue == redactedValue {
 			t.Logf("warning: 'normal_key' was redacted due to keyword matching, this is expected behavior")
 		}
 	})
@@ -261,9 +261,9 @@ func TestSanitizer_SanitizeNilValue(t *testing.T) {
 	t.Parallel()
 	sanitizer := NewSanitizer()
 
-	result := sanitizer.Sanitize("password", nil)
-	if result != nil {
-		t.Errorf("expected nil, got %v", result)
+	sanitizedValue := sanitizer.Sanitize("password", nil)
+	if sanitizedValue != nil {
+		t.Errorf("expected nil, got %v", sanitizedValue)
 	}
 }
 
@@ -286,9 +286,9 @@ func TestSanitizer_SanitizeKeywordMatch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
-			result := sanitizer.Sanitize(tt.key, tt.value)
-			if result != tt.expected {
-				t.Errorf("expected %v, got %v for key %s", tt.expected, result, tt.key)
+			sanitizedValue := sanitizer.Sanitize(tt.key, tt.value)
+			if sanitizedValue != tt.expected {
+				t.Errorf("expected %v, got %v for key %s", tt.expected, sanitizedValue, tt.key)
 			}
 		})
 	}

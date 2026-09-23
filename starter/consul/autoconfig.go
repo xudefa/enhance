@@ -17,7 +17,8 @@ import (
 func init() {
 	boot.RegisterAutoConfigWith(&ConsulAutoConfiguration{},
 		boot.WithConditions(
-			condition.OnProperty(ConsulEnabled, ConditionTrue),
+			// 约定优于配置：当 consul.enabled 未配置时，默认为 true（即默认启用）
+			condition.OnPropertyOrDefault(ConsulEnabled, ConditionTrue, ConditionTrue),
 		),
 		boot.WithOrder(int(boot.OrderPriorityServiceDiscovery)),
 	)
@@ -95,7 +96,10 @@ func (c *ConsulAutoConfiguration) DeregisterService(serviceID string) error {
 // GetHealthyServices 获取健康服务列表。
 func (c *ConsulAutoConfiguration) GetHealthyServices(serviceName string) ([]*consulapi.ServiceEntry, error) {
 	entries, _, err := c.client.Health().Service(serviceName, "", true, nil)
-	return entries, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to get healthy services for %s: %w", serviceName, err)
+	}
+	return entries, nil
 }
 
 // ConsulConfig Consul 服务发现配置。

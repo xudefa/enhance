@@ -29,19 +29,23 @@ func NewConsoleWriter() EventWriter {
 	}
 }
 
+// Write 将事件序列化为 JSON 并输出到控制台。
 func (w *consoleWriterImpl) Write(event Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	data, err := json.Marshal(event)
+	payload, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("序列化事件失败: %w", err)
 	}
 
-	_, err = fmt.Fprintln(w.output, string(data))
-	return err
+	if _, err = fmt.Fprintln(w.output, string(payload)); err != nil {
+		return fmt.Errorf("写入审计输出失败: %w", err)
+	}
+	return nil
 }
 
+// Close 关闭控制台写入器。
 func (w *consoleWriterImpl) Close() error {
 	return nil
 }
@@ -61,27 +65,31 @@ func NewFileWriter(filePath string) (EventWriter, error) {
 	}, nil
 }
 
+// Write 将事件序列化为 JSON 并写入文件，随后刷新缓冲区。
 func (w *fileWriterImpl) Write(event Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	data, err := json.Marshal(event)
+	payload, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("序列化事件失败: %w", err)
 	}
 
-	_, err = w.writer.Write(data)
-	if err != nil {
-		return err
+	if _, err = w.writer.Write(payload); err != nil {
+		return fmt.Errorf("写入审计文件失败: %w", err)
 	}
 
 	if err := w.writer.WriteByte('\n'); err != nil {
-		return err
+		return fmt.Errorf("写入审计换行失败: %w", err)
 	}
 
-	return w.writer.Flush()
+	if err := w.writer.Flush(); err != nil {
+		return fmt.Errorf("刷新审计缓冲区失败: %w", err)
+	}
+	return nil
 }
 
+// Close 刷新缓冲区并关闭文件写入器。
 func (w *fileWriterImpl) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

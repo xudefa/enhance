@@ -13,7 +13,7 @@ import (
 // 维护 Bean 与配置键的双向映射关系，当配置变更事件到达时，
 // 查找受影响的 Bean 并发布 BeanRefreshEvent。
 type EventRouter struct {
-	eventBus      *event.EventBus     // 事件总线
+	eventBus      event.EventBus      // 事件总线
 	beanConfigMap map[string][]string // Bean ID -> 依赖的配置键列表
 	configBeanMap map[string][]string // 配置键 -> 依赖该键的 Bean ID 列表
 	mu            sync.RWMutex        // 保护映射表的并发访问
@@ -22,7 +22,7 @@ type EventRouter struct {
 // NewEventRouter 创建事件路由器
 //
 // 创建后自动订阅事件总线的 "ConfigChange" 事件。
-func NewEventRouter(eventBus *event.EventBus) *EventRouter {
+func NewEventRouter(eventBus event.EventBus) *EventRouter {
 	router := &EventRouter{
 		eventBus:      eventBus,
 		beanConfigMap: make(map[string][]string),
@@ -84,11 +84,11 @@ func (r *EventRouter) findAffectedBeans(keys []string) []string {
 		}
 	}
 
-	result := make([]string, 0, len(affected))
+	affectedList := make([]string, 0, len(affected))
 	for beanID := range affected {
-		result = append(result, beanID)
+		affectedList = append(affectedList, beanID)
 	}
-	return result
+	return affectedList
 }
 
 // BeanRefreshEvent Bean 刷新事件

@@ -51,7 +51,7 @@ func main() {
 	}
 
 	// Get the validator from container
-	v, err := core.GetByName[*validator.Validate](app.Container(), "")
+	validate, err := core.GetByName[*validator.Validate](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get validator: %v\n", err)
 		return
@@ -68,7 +68,7 @@ func main() {
 		Password: "securepassword",
 	}
 
-	if err := v.Struct(validUser); err != nil {
+	if err := validate.Struct(validUser); err != nil {
 		fmt.Printf("Validation failed: %v\n", err)
 	} else {
 		fmt.Println("Validation passed!")
@@ -77,12 +77,12 @@ func main() {
 	// Test 2: Invalid user (missing required fields)
 	fmt.Println("\n--- Test 2: Invalid User (Missing Required Fields) ---")
 	invalidUser := User{
-		Name:  "",           // Required
-		Email: "invalid",    // Invalid email
-		Age:   -5,           // Invalid age
+		Name:  "",        // Required
+		Email: "invalid", // Invalid email
+		Age:   -5,        // Invalid age
 	}
 
-	if err := v.Struct(invalidUser); err != nil {
+	if err := validate.Struct(invalidUser); err != nil {
 		fmt.Printf("Validation failed (expected):\n%v\n", err)
 	} else {
 		fmt.Println("Validation passed (unexpected)")
@@ -97,7 +97,7 @@ func main() {
 		Password: "123", // Too short
 	}
 
-	if err := v.Struct(shortPasswordUser); err != nil {
+	if err := validate.Struct(shortPasswordUser); err != nil {
 		fmt.Printf("Validation failed (expected):\n%v\n", err)
 	} else {
 		fmt.Println("Validation passed (unexpected)")
@@ -108,7 +108,7 @@ func main() {
 	field := "email"
 	value := "not-an-email"
 
-	if err := v.Var(value, field); err != nil {
+	if err := validate.Var(value, field); err != nil {
 		fmt.Printf("Field validation failed for %s: %v\n", field, err)
 	} else {
 		fmt.Printf("Field validation passed for %s\n", field)
@@ -126,7 +126,7 @@ func main() {
 		PasswordConfirm: "securepassword",
 	}
 
-	if err := v.Struct(validPC); err != nil {
+	if err := validate.Struct(validPC); err != nil {
 		fmt.Printf("Cross-field validation failed: %v\n", err)
 	} else {
 		fmt.Println("Cross-field validation passed!")
@@ -137,7 +137,7 @@ func main() {
 		PasswordConfirm: "differentpassword",
 	}
 
-	if err := v.Struct(invalidPC); err != nil {
+	if err := validate.Struct(invalidPC); err != nil {
 		fmt.Printf("Cross-field validation failed (expected):\n%v\n", err)
 	} else {
 		fmt.Println("Cross-field validation passed (unexpected)")

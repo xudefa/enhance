@@ -154,9 +154,9 @@ func (aw *AdaptiveWeight) RecordConnection(backendURL string, delta int64) {
 // GetStats 获取后端统计信息
 func (aw *AdaptiveWeight) GetStats(backendURL string) (*BackendStats, bool) {
 	if value, ok := aw.stats.Load(backendURL); ok {
-		s, _ := value.(*BackendStats)
-		if s != nil {
-			return s, true
+		stats, _ := value.(*BackendStats)
+		if stats != nil {
+			return stats, true
 		}
 	}
 	return nil, false
@@ -164,14 +164,14 @@ func (aw *AdaptiveWeight) GetStats(backendURL string) (*BackendStats, bool) {
 
 // GetAllStats 获取所有后端统计信息
 func (aw *AdaptiveWeight) GetAllStats() map[string]*BackendStats {
-	result := make(map[string]*BackendStats)
+	statsMap := make(map[string]*BackendStats)
 	aw.stats.Range(func(key, value any) bool {
 		k, _ := key.(string)
 		v, _ := value.(*BackendStats)
-		result[k] = v
+		statsMap[k] = v
 		return true
 	})
-	return result
+	return statsMap
 }
 
 // GetAvgResponseTime 获取平均响应时间

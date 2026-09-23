@@ -27,18 +27,22 @@ package consul
 // ==================== 配置键常量 ====================
 
 const (
-	// Consul 配置
+	// ConsulEnabled 是否启用 Consul。
 	ConsulEnabled = "consul.enabled"
-	ConsulHost    = "consul.host"
-	ConsulPort    = "consul.port"
-	ConsulToken   = "consul.token"
+	// ConsulHost Consul 服务器地址。
+	ConsulHost = "consul.host"
+	// ConsulPort Consul 服务器端口。
+	ConsulPort = "consul.port"
+	// ConsulToken Consul 访问令牌。
+	ConsulToken = "consul.token"
 )
 
 // ==================== 默认值常量 ====================
 
 const (
-	// Consul 默认值
+	// DefaultConsulHost 默认 Consul 主机地址。
 	DefaultConsulHost = "localhost"
+	// DefaultConsulPort 默认 Consul 端口。
 	DefaultConsulPort = 8500
 
 	// 条件值常量
