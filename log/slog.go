@@ -51,15 +51,14 @@ func WithOutputPath(path string) Option {
 	return func(l *SlogLogger) {
 		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
+			slog.Error("failed to open log file, keeping current output", "path", path, "error", err)
 			return
 		}
-		// 关闭旧文件句柄（如果存在）
 		if l.file != nil {
 			_ = l.file.Close()
 		}
 		l.output = file
 		l.file = file
-		// 重新创建 handler 和 logger 以使用新的输出
 		l.slogLevel = l.toSlogLevel(l.level)
 		handlerOptions := &slog.HandlerOptions{
 			Level:     l.slogLevel,

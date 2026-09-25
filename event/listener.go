@@ -208,7 +208,17 @@ func (b *EventBusWithOrdering) executeListenerOl(event ApplicationEvent, ol *ord
 		b.invokeAsyncHandler(event, ol.config.Handler)
 		return
 	}
-	ol.config.Handler(event)
+	func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("event listener panic recovered",
+					"event_type", event.Type(),
+					"recover", rec,
+				)
+			}
+		}()
+		ol.config.Handler(event)
+	}()
 }
 
 // invokeAsyncHandler 在后台并发执行事件处理器，带 panic 恢复与超时保护。

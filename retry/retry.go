@@ -107,12 +107,20 @@ func (p RetryPolicy) CalculateDelay(attempt int) time.Duration {
 		delay = p.InitialDelay
 	case BackoffLinear:
 		delay = p.InitialDelay * time.Duration(attempt+1)
+		if p.MaxDelay > 0 && delay > p.MaxDelay {
+			delay = p.MaxDelay
+		}
 	case BackoffExponential:
-		shift := attempt
+		shift := uint(attempt)
 		if shift > maxExponentialShift {
 			shift = maxExponentialShift
 		}
-		delay = p.InitialDelay * time.Duration(float64(int64(1)<<uint(shift))*p.Multiplier)
+		if p.MaxDelay > 0 {
+			if safeShift := maxSafeShift(p.InitialDelay, p.MaxDelay); shift > safeShift {
+				shift = safeShift
+			}
+		}
+		delay = p.InitialDelay * time.Duration(float64(int64(1)<<shift)*p.Multiplier)
 	default:
 		delay = p.InitialDelay
 	}

@@ -98,6 +98,7 @@ type histogramShard struct {
 type simpleHistogram struct {
 	name   string
 	tags   map[string]string
+	tagsMu sync.RWMutex
 	shards [8]*histogramShard // 8 分片
 }
 
@@ -140,19 +141,22 @@ func (h *simpleHistogram) Record(v float64) {
 // RecordWithLabels 记录带标签的值
 func (h *simpleHistogram) RecordWithLabels(v float64, labels map[string]string) {
 	if len(labels) > 0 {
-		// 简化处理：直接合并（实际应该使用更安全的并发方式）
+		h.tagsMu.Lock()
 		if h.tags == nil {
 			h.tags = make(map[string]string)
 		}
 		for k, val := range labels {
 			h.tags[k] = val
 		}
+		h.tagsMu.Unlock()
 	}
 	h.Record(v)
 }
 
 // tagsSnapshot 返回标签的快照副本
 func (h *simpleHistogram) tagsSnapshot() map[string]string {
+	h.tagsMu.RLock()
+	defer h.tagsMu.RUnlock()
 	return copyTags(h.tags)
 }
 

@@ -106,9 +106,15 @@ func (a *auditorImpl) Log(event Event) {
 		case <-a.doneChan:
 			return
 		default:
+			a.mu.Lock()
+			if a.closed {
+				a.mu.Unlock()
+				return
+			}
 			if err := a.writer.Write(event); err != nil {
 				fmt.Fprintf(os.Stderr, "[audit] failed to write audit event: %v\n", err)
 			}
+			a.mu.Unlock()
 		}
 		return
 	}

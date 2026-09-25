@@ -75,10 +75,14 @@ func (r *LeakyBucketRateLimiter) Allow(key string) bool {
 
 	if !exists {
 		r.buckets[key] = &leakyBucket{
-			tokens:   1,
+			tokens:   0,
 			lastLeak: now,
 		}
-		return true
+		if r.capacity > 0 {
+			r.buckets[key].tokens = 1
+			return true
+		}
+		return false
 	}
 
 	if r.rate <= 0 {

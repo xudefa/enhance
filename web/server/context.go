@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -80,7 +81,6 @@ func (c *DefaultContext) Header(key string) string {
 
 // BindJSON 解析 JSON 请求体
 func (c *DefaultContext) BindJSON(target any) error {
-	defer func() { _ = c.request.Body.Close() }()
 	body, err := io.ReadAll(http.MaxBytesReader(c.writer, c.request.Body, 10<<20)) // 10 MB
 	if err != nil {
 		return fmt.Errorf("failed to read request body: %w", err)
@@ -88,6 +88,7 @@ func (c *DefaultContext) BindJSON(target any) error {
 	if err := json.Unmarshal(body, target); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w", err)
 	}
+	c.request.Body = io.NopCloser(bytes.NewReader(body))
 	return nil
 }
 
@@ -106,8 +107,11 @@ func (c *DefaultContext) JSON(code int, data any) error {
 	c.writer.Header().Set("Content-Type", "application/json")
 	body, err := json.Marshal(data)
 	if err != nil {
-		// 序列化失败时直接返回 500，避免客户端收到空的 200 响应
-		c.writer.WriteHeader(http.StatusInternalServerError)
+		errorCode := code
+		if errorCode < 400 {
+			errorCode = http.StatusInternalServerError
+		}
+		c.writer.WriteHeader(errorCode)
 		_, _ = c.writer.Write([]byte(`{"error": "json marshal failed"}`))
 		return fmt.Errorf("failed to marshal JSON response: %w", err)
 	}

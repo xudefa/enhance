@@ -145,17 +145,20 @@ func (m *DelegatingMessageSource) GetMessage(code string, args ...any) string {
 // GetMessageWithLocale 使用指定区域获取消息。
 func (m *DelegatingMessageSource) GetMessageWithLocale(code string, locale Locale, args ...any) string {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	children := make([]MessageSource, len(m.children))
+	copy(children, m.children)
+	parent := m.parent
+	m.mu.RUnlock()
 
-	for _, child := range m.children {
+	for _, child := range children {
 		msg := child.GetMessageWithLocale(code, locale, args...)
 		if msg != code {
 			return msg
 		}
 	}
 
-	if m.parent != nil {
-		return m.parent.GetMessageWithLocale(code, locale, args...)
+	if parent != nil {
+		return parent.GetMessageWithLocale(code, locale, args...)
 	}
 
 	return code

@@ -236,12 +236,13 @@ type RetryableClient struct {
 
 // CircuitBreaker 断路器。
 type CircuitBreaker struct {
-	mu           sync.Mutex // 并发锁
-	maxFailures  int
-	resetTimeout time.Duration
-	failures     int
-	lastFailure  time.Time
-	state        CircuitState
+	mu            sync.Mutex // 并发锁
+	maxFailures   int
+	resetTimeout  time.Duration
+	failures      int
+	lastFailure   time.Time
+	state         CircuitState
+	halfOpenTrips int // 半开状态已放行的探测请求数
 }
 
 // CircuitBreakerClient 带断路器的 HTTP 客户端。

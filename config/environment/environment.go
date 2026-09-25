@@ -77,8 +77,8 @@ func (e *Environment) AddPropertySource(source PropertySource) {
 func (e *Environment) AddPropertySourceFirst(source PropertySource) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.sortSources()
 	e.sources = append(e.sources, source)
+	e.sortSources()
 }
 
 // GetPropertySources 获取所有配置源列表.

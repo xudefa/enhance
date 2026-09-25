@@ -237,6 +237,9 @@ func (e *ExponentialBackoff) Delay(attempt int) time.Duration {
 	jitter := delay / 2
 	delay = delay - jitter + time.Duration(randInt64(int64(jitter*2)))
 
+	if delay < 0 {
+		delay = 0
+	}
 	if delay > e.maxDelay {
 		delay = e.maxDelay
 	}

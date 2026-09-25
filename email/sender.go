@@ -113,12 +113,20 @@ func (s *smtpSender) Send(ctx context.Context, msg *Message) error {
 
 	body := s.buildMessage(msg, from)
 
-	err := smtp.SendMail(addr, s.buildAuth(), from, msg.To, []byte(body))
-	if err != nil {
-		return fmt.Errorf("failed to send email: %w", err)
-	}
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- smtp.SendMail(addr, s.buildAuth(), from, msg.To, []byte(body))
+	}()
 
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-resultCh:
+		if err != nil {
+			return fmt.Errorf("failed to send email: %w", err)
+		}
+		return nil
+	}
 }
 
 // Close 关闭发送器。

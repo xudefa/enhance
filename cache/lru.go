@@ -300,9 +300,15 @@ func (c *LRUCache) Len() int {
 // Clear 清空缓存。
 func (c *LRUCache) Clear() {
 	c.mu.Lock()
+	var evicted []evictedEntry
+	for _, elem := range c.items {
+		evicted = append(evicted, c.removeElement(elem)...)
+	}
 	c.items = make(map[string]*list.Element, c.capacity)
 	c.evictList = list.New()
 	c.mu.Unlock()
+
+	c.fireEvicted(evicted)
 }
 
 // evictOldest 淘汰最久未使用的项。

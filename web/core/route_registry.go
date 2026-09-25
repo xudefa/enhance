@@ -101,11 +101,11 @@ func (r *RouteRegistry) RegisterToMux(mux *http.ServeMux) error {
 	seen := make(map[string]string)
 	for _, route := range routes {
 		key := route.Method + " " + route.Path
-		if prevKey, ok := seen[key]; ok {
-			return fmt.Errorf("duplicate route %s: %s and %s",
-				key, prevKey, route.Method+" "+route.Path)
+		if prevHandler, ok := seen[key]; ok {
+			return fmt.Errorf("duplicate route %s: previously registered by %s, now by %s.%s",
+				key, prevHandler, route.StructName, route.MethodName)
 		}
-		seen[key] = route.Method
+		seen[key] = route.StructName + "." + route.MethodName
 	}
 
 	for _, route := range routes {

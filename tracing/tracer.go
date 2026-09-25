@@ -284,10 +284,12 @@ func (t *Tracer) GetSpanCount() int64 {
 // GetActiveSpanCount 获取当前活跃的 Span 数量。
 func (t *Tracer) GetActiveSpanCount() int {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
+	spans := make([]*Span, len(t.spans))
+	copy(spans, t.spans)
+	t.mu.RUnlock()
 
 	count := 0
-	for _, s := range t.spans {
+	for _, s := range spans {
 		s.mu.Lock()
 		ended := s.Ended
 		s.mu.Unlock()

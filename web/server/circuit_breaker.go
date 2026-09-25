@@ -72,11 +72,16 @@ func (cb *CircuitBreaker) AllowRequest() bool {
 	case CircuitOpen:
 		if time.Since(cb.lastFailure) > cb.resetTimeout {
 			cb.state = CircuitHalfOpen
+			cb.halfOpenTrips = 0
 			return true
 		}
 		return false
 	case CircuitHalfOpen:
-		return true
+		if cb.halfOpenTrips < 1 {
+			cb.halfOpenTrips++
+			return true
+		}
+		return false
 	}
 	return false
 }

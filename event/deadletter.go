@@ -163,8 +163,9 @@ func (dlq *DeadLetterQueue) Remove(event ApplicationEvent) {
 		}
 		if fe.Event.Type() == eventType && fe.Event.Timestamp().Equal(eventTime) {
 			dlq.events.Delete(key)
-			dlq.size.Add(-1)
-			return false
+			if dlq.size.Load() > 0 {
+				dlq.size.Add(-1)
+			}
 		}
 		return true
 	})
@@ -193,9 +194,9 @@ func (dlq *DeadLetterQueue) Clear() {
 	defer dlq.mu.Unlock()
 	dlq.events.Range(func(key, value any) bool {
 		dlq.events.Delete(key)
-		dlq.size.Add(-1)
 		return true
 	})
+	dlq.size.Store(0)
 }
 
 // GetByType 获取指定类型的所有失败事件（快照）

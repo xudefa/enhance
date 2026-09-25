@@ -149,10 +149,15 @@ func (b *EventBusWithDeadLetter) publishWithRecoveryInternal(event ApplicationEv
 	case outcome = <-resultCh:
 	case <-timer.C:
 		outcome = publishResult{err: fmt.Errorf("event handler timeout after 30s")}
+		b.mu.Lock()
+		delete(b.retrying, key)
+		b.mu.Unlock()
+		go func() { <-resultCh }()
 	case <-b.ctx.Done():
 		b.mu.Lock()
 		delete(b.retrying, key)
 		b.mu.Unlock()
+		go func() { <-resultCh }()
 		return
 	}
 

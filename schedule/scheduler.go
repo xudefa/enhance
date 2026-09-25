@@ -104,6 +104,7 @@ type DefaultScheduler struct {
 	cancel       context.CancelFunc
 	done         chan struct{}
 	wg           sync.WaitGroup
+	notify       chan struct{} // 注册/注销任务时通知主循环
 }
 
 // NewScheduler 创建调度器实例。
@@ -131,6 +132,7 @@ func NewScheduler(ctx context.Context, opts ...SchedulerOption) *DefaultSchedule
 		ctx:          ctx,
 		cancel:       cancel,
 		done:         make(chan struct{}),
+		notify:       make(chan struct{}, 1),
 	}
 
 	heap.Init(&scheduler.heap)
@@ -147,12 +149,12 @@ func (s *DefaultScheduler) Start(ctx context.Context) error {
 	}
 
 	s.running = true
+	s.done = make(chan struct{})
 	s.mu.Unlock()
 
 	s.logger.Info(s.ctx, "scheduler started",
 		log.KeyValue{Key: "pool_size", Value: s.poolSize})
 
-	s.done = make(chan struct{})
 	go s.run()
 
 	return nil
@@ -163,18 +165,16 @@ func (s *DefaultScheduler) run() {
 	defer close(s.done)
 
 	for {
-		select {
-		case <-s.ctx.Done():
-			s.logger.Info(s.ctx, "scheduler stopping")
-			return
-		default:
-		}
-
 		s.mu.Lock()
 		if s.heap.Len() == 0 {
 			s.mu.Unlock()
-			time.Sleep(100 * time.Millisecond)
-			continue
+			select {
+			case <-s.ctx.Done():
+				s.logger.Info(s.ctx, "scheduler stopping")
+				return
+			case <-s.notify:
+				continue
+			}
 		}
 
 		next := s.heap[0]
@@ -378,6 +378,11 @@ func (s *DefaultScheduler) Register(task Task) error {
 	s.tasks[task.Name()] = st
 	heap.Push(&s.heap, st)
 
+	select {
+	case s.notify <- struct{}{}:
+	default:
+	}
+
 	s.logger.Info(s.ctx, "task registered",
 		log.KeyValue{Key: "task", Value: task.Name()},
 		log.KeyValue{Key: "cron", Value: task.Cron()},
@@ -401,6 +406,11 @@ func (s *DefaultScheduler) Unregister(name string) bool {
 		heap.Remove(&s.heap, st.index)
 	}
 	delete(s.tasks, name)
+
+	select {
+	case s.notify <- struct{}{}:
+	default:
+	}
 
 	s.logger.Info(s.ctx, "task unregistered",
 		log.KeyValue{Key: "task", Value: name})

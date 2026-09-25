@@ -82,45 +82,51 @@ func (m *refreshManager) Refresh() error {
 // 首次调用时会建立初始快照。
 func (m *refreshManager) collectChangedKeys() []string {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	snapshot := m.lastSnapshot
-	if snapshot == nil {
+	if m.lastSnapshot == nil {
 		m.initSnapshotLocked()
+		m.mu.Unlock()
 		return nil
 	}
 
+	snapshotCopy := make(map[string]any, len(m.lastSnapshot))
+	for k, v := range m.lastSnapshot {
+		snapshotCopy[k] = v
+	}
+	m.mu.Unlock()
+
 	var changed []string
 
-	// 检测已有键的变化或删除
-	for key, oldVal := range snapshot {
+	for key, oldVal := range snapshotCopy {
 		if newVal, ok := m.env.GetProperty(key); ok {
 			if !reflect.DeepEqual(oldVal, newVal) {
 				changed = append(changed, key)
-				snapshot[key] = newVal
+				snapshotCopy[key] = newVal
 			}
 		} else {
 			changed = append(changed, key)
-			delete(snapshot, key)
+			delete(snapshotCopy, key)
 		}
 	}
 
-	// 检测新增的键
 	type keyEnumerator interface {
 		Keys() []string
 	}
 	for _, source := range m.env.GetPropertySources() {
 		if ks, ok := source.(keyEnumerator); ok {
 			for _, key := range ks.Keys() {
-				if _, exists := snapshot[key]; !exists {
+				if _, exists := snapshotCopy[key]; !exists {
 					if currentVal, ok := m.env.GetProperty(key); ok {
-						snapshot[key] = currentVal
+						snapshotCopy[key] = currentVal
 						changed = append(changed, key)
 					}
 				}
 			}
 		}
 	}
+
+	m.mu.Lock()
+	m.lastSnapshot = snapshotCopy
+	m.mu.Unlock()
 
 	return changed
 }

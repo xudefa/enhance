@@ -241,8 +241,9 @@ func (m *tenantManagerImpl) RegisterTenant(tenant *Tenant) {
 	m.tenants[tenant.ID] = tenant
 }
 
-// getTenantLocked 在持有读锁的情况下获取租户，复用公共查找逻辑
-func (m *tenantManagerImpl) getTenantLocked(tenantID string) (*Tenant, error) {
+// getTenantFromMap 从 map 中查找租户。
+// 调用前提：调用者必须持有 m.mu 的读锁或写锁。
+func (m *tenantManagerImpl) getTenantFromMap(tenantID string) (*Tenant, error) {
 	tenant, exists := m.tenants[tenantID]
 	if !exists {
 		return nil, fmt.Errorf("tenant %s not found", tenantID)
@@ -255,7 +256,7 @@ func (m *tenantManagerImpl) GetTenant(tenantID string) (*Tenant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.getTenantLocked(tenantID)
+	return m.getTenantFromMap(tenantID)
 }
 
 // SetCurrentTenant 设置当前租户。
@@ -266,7 +267,7 @@ func (m *tenantManagerImpl) SetCurrentTenant(tenantID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	tenant, err := m.getTenantLocked(tenantID)
+	tenant, err := m.getTenantFromMap(tenantID)
 	if err != nil {
 		return err
 	}

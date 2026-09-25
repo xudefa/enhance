@@ -85,6 +85,9 @@ func (m *WatchManager) AddSource(name string, ch chan WatchEvent) {
 func (m *WatchManager) GetSource(name string) (chan WatchEvent, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if m.sources == nil {
+		return nil, false
+	}
 	ch, ok := m.sources[name]
 	return ch, ok
 }

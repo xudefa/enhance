@@ -198,15 +198,19 @@ func (e *AsyncExecutor) Submit(fn func() (any, error)) *Future {
 	}
 	e.mu.Unlock()
 
-	// 使用 recover 捕获向已关闭 channel 发送时的 panic
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// 向已关闭的 channel 发送会 panic，捕获后设置错误
 				future.setResult(nil, fmt.Errorf("executor is shutdown"))
 			}
 		}()
-		e.taskQueue <- task
+		select {
+		case e.taskQueue <- task:
+		case <-e.done:
+			future.setResult(nil, fmt.Errorf("executor is shutdown"))
+		default:
+			future.setResult(nil, fmt.Errorf("executor queue is full"))
+		}
 	}()
 
 	return future

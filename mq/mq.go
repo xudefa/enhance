@@ -75,6 +75,7 @@ func ReleaseMessage(msg *Message) {
 	}
 	msg.acknowledged.Store(0)
 	msg.RetryCount = 0
+	msg.MaxRetries = DefaultMaxRetries
 	msg.Body = nil
 	msg.QueueName = ""
 	msg.Timestamp = time.Time{}
@@ -183,20 +184,22 @@ func (q *InMemoryQueue) Send(msg *Message) error {
 	}
 
 	msg.nack = func(requeue bool) {
-		q.mu.Lock()
-		defer q.mu.Unlock()
+		go func() {
+			q.mu.Lock()
+			defer q.mu.Unlock()
 
-		if requeue && msg.RetryCount < msg.MaxRetries {
-			msg.RetryCount++
-			msg.acknowledged.Store(0) // 重置确认状态以便重新入队
-			q.messages.PushBack(msg)
-			q.cond.Signal()
-		} else if q.deadLetterQueue != nil {
-			msg.acknowledged.Store(0) // 重置确认状态，使 DLQ 消费者可以 Ack/Nack
-			if err := q.deadLetterQueue.Send(msg); err != nil {
-				slog.Error("failed to send to dead letter queue", "error", err)
+			if requeue && msg.RetryCount < msg.MaxRetries {
+				msg.RetryCount++
+				msg.acknowledged.Store(0)
+				q.messages.PushBack(msg)
+				q.cond.Signal()
+			} else if q.deadLetterQueue != nil {
+				msg.acknowledged.Store(0)
+				if err := q.deadLetterQueue.Send(msg); err != nil {
+					slog.Error("failed to send to dead letter queue", "error", err)
+				}
 			}
-		}
+		}()
 	}
 
 	q.messages.PushBack(msg)

@@ -160,7 +160,7 @@ func extractInvokeError(results []reflect.Value, fnType reflect.Type) error {
 	if !ok {
 		return nil
 	}
-	return fmt.Errorf("extract error from result: %w", err)
+	return err
 }
 
 // isNilValue 判断 reflect.Value 是否为 nil，支持 interface 包裹的 typed-nil。

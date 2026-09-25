@@ -78,19 +78,23 @@ func (b *breakerImpl) Allow() error {
 	case StateOpen:
 		lastChange := time.Unix(0, b.lastStateChange.Load())
 		if time.Since(lastChange) > b.waitDuration {
-			// 尝试转换为半开状态
 			b.mu.Lock()
-			// 双重检查
-			if State(b.state.Load()) == StateOpen && time.Since(lastChange) > b.waitDuration {
-				b.state.Store(int32(StateHalfOpen))
-				b.halfOpenRequests.Store(0)
-				b.successes.Store(0)
-				b.errors.Store(0)
-				b.requests.Store(0)
-				b.lastStateChange.Store(time.Now().UnixNano())
+			if State(b.state.Load()) == StateOpen {
+				lastChangeLocked := time.Unix(0, b.lastStateChange.Load())
+				if time.Since(lastChangeLocked) > b.waitDuration {
+					b.state.Store(int32(StateHalfOpen))
+					b.halfOpenRequests.Store(0)
+					b.successes.Store(0)
+					b.errors.Store(0)
+					b.requests.Store(0)
+					b.lastStateChange.Store(time.Now().UnixNano())
+				}
 			}
 			b.mu.Unlock()
-			return nil
+			if State(b.state.Load()) == StateHalfOpen {
+				return nil
+			}
+			return ErrCircuitOpen
 		}
 		return ErrCircuitOpen
 	case StateHalfOpen:
@@ -128,9 +132,14 @@ func (b *breakerImpl) RecordSuccess() {
 		const resetWindow = 1000
 		if b.requests.Load() >= resetWindow {
 			b.mu.Lock()
-			// 双重检查：确保仍然是 Closed 状态且计数器达到阈值
 			if State(b.state.Load()) == StateClosed && b.requests.Load() >= resetWindow {
-				b.resetCounters()
+				total := b.requests.Load()
+				errorRate := float64(b.errors.Load()) / float64(total)
+				if errorRate >= b.errorThreshold {
+					b.transitionToOpen()
+				} else {
+					b.resetCounters()
+				}
 			}
 			b.mu.Unlock()
 		}

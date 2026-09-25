@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -139,6 +140,7 @@ func CORS(config ...CORSConfig) core.MiddlewareFunc {
 		for _, o := range cfg.AllowOrigins {
 			if o == "*" {
 				cfg.AllowCredentials = false
+				slog.Warn("CORS: AllowCredentials=true with AllowOrigins=[*] is not allowed by spec, disabling AllowCredentials")
 				break
 			}
 		}
