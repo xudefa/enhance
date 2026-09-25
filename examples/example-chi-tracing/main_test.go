@@ -17,36 +17,15 @@ import (
 	"github.com/xudefa/enhance/tracing"
 )
 
+// monitoringEndpoint 描述一个监控端点及其展示名称。
+type monitoringEndpoint struct {
+	name string
+	path string
+}
+
 func TestChiTracingIntegration(t *testing.T) {
-	tt.Parallel()
-	router := chi.NewRouter()
-
-	app, err := boot.NewApplication(
-		boot.WithAppName("test-chi-tracing"),
-		boot.WithProperty("chi.enabled", "true"),
-		boot.WithProperty("tracing.enabled", "true"),
-		boot.WithProperty("tracing.service_name", "test-service"),
-		boot.WithProperty("tracing.sampling_rate", "1.0"),
-		boot.WithProperty("actuator.enabled", "true"),
-	)
-	if err != nil {
-		t.Fatalf("创建应用失败: %v", err)
-	}
+	router, app, tracer := newTestServer(t, "test-chi-tracing")
 	defer app.Stop()
-
-	ctx := app.Context()
-	if err := ctx.Container().RegisterInstance(router, reflect.TypeFor[*chi.Mux]()); err != nil {
-		t.Fatalf("注册 Chi Router 失败: %v", err)
-	}
-
-	if err := app.Start(); err != nil {
-		t.Fatalf("启动应用失败: %v", err)
-	}
-
-	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
-	if err != nil {
-		t.Fatalf("未找到 Tracer: %v", err)
-	}
 
 	router.Get("/api/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -71,107 +50,22 @@ func TestChiTracingIntegration(t *testing.T) {
 	})
 
 	t.Run("测试正常请求", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/hello", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
-		}
-
-		var resp map[string]string
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("解码响应失败: %v", err)
-		}
-		if resp["message"] != "ok" {
-			t.Errorf("期望响应 message='ok'，实际 '%s'", resp["message"])
-		}
+		testHelloEndpoint(t, router)
 	})
-
 	t.Run("测试错误请求", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/error", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusInternalServerError {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusInternalServerError, w.Code)
-		}
+		testErrorEndpoint(t, router)
 	})
-
 	t.Run("测试链路数据", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/spans", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
-		}
-
-		var resp map[string]interface{}
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("解码响应失败: %v", err)
-		}
-		if resp["total_spans"] == nil {
-			t.Error("期望返回链路数据，实际为空")
-		}
+		testSpansEndpoint(t, router)
 	})
-
 	t.Run("测试链路传播", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/hello", nil)
-		req.Header.Set("X-Trace-ID", "test-trace-123")
-		req.Header.Set("X-Span-ID", "test-span-456")
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
-		}
-
-		traceID := w.Header().Get("X-Trace-ID")
-		if traceID == "" {
-			t.Error("响应头中缺少 X-Trace-ID")
-		}
-
-		spanID := w.Header().Get("X-Span-ID")
-		if spanID == "" {
-			t.Error("响应头中缺少 X-Span-ID")
-		}
+		testTracePropagation(t, router)
 	})
 }
 
 func TestChiTracingHTTP(t *testing.T) {
-	tt.Parallel()
-	router := chi.NewRouter()
-
-	app, err := boot.NewApplication(
-		boot.WithAppName("test-chi-tracing-http"),
-		boot.WithProperty("chi.enabled", "true"),
-		boot.WithProperty("chi.port", "18084"),
-		boot.WithProperty("tracing.enabled", "true"),
-		boot.WithProperty("tracing.service_name", "test-service"),
-		boot.WithProperty("tracing.sampling_rate", "1.0"),
-		boot.WithProperty("actuator.enabled", "true"),
-	)
-	if err != nil {
-		t.Fatalf("创建应用失败: %v", err)
-	}
+	router, app, tracer := newHTTPServer(t, "test-chi-tracing-http")
 	defer app.Stop()
-
-	ctx := app.Context()
-	if err := ctx.Container().RegisterInstance(router, reflect.TypeFor[*chi.Mux]()); err != nil {
-		t.Fatalf("注册 Chi Router 失败: %v", err)
-	}
-
-	go app.Start()
-
-	if err := waitForServer("http://localhost:18084/api/hello", 10, 500*time.Millisecond); err != nil {
-		t.Fatalf("Server did not start in time: %v", err)
-	}
-
-	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
-	if err != nil {
-		t.Fatalf("未找到 Tracer: %v", err)
-	}
 
 	router.Get("/api/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -190,133 +84,26 @@ func TestChiTracingHTTP(t *testing.T) {
 	})
 
 	t.Run("HTTP 正常请求", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:18084/api/hello")
-		if err != nil {
-			t.Fatalf("请求失败: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
-		}
-
-		traceID := resp.Header.Get("X-Trace-ID")
-		if traceID == "" {
-			t.Error("响应头中缺少 X-Trace-ID")
-		}
+		assertGetOKWithTraceID(t, "http://localhost:18084/api/hello")
 	})
-
 	t.Run("HTTP 查看链路数据", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:18084/api/spans")
-		if err != nil {
-			t.Fatalf("请求失败: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
-		}
-
-		body, _ := io.ReadAll(resp.Body)
-		if len(body) == 0 {
-			t.Error("期望返回链路数据，实际为空")
-		}
+		assertGetNonEmptyBody(t, "http://localhost:18084/api/spans")
 	})
-
 	t.Run("HTTP 监控端点-健康检查", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:18084/actuator/health")
-		if err != nil {
-			t.Fatalf("请求失败: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
-		}
-
-		traceID := resp.Header.Get("X-Trace-ID")
-		if traceID == "" {
-			t.Error("监控端点响应头中缺少 X-Trace-ID")
-		}
-
-		spanID := resp.Header.Get("X-Span-ID")
-		if spanID == "" {
-			t.Error("监控端点响应头中缺少 X-Span-ID")
-		}
-
-		t.Logf("监控端点 /actuator/health 链路追踪: TraceID=%s, SpanID=%s", traceID, spanID)
+		assertHealthEndpointTracing(t, "http://localhost:18084/actuator/health")
 	})
-
 	t.Run("HTTP 监控端点-指标", func(t *testing.T) {
-		resp, err := http.Get("http://localhost:18084/actuator/metrics")
-		if err != nil {
-			t.Fatalf("请求失败: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
-		}
-
-		traceID := resp.Header.Get("X-Trace-ID")
-		if traceID == "" {
-			t.Error("监控端点响应头中缺少 X-Trace-ID")
-		}
-
-		t.Logf("监控端点 /actuator/metrics 链路追踪: TraceID=%s", traceID)
+		assertMetricsEndpointTracing(t, "http://localhost:18084/actuator/metrics")
 	})
 }
 
 func TestChiActuatorEndpointsWithTracing(t *testing.T) {
-	tt.Parallel()
-	router := chi.NewRouter()
-
-	app, err := boot.NewApplication(
-		boot.WithAppName("test-chi-actuator-tracing"),
-		boot.WithProperty("chi.enabled", "true"),
-		boot.WithProperty("tracing.enabled", "true"),
-		boot.WithProperty("tracing.service_name", "test-service"),
-		boot.WithProperty("tracing.sampling_rate", "1.0"),
-		boot.WithProperty("actuator.enabled", "true"),
-		boot.WithProperty("actuator.path", "/actuator"),
-	)
-	if err != nil {
-		t.Fatalf("创建应用失败: %v", err)
-	}
+	router, app, tracer := newTestServer(t, "test-chi-actuator-tracing", boot.WithProperty("actuator.path", "/actuator"))
 	defer app.Stop()
 
-	ctx := app.Context()
-	if err := ctx.Container().RegisterInstance(router, reflect.TypeFor[*chi.Mux]()); err != nil {
-		t.Fatalf("注册 Chi Router 失败: %v", err)
-	}
+	logEndpointRegistryState(t, app)
 
-	if err := app.Start(); err != nil {
-		t.Fatalf("启动应用失败: %v", err)
-	}
-
-	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
-	if err != nil {
-		t.Fatalf("未找到 Tracer: %v", err)
-	}
-
-	// 调试：检查 HttpEndpointRegistry 是否已注册
-	registry, err := core.GetByName[actuator.HttpEndpointRegistry](ctx.Container(), "")
-	if err != nil {
-		t.Logf("警告: 未找到 HttpEndpointRegistry: %v", err)
-		// 检查容器中注册的类型
-		types := ctx.Container().Types()
-		t.Logf("容器中注册的类型数量: %d", len(types))
-		for _, typ := range types {
-			t.Logf("  - 类型: %v", typ)
-		}
-	} else {
-		t.Logf("HttpEndpointRegistry 已注册: %T", registry)
-	}
-
-	monitoringEndpoints := []struct {
-		name string
-		path string
-	}{
+	monitoringEndpoints := []monitoringEndpoint{
 		{"健康检查端点", "/actuator/health"},
 		{"指标端点", "/actuator/metrics"},
 		{"环境信息端点", "/actuator/env"},
@@ -326,56 +113,12 @@ func TestChiActuatorEndpointsWithTracing(t *testing.T) {
 
 	for _, ep := range monitoringEndpoints {
 		t.Run("监控端点_"+ep.name, func(t *testing.T) {
-			spansBefore := len(tracer.GetSpans())
-
-			req := httptest.NewRequest(http.MethodGet, ep.path, nil)
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			if w.Code != http.StatusOK {
-				t.Errorf("期望状态码 200，实际 %d", w.Code)
-			}
-
-			spansAfter := len(tracer.GetSpans())
-			if spansAfter <= spansBefore {
-				t.Errorf("期望产生新的链路追踪日志，实际未产生: spans before=%d, after=%d", spansBefore, spansAfter)
-			}
-
-			spans := tracer.GetSpans()
-			if len(spans) == 0 {
-				t.Fatal("未产生任何链路追踪日志")
-			}
-
-			latestSpan := spans[len(spans)-1]
-
-			if latestSpan.Name == "" {
-				t.Error("链路追踪日志中 Span 名称为空")
-			}
-
-			if latestSpan.TraceID == "" {
-				t.Error("链路追踪日志中 TraceID 为空")
-			}
-
-			if latestSpan.SpanID == "" {
-				t.Error("链路追踪日志中 SpanID 为空")
-			}
-
-			if latestSpan.Tags["http.method"] != "GET" {
-				t.Errorf("期望 http.method='GET'，实际 '%s'", latestSpan.Tags["http.method"])
-			}
-
-			if latestSpan.Tags["http.url"] != ep.path {
-				t.Errorf("期望 http.url='%s'，实际 '%s'", ep.path, latestSpan.Tags["http.url"])
-			}
-
-			t.Logf("监控端点 [%s] 链路追踪日志: TraceID=%s, SpanID=%s, Name=%s, Status=%s",
-				ep.name, latestSpan.TraceID, latestSpan.SpanID, latestSpan.Name, latestSpan.Status)
+			assertMonitoringEndpoint(t, router, tracer, ep)
 		})
 	}
 }
 
 func TestChiActuatorEndpointsTracingContextPropagation(t *testing.T) {
-	tt.Parallel()
 	router := chi.NewRouter()
 
 	app, err := boot.NewApplication(
@@ -426,6 +169,292 @@ func TestChiActuatorEndpointsTracingContextPropagation(t *testing.T) {
 			t.Errorf("期望 TraceID 传播 'test-trace-actuator-123'，实际 '%s'", traceID)
 		}
 	})
+}
+
+// newTestServer 构建并同步启动一个测试用 Chi 应用，返回 Router、Boot 与 Tracer。
+func newTestServer(t *testing.T, appName string, extra ...boot.BootOption) (chi.Router, *boot.Boot, *tracing.Tracer) {
+	router := chi.NewRouter()
+
+	opts := []boot.BootOption{
+		boot.WithAppName(appName),
+		boot.WithProperty("chi.enabled", "true"),
+		boot.WithProperty("tracing.enabled", "true"),
+		boot.WithProperty("tracing.service_name", "test-service"),
+		boot.WithProperty("tracing.sampling_rate", "1.0"),
+		boot.WithProperty("actuator.enabled", "true"),
+	}
+	app, err := boot.NewApplication(append(opts, extra...)...)
+	if err != nil {
+		t.Fatalf("创建应用失败: %v", err)
+	}
+
+	ctx := app.Context()
+	if err := ctx.Container().RegisterInstance(router, reflect.TypeFor[*chi.Mux]()); err != nil {
+		t.Fatalf("注册 Chi Router 失败: %v", err)
+	}
+
+	if err := app.Start(); err != nil {
+		t.Fatalf("启动应用失败: %v", err)
+	}
+
+	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
+	if err != nil {
+		t.Fatalf("未找到 Tracer: %v", err)
+	}
+	return router, app, tracer
+}
+
+// newHTTPServer 以异步方式启动 Chi 应用并等待服务就绪，供真实 HTTP 测试使用。
+func newHTTPServer(t *testing.T, appName string) (chi.Router, *boot.Boot, *tracing.Tracer) {
+	router := chi.NewRouter()
+
+	app, err := boot.NewApplication(
+		boot.WithAppName(appName),
+		boot.WithProperty("chi.enabled", "true"),
+		boot.WithProperty("chi.port", "18084"),
+		boot.WithProperty("tracing.enabled", "true"),
+		boot.WithProperty("tracing.service_name", "test-service"),
+		boot.WithProperty("tracing.sampling_rate", "1.0"),
+		boot.WithProperty("actuator.enabled", "true"),
+	)
+	if err != nil {
+		t.Fatalf("创建应用失败: %v", err)
+	}
+
+	ctx := app.Context()
+	if err := ctx.Container().RegisterInstance(router, reflect.TypeFor[*chi.Mux]()); err != nil {
+		t.Fatalf("注册 Chi Router 失败: %v", err)
+	}
+
+	go app.Start()
+
+	if err := waitForServer("http://localhost:18084/api/hello", 10, 500*time.Millisecond); err != nil {
+		t.Fatalf("Server did not start in time: %v", err)
+	}
+
+	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
+	if err != nil {
+		t.Fatalf("未找到 Tracer: %v", err)
+	}
+	return router, app, tracer
+}
+
+// logEndpointRegistryState 输出 HttpEndpointRegistry 在容器中的注册状态（调试用）。
+func logEndpointRegistryState(t *testing.T, app *boot.Boot) {
+	ctx := app.Context()
+	registry, err := core.GetByName[actuator.HttpEndpointRegistry](ctx.Container(), "")
+	if err != nil {
+		t.Logf("警告: 未找到 HttpEndpointRegistry: %v", err)
+		// 检查容器中注册的类型
+		types := ctx.Container().Types()
+		t.Logf("容器中注册的类型数量: %d", len(types))
+		for _, typ := range types {
+			t.Logf("  - 类型: %v", typ)
+		}
+		return
+	}
+	t.Logf("HttpEndpointRegistry 已注册: %T", registry)
+}
+
+// testHelloEndpoint 验证 /api/hello 返回 200 与正确的响应体。
+func testHelloEndpoint(t *testing.T, handler http.Handler) {
+	req := httptest.NewRequest(http.MethodGet, "/api/hello", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("解码响应失败: %v", err)
+	}
+	if resp["message"] != "ok" {
+		t.Errorf("期望响应 message='ok'，实际 '%s'", resp["message"])
+	}
+}
+
+// testErrorEndpoint 验证 /api/error 返回 500 状态码。
+func testErrorEndpoint(t *testing.T, handler http.Handler) {
+	req := httptest.NewRequest(http.MethodGet, "/api/error", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+// testSpansEndpoint 验证 /api/spans 返回链路追踪数据。
+func testSpansEndpoint(t *testing.T, handler http.Handler) {
+	req := httptest.NewRequest(http.MethodGet, "/api/spans", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("解码响应失败: %v", err)
+	}
+	if resp["total_spans"] == nil {
+		t.Error("期望返回链路数据，实际为空")
+	}
+}
+
+// testTracePropagation 验证 X-Trace-ID / X-Span-ID 请求头在响应中回传。
+func testTracePropagation(t *testing.T, handler http.Handler) {
+	req := httptest.NewRequest(http.MethodGet, "/api/hello", nil)
+	req.Header.Set("X-Trace-ID", "test-trace-123")
+	req.Header.Set("X-Span-ID", "test-span-456")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, w.Code)
+	}
+
+	traceID := w.Header().Get("X-Trace-ID")
+	if traceID == "" {
+		t.Error("响应头中缺少 X-Trace-ID")
+	}
+
+	spanID := w.Header().Get("X-Span-ID")
+	if spanID == "" {
+		t.Error("响应头中缺少 X-Span-ID")
+	}
+}
+
+// assertGetOKWithTraceID 发起 GET 请求并断言返回 200 与 X-Trace-ID 响应头。
+func assertGetOKWithTraceID(t *testing.T, url string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
+	}
+
+	traceID := resp.Header.Get("X-Trace-ID")
+	if traceID == "" {
+		t.Error("响应头中缺少 X-Trace-ID")
+	}
+}
+
+// assertGetNonEmptyBody 发起 GET 请求并断言响应体非空。
+func assertGetNonEmptyBody(t *testing.T, url string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		t.Error("期望返回链路数据，实际为空")
+	}
+}
+
+// assertHealthEndpointTracing 验证健康检查端点的链路追踪响应头。
+func assertHealthEndpointTracing(t *testing.T, url string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
+	}
+
+	traceID := resp.Header.Get("X-Trace-ID")
+	if traceID == "" {
+		t.Error("监控端点响应头中缺少 X-Trace-ID")
+	}
+
+	spanID := resp.Header.Get("X-Span-ID")
+	if spanID == "" {
+		t.Error("监控端点响应头中缺少 X-Span-ID")
+	}
+
+	t.Logf("监控端点 /actuator/health 链路追踪: TraceID=%s, SpanID=%s", traceID, spanID)
+}
+
+// assertMetricsEndpointTracing 验证指标端点的链路追踪响应头。
+func assertMetricsEndpointTracing(t *testing.T, url string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("期望状态码 %d，实际 %d", http.StatusOK, resp.StatusCode)
+	}
+
+	traceID := resp.Header.Get("X-Trace-ID")
+	if traceID == "" {
+		t.Error("监控端点响应头中缺少 X-Trace-ID")
+	}
+
+	t.Logf("监控端点 /actuator/metrics 链路追踪: TraceID=%s", traceID)
+}
+
+// assertMonitoringEndpoint 请求监控端点并断言链路追踪日志符合预期。
+func assertMonitoringEndpoint(t *testing.T, handler http.Handler, tracer *tracing.Tracer, ep monitoringEndpoint) {
+	spansBefore := len(tracer.GetSpans())
+
+	req := httptest.NewRequest(http.MethodGet, ep.path, nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("期望状态码 200，实际 %d", w.Code)
+	}
+
+	spansAfter := len(tracer.GetSpans())
+	if spansAfter <= spansBefore {
+		t.Errorf("期望产生新的链路追踪日志，实际未产生: spans before=%d, after=%d", spansBefore, spansAfter)
+	}
+
+	spans := tracer.GetSpans()
+	if len(spans) == 0 {
+		t.Fatal("未产生任何链路追踪日志")
+	}
+
+	latestSpan := spans[len(spans)-1]
+
+	if latestSpan.Name == "" {
+		t.Error("链路追踪日志中 Span 名称为空")
+	}
+
+	if latestSpan.TraceID == "" {
+		t.Error("链路追踪日志中 TraceID 为空")
+	}
+
+	if latestSpan.SpanID == "" {
+		t.Error("链路追踪日志中 SpanID 为空")
+	}
+
+	if latestSpan.Tags["http.method"] != "GET" {
+		t.Errorf("期望 http.method='GET'，实际 '%s'", latestSpan.Tags["http.method"])
+	}
+
+	if latestSpan.Tags["http.url"] != ep.path {
+		t.Errorf("期望 http.url='%s'，实际 '%s'", ep.path, latestSpan.Tags["http.url"])
+	}
+
+	t.Logf("监控端点 [%s] 链路追踪日志: TraceID=%s, SpanID=%s, Name=%s, Status=%s",
+		ep.name, latestSpan.TraceID, latestSpan.SpanID, latestSpan.Name, latestSpan.Status)
 }
 
 func waitForServer(url string, maxRetries int, delay time.Duration) error {

@@ -29,17 +29,9 @@ func main() {
 	fmt.Println("=== Kafka Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
-	app, err := boot.NewApplication(
-		boot.WithAppName("kafka-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := newApp()
 	defer app.Stop()
 
-	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: Kafka connection failed: %v\n", err)
 		fmt.Println("This example requires a running Kafka server.")
@@ -47,16 +39,49 @@ func main() {
 		return
 	}
 
-	// Get the Kafka queue from container
+	if err := getKafkaQueue(app); err != nil {
+		return
+	}
+	ctx := context.Background()
+
+	if err := demoProduce(ctx); err != nil {
+		return
+	}
+	if err := demoConsume(ctx); err != nil {
+		return
+	}
+	if err := demoTopics(); err != nil {
+		return
+	}
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
+	app, err := boot.NewApplication(
+		boot.WithAppName("kafka-example"),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// getKafkaQueue 从容器的 Bean 中获取 Kafka 队列。
+func getKafkaQueue(app *boot.Boot) error {
 	kafkaQueue, err := core.GetByName[KafkaQueue](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get Kafka queue: %v\n", err)
-		return
+		return fmt.Errorf("Failed to get Kafka queue: %w", err)
 	}
 	_ = kafkaQueue // Suppress unused variable warning
+	return nil
+}
 
-	ctx := context.Background()
-
+// demoProduce 演示生产单条与多条消息（Demo 1-2）。
+func demoProduce(ctx context.Context) error {
 	// Demo 1: Produce a message
 	fmt.Println("--- Demo 1: Produce Message ---")
 	producer := &kafka.Writer{
@@ -74,7 +99,7 @@ func main() {
 
 	if err := producer.WriteMessages(ctx, msg); err != nil {
 		fmt.Printf("Failed to produce message: %v\n", err)
-		return
+		return fmt.Errorf("Failed to produce message: %w", err)
 	}
 	fmt.Println("Message produced: event-1")
 
@@ -93,10 +118,14 @@ func main() {
 
 	if err := producer.WriteMessages(ctx, messages...); err != nil {
 		fmt.Printf("Failed to produce messages: %v\n", err)
-		return
+		return fmt.Errorf("Failed to produce messages: %w", err)
 	}
 	fmt.Printf("Produced %d messages\n", len(messages))
+	return nil
+}
 
+// demoConsume 演示在超时时间内的消息消费（Demo 3）。
+func demoConsume(ctx context.Context) error {
 	// Demo 3: Consume messages
 	fmt.Println("\n--- Demo 3: Consume Messages ---")
 	consumer := kafka.NewReader(kafka.ReaderConfig{
@@ -134,6 +163,11 @@ func main() {
 	}
 
 done:
+	return nil
+}
+
+// demoTopics 演示主题与分区信息的展示（Demo 4-5）。
+func demoTopics() error {
 	// Demo 4: List topics
 	fmt.Println("\n--- Demo 4: List Topics ---")
 	fmt.Println("Available topics:")
@@ -146,8 +180,7 @@ done:
 	fmt.Println("  - Partition 0")
 	fmt.Println("  - Partition 1")
 	fmt.Println("  - Partition 2")
-
-	fmt.Println("\n=== Example completed successfully ===")
+	return nil
 }
 
 // KafkaQueue is a placeholder for the actual Kafka queue type

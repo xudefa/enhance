@@ -28,7 +28,34 @@ func main() {
 	fmt.Println("=== OpenTelemetry Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
+	app := newApp()
+	defer app.Stop()
+
+	if err := app.Start(); err != nil {
+		fmt.Printf("Failed to start application: %v\n", err)
+		return
+	}
+
+	provider, err := getTracerProvider(app)
+	if err != nil {
+		return
+	}
+	tracer := provider.Tracer("example-tracer")
+
+	ctx, endSpan := startSimpleSpan(tracer)
+	defer endSpan()
+
+	demoSpanAttributes(tracer, ctx)
+	demoSpanEvents(tracer, ctx)
+	demoSpanStatus(tracer, ctx)
+	endParent := demoNestedSpans(tracer, ctx)
+	defer endParent()
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
 	app, err := boot.NewApplication(
 		boot.WithAppName("otel-example"),
 		boot.WithProfiles("default"),
@@ -36,36 +63,36 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
-	// Start the application (triggers auto-configuration)
-	if err := app.Start(); err != nil {
-		fmt.Printf("Failed to start application: %v\n", err)
-		return
-	}
-
-	// Get the tracer from container
+// getTracerProvider 从容器的 Bean 中获取 OpenTelemetry TracerProvider。
+func getTracerProvider(app *boot.Boot) (trace.TracerProvider, error) {
 	tracerProvider, err := core.GetByName[trace.TracerProvider](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get tracer provider: %v\n", err)
-		return
+		return nil, fmt.Errorf("Failed to get tracer provider: %w", err)
 	}
+	return tracerProvider, nil
+}
 
-	// Get a tracer
-	tracer := tracerProvider.Tracer("example-tracer")
-
+// startSimpleSpan 演示创建简单 Span（Demo 1），并返回派生的上下文与 Span 结束函数。
+func startSimpleSpan(tracer trace.Tracer) (context.Context, func(options ...trace.SpanEndOption)) {
 	// Demo 1: Simple span
 	fmt.Println("--- Demo 1: Simple Span ---")
 	ctx := context.Background()
 	ctx, span := tracer.Start(ctx, "example-operation")
-	defer span.End()
 
 	fmt.Println("Span created: example-operation")
 	span.AddEvent("Operation started")
 	time.Sleep(100 * time.Millisecond)
 	span.AddEvent("Operation completed")
 	fmt.Println("Span ended")
+	return ctx, span.End
+}
 
+// demoSpanAttributes 演示为 Span 附加属性（Demo 2）。
+func demoSpanAttributes(tracer trace.Tracer, ctx context.Context) {
 	// Demo 2: Span with attributes
 	fmt.Println("\n--- Demo 2: Span with Attributes ---")
 	_, span2 := tracer.Start(ctx, "user-operation")
@@ -86,7 +113,10 @@ func main() {
 	fmt.Println("  - user.active: true")
 
 	time.Sleep(100 * time.Millisecond)
+}
 
+// demoSpanEvents 演示向 Span 添加事件（Demo 3）。
+func demoSpanEvents(tracer trace.Tracer, ctx context.Context) {
 	// Demo 3: Span with events
 	fmt.Println("\n--- Demo 3: Span with Events ---")
 	_, span3 := tracer.Start(ctx, "database-operation")
@@ -108,7 +138,10 @@ func main() {
 	fmt.Println("Events:")
 	fmt.Println("  - Query started")
 	fmt.Println("  - Query completed")
+}
 
+// demoSpanStatus 演示设置 Span 状态与记录错误（Demo 4）。
+func demoSpanStatus(tracer trace.Tracer, ctx context.Context) {
 	// Demo 4: Span with status
 	fmt.Println("\n--- Demo 4: Span with Status ---")
 	_, span4 := tracer.Start(ctx, "error-operation")
@@ -119,11 +152,13 @@ func main() {
 
 	fmt.Println("Span with error status created")
 	fmt.Println("Status: ERROR - Operation failed")
+}
 
+// demoNestedSpans 演示嵌套 Span（Demo 5），并返回父 Span 的结束函数。
+func demoNestedSpans(tracer trace.Tracer, ctx context.Context) func(options ...trace.SpanEndOption) {
 	// Demo 5: Nested spans
 	fmt.Println("\n--- Demo 5: Nested Spans ---")
 	ctx5, parentSpan := tracer.Start(ctx, "parent-operation")
-	defer parentSpan.End()
 
 	// Child span 1
 	_, childSpan1 := tracer.Start(ctx5, "child-operation-1")
@@ -139,6 +174,5 @@ func main() {
 	fmt.Println("  - parent-operation")
 	fmt.Println("    - child-operation-1")
 	fmt.Println("    - child-operation-2")
-
-	fmt.Println("\n=== Example completed successfully ===")
+	return parentSpan.End
 }

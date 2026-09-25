@@ -391,36 +391,59 @@ const (
 // ==================== Casbin 配置键常量 ====================
 
 const (
-	CasbinEnabled          = "security.casbin.enabled"
-	CasbinModelType        = "security.casbin.model-type"
-	CasbinModelPath        = "security.casbin.model-path"
-	CasbinModelText        = "security.casbin.model-text"
-	CasbinPolicyType       = "security.casbin.policy-type"
-	CasbinPolicyPath       = "security.casbin.policy-path"
-	CasbinPolicyText       = "security.casbin.policy-text"
-	CasbinAutoLoad         = "security.casbin.auto-load"
+	// CasbinEnabled Casbin 是否启用的配置键。
+	CasbinEnabled = "security.casbin.enabled"
+	// CasbinModelType Casbin 模型加载方式的配置键（file/text）。
+	CasbinModelType = "security.casbin.model-type"
+	// CasbinModelPath Casbin 模型文件路径的配置键。
+	CasbinModelPath = "security.casbin.model-path"
+	// CasbinModelText Casbin 模型文本内容的配置键。
+	CasbinModelText = "security.casbin.model-text"
+	// CasbinPolicyType Casbin 策略加载方式的配置键（file/text）。
+	CasbinPolicyType = "security.casbin.policy-type"
+	// CasbinPolicyPath Casbin 策略文件路径的配置键。
+	CasbinPolicyPath = "security.casbin.policy-path"
+	// CasbinPolicyText Casbin 策略文本内容的配置键。
+	CasbinPolicyText = "security.casbin.policy-text"
+	// CasbinAutoLoad 是否自动加载策略的配置键。
+	CasbinAutoLoad = "security.casbin.auto-load"
+	// CasbinAutoLoadInterval 策略自动加载间隔（秒）的配置键。
 	CasbinAutoLoadInterval = "security.casbin.auto-load-interval"
-	CasbinLogFieldModel    = "model-path"
-	CasbinLogFieldPolicy   = "policy-path"
+	// CasbinLogFieldModel 日志中模型字段名。
+	CasbinLogFieldModel = "model-path"
+	// CasbinLogFieldPolicy 日志中策略字段名。
+	CasbinLogFieldPolicy = "policy-path"
 )
 
 const (
-	DefaultCasbinModelType        = "file"
-	DefaultCasbinModelPath        = "config/casbin_model.conf"
-	DefaultCasbinPolicyType       = "file"
-	DefaultCasbinPolicyPath       = "config/casbin_policy.csv"
-	DefaultCasbinAutoLoad         = false
+	// DefaultCasbinModelType Casbin 模型默认加载方式。
+	DefaultCasbinModelType = "file"
+	// DefaultCasbinModelPath Casbin 模型默认文件路径。
+	DefaultCasbinModelPath = "config/casbin_model.conf"
+	// DefaultCasbinPolicyType Casbin 策略默认加载方式。
+	DefaultCasbinPolicyType = "file"
+	// DefaultCasbinPolicyPath Casbin 策略默认文件路径。
+	DefaultCasbinPolicyPath = "config/casbin_policy.csv"
+	// DefaultCasbinAutoLoad Casbin 策略默认不自动加载。
+	DefaultCasbinAutoLoad = false
+	// DefaultCasbinAutoLoadInterval Casbin 策略默认自动加载间隔（秒）。
 	DefaultCasbinAutoLoadInterval = 5
 )
 
-// CasbinEnforcer Casbin 执行器接口。
+// CasbinEnforcer Casbin 执行器接口，提供权限实施与策略持久化能力。
+// 策略增删查通过组合 PolicyManager 提供。
 type CasbinEnforcer interface {
 	Enforce(ctx context.Context, subject, object, action string) (bool, error)
+	LoadPolicy(ctx context.Context) error
+	SavePolicy(ctx context.Context) error
+	PolicyManager
+}
+
+// PolicyManager 策略管理接口，提供 Casbin 策略的查询与变更能力。
+type PolicyManager interface {
 	AddPolicy(ctx context.Context, sub, obj, act string) error
 	RemovePolicy(ctx context.Context, sub, obj, act string) error
 	GetPolicy(ctx context.Context) ([][]string, error)
-	LoadPolicy(ctx context.Context) error
-	SavePolicy(ctx context.Context) error
 }
 
 // CasbinVoter Casbin 投票者实现。

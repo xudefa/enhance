@@ -170,12 +170,12 @@ func (v *TagValidator) evaluateFieldRules(field reflect.Value, rules []string, f
 		case rule == "required":
 		case strings.Contains(rule, "="):
 			parts := strings.SplitN(rule, "=", 2)
-			errs = v.appendEvalErrors(errs, field, parts[0], parts[1], fieldName)
+			errs = v.appendEvalErrors(errs, field, validationRule{name: parts[0], value: parts[1]}, fieldName)
 		default:
 			// 处理不含参数的规则
 			switch rule {
 			case "email", "url", "ip":
-				errs = v.appendEvalErrors(errs, field, rule, "", fieldName)
+				errs = v.appendEvalErrors(errs, field, validationRule{name: rule}, fieldName)
 			default:
 				errs = v.applyCustomValidator(errs, field, rule, fieldName)
 			}
@@ -219,14 +219,20 @@ func (v *TagValidator) applyCustomValidator(errs []ValidationError, field reflec
 	return errs
 }
 
+// validationRule 一条验证规则（名称=值）。
+type validationRule struct {
+	name  string
+	value string
+}
+
 // appendEvalErrors 按规则名评估验证规则并追加错误。
-func (v *TagValidator) appendEvalErrors(errs []ValidationError, field reflect.Value, ruleName, ruleValue, fieldName string) []ValidationError {
+func (v *TagValidator) appendEvalErrors(errs []ValidationError, field reflect.Value, rule validationRule, fieldName string) []ValidationError {
 	var ruleErrs []ValidationError
-	switch ruleName {
+	switch rule.name {
 	case "min", "max", "gt", "gte", "lt", "lte":
-		ruleErrs = v.validateComparisonRules(field, ruleName, ruleValue, fieldName)
+		ruleErrs = v.validateComparisonRules(field, rule.name, rule.value, fieldName)
 	default:
-		ruleErrs = v.validateFormatRules(field, ruleName, ruleValue, fieldName)
+		ruleErrs = v.validateFormatRules(field, rule.name, rule.value, fieldName)
 	}
 	return append(errs, ruleErrs...)
 }

@@ -171,7 +171,7 @@ func checkLiteral(n ast.Node, usage string, ctx magicCheckContext) {
 	if !ok || !isMagic(numVal) {
 		return
 	}
-	addMagicFinding(literalPos(expr), numVal, usage, ctx.f, ctx.findings, ctx.visited)
+	ctx.addMagicFinding(literalPos(expr), numVal, usage)
 }
 
 // literalPos 负数取数字字面量本身的位置，作为唯一位置去重。
@@ -182,14 +182,15 @@ func literalPos(expr ast.Expr) token.Pos {
 	return expr.Pos()
 }
 
-func addMagicFinding(pos token.Pos, value int64, usage string, f *fileInfo, findings *[]Finding, visited map[token.Pos]bool) {
-	if visited[pos] {
+// addMagicFinding 记录一条魔法数字发现，并按位置去重。
+func (ctx magicCheckContext) addMagicFinding(pos token.Pos, value int64, usage string) {
+	if ctx.visited[pos] {
 		return
 	}
-	visited[pos] = true
-	*findings = append(*findings, Finding{
-		File:       f.path,
-		Line:       f.fset.Position(pos).Line,
+	ctx.visited[pos] = true
+	*ctx.findings = append(*ctx.findings, Finding{
+		File:       ctx.f.path,
+		Line:       ctx.f.fset.Position(pos).Line,
 		Category:   CategoryMagicNumbers,
 		Severity:   SeverityMechanical,
 		Message:    fmt.Sprintf("魔法数字 %d 出现在%s", value, usage),

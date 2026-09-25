@@ -6,12 +6,14 @@ import (
 	"github.com/xudefa/enhance/validation"
 )
 
+// CreateUserRequest 创建用户请求结构。
 type CreateUserRequest struct {
 	Name  string `json:"name" validate:"required"`
 	Email string `json:"email" validate:"required,email"`
 	Age   int    `json:"age" validate:"required,gt=0,lte=130"`
 }
 
+// UpdateUserRequest 更新用户请求结构。
 type UpdateUserRequest struct {
 	Name string `json:"name" validate:"required,min=2,max=50"`
 }

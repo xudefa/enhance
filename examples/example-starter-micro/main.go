@@ -42,19 +42,10 @@ func main() {
 	fmt.Println("=== Micro Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
-	app, err := boot.NewApplication(
-		boot.WithAppName("micro-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := newApp("micro-example")
 	defer app.Stop()
 
-	// Start the application (triggers auto-configuration)
-	if err := app.Start(); err != nil {
-		fmt.Printf("Failed to start application: %v\n", err)
+	if !startApp(app) {
 		return
 	}
 
@@ -63,6 +54,35 @@ func main() {
 	// microService, err := core.GetByName[micro.Service](app.Container(), "")
 	_ = context.Background()
 
+	printMicroConfig()
+	printMicroUsage()
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
+	// Create application with boot
+	app, err := boot.NewApplication(
+		boot.WithAppName(name),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// startApp 启动应用，触发 Micro 自动配置。
+func startApp(app *boot.Boot) bool {
+	// Start the application (triggers auto-configuration)
+	if err := app.Start(); err != nil {
+		fmt.Printf("Failed to start application: %v\n", err)
+		return false
+	}
+	return true
+}
+
+// printMicroConfig 打印 Micro 服务配置信息与核心特性。
+func printMicroConfig() {
 	fmt.Println("--- Micro Service Configuration ---")
 	fmt.Println("Service Name: my-micro-service")
 	fmt.Println("Version: 1.0.0")
@@ -88,7 +108,10 @@ func main() {
 	fmt.Println("   - Distributed tracing")
 	fmt.Println("   - Request correlation")
 	fmt.Println("   - Span propagation")
+}
 
+// printMicroUsage 打印 Micro 服务使用、通信与发现示例。
+func printMicroUsage() {
 	fmt.Println("\n--- Example Usage ---")
 	fmt.Println("// Create a new service")
 	fmt.Println("svc := micro.NewService(")

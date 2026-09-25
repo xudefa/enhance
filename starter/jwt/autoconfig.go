@@ -61,14 +61,7 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	container := ctx.Container()
 	env := ctx.Environment()
 
-	// 从容器获取日志记录器，如果不存在则使用默认值
-	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
-		c.logger = logger
-	} else {
-		c.logger = log.Build()
-		c.logger.Warn(ctx.Context(), "failed to get Logger from container, using default slog",
-			log.KeyValue{Key: "error", Value: err.Error()})
-	}
+	c.resolveLogger(ctx, container)
 	c.logger.Info(ctx.Context(), "configuring JWT authentication...")
 
 	cfg, err := c.loadConfig(env)
@@ -76,6 +69,39 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		return fmt.Errorf("failed to load JWT config: %w", err)
 	}
 
+	c.warnAboutConfig(ctx, cfg)
+
+	tokenProvider, err := c.registerTokenProvider(ctx, container, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to register token provider: %w", err)
+	}
+
+	if err := c.registerAuthFilter(ctx, container, tokenProvider, cfg); err != nil {
+		return fmt.Errorf("failed to register JWT authentication filter: %w", err)
+	}
+
+	// 打印配置信息
+	c.logger.Info(ctx.Context(), "JWT 配置",
+		log.KeyValue{Key: LogFieldSecret, Value: maskSecret(cfg.SecretKey)},
+		log.KeyValue{Key: LogFieldExclude, Value: cfg.ExcludePaths},
+	)
+
+	return nil
+}
+
+// resolveLogger 从容器获取日志记录器，缺省时使用默认实现。
+func (c *JwtAutoConfiguration) resolveLogger(ctx boot.ApplicationContext, container core.Container) {
+	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
+		c.logger = logger
+	} else {
+		c.logger = log.Build()
+		c.logger.Warn(ctx.Context(), "failed to get Logger from container, using default slog",
+			log.KeyValue{Key: "error", Value: err.Error()})
+	}
+}
+
+// warnAboutConfig 校验配置并给出默认密钥/签名方法提示。
+func (c *JwtAutoConfiguration) warnAboutConfig(ctx boot.ApplicationContext, cfg *JwtConfig) {
 	if cfg.SecretKey == "" {
 		cfg.SecretKey = DefaultJWTSecretKey
 		c.logger.Warn(ctx.Context(), "using default secret key, configure "+JWTSecretKey)
@@ -85,8 +111,10 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger.Warn(ctx.Context(), "only HS256 signing method is supported, ignoring configured signing-method",
 			log.KeyValue{Key: "signing-method", Value: cfg.SigningMethod})
 	}
+}
 
-	// 创建 TokenProvider
+// registerTokenProvider 创建并注册 TokenProvider。
+func (c *JwtAutoConfiguration) registerTokenProvider(ctx boot.ApplicationContext, container core.Container, cfg *JwtConfig) (*DefaultTokenProvider, error) {
 	tokenProvider := NewTokenProvider(
 		WithSecretKey(cfg.SecretKey),
 		WithExpiration(time.Duration(cfg.ExpiresDuration)*time.Second),
@@ -94,12 +122,16 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		WithIssuer(cfg.Issuer),
 	)
 
-	// 注册 TokenProvider
 	if err := container.RegisterInstance(tokenProvider, reflect.TypeFor[*DefaultTokenProvider]()); err != nil {
-		return fmt.Errorf("failed to register TokenProvider: %w", err)
+		return nil, fmt.Errorf("failed to register TokenProvider: %w", err)
 	}
 	c.logger.Info(ctx.Context(), "TokenProvider registered")
 
+	return tokenProvider, nil
+}
+
+// registerAuthFilter 创建并注册 JWT 认证过滤器。
+func (c *JwtAutoConfiguration) registerAuthFilter(ctx boot.ApplicationContext, container core.Container, tokenProvider *DefaultTokenProvider, cfg *JwtConfig) error {
 	// 获取 UserDetailsService（可选）
 	var userDetailsService security.UserDetailsService
 	beans, err := container.Get(reflect.TypeFor[security.UserDetailsService]())
@@ -108,7 +140,6 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger.Info(ctx.Context(), "using registered UserDetailsService")
 	}
 
-	// 创建 JWT 认证过滤器
 	filterOpts := []JwtFilterOption{
 		WithUserDetailsService(userDetailsService),
 	}
@@ -142,12 +173,6 @@ func (c *JwtAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger.Warn(ctx.Context(), "failed to register SecurityFilter interface (non-fatal)", log.KeyValue{Key: LogFieldError, Value: err.Error()})
 	}
 	c.logger.Info(ctx.Context(), "JwtAuthenticationFilter registered")
-
-	// 打印配置信息
-	c.logger.Info(ctx.Context(), "JWT 配置",
-		log.KeyValue{Key: LogFieldSecret, Value: maskSecret(cfg.SecretKey)},
-		log.KeyValue{Key: LogFieldExclude, Value: cfg.ExcludePaths},
-	)
 
 	return nil
 }

@@ -28,17 +28,9 @@ func main() {
 	fmt.Println("=== Consul Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
-	app, err := boot.NewApplication(
-		boot.WithAppName("consul-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := newApp()
 	defer app.Stop()
 
-	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: Consul connection failed: %v\n", err)
 		fmt.Println("This example requires a running Consul server.")
@@ -46,13 +38,51 @@ func main() {
 		return
 	}
 
-	// Get the Consul client from container
-	consulClient, err := core.GetByName[*consulapi.Client](app.Container(), "")
+	client, err := getConsulClient(app)
 	if err != nil {
-		fmt.Printf("Failed to get Consul client: %v\n", err)
 		return
 	}
 
+	if err := demoRegisterServices(client); err != nil {
+		return
+	}
+	if err := demoDiscoverServices(client); err != nil {
+		return
+	}
+	if err := demoKVOperations(client); err != nil {
+		return
+	}
+	if err := demoCleanup(client); err != nil {
+		return
+	}
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
+	app, err := boot.NewApplication(
+		boot.WithAppName("consul-example"),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// getConsulClient 从容器的 Bean 中获取 Consul 客户端。
+func getConsulClient(app *boot.Boot) (*consulapi.Client, error) {
+	client, err := core.GetByName[*consulapi.Client](app.Container(), "")
+	if err != nil {
+		fmt.Printf("Failed to get Consul client: %v\n", err)
+		return nil, fmt.Errorf("Failed to get Consul client: %w", err)
+	}
+	return client, nil
+}
+
+// demoRegisterServices 演示注册两个服务实例（Demo 1-2）。
+func demoRegisterServices(client *consulapi.Client) error {
 	// Demo 1: Register a service
 	fmt.Println("--- Demo 1: Register Service ---")
 	registration := &consulapi.AgentServiceRegistration{
@@ -72,9 +102,9 @@ func main() {
 		},
 	}
 
-	if err := consulClient.Agent().ServiceRegister(registration); err != nil {
+	if err := client.Agent().ServiceRegister(registration); err != nil {
 		fmt.Printf("Failed to register service: %v\n", err)
-		return
+		return fmt.Errorf("Failed to register service: %w", err)
 	}
 	fmt.Println("Service registered: my-service-1")
 
@@ -94,18 +124,22 @@ func main() {
 		},
 	}
 
-	if err := consulClient.Agent().ServiceRegister(registration2); err != nil {
+	if err := client.Agent().ServiceRegister(registration2); err != nil {
 		fmt.Printf("Failed to register service: %v\n", err)
-		return
+		return fmt.Errorf("Failed to register service: %w", err)
 	}
 	fmt.Println("Service registered: my-service-2")
+	return nil
+}
 
+// demoDiscoverServices 演示服务发现（Demo 3-4）。
+func demoDiscoverServices(client *consulapi.Client) error {
 	// Demo 3: Discover services
 	fmt.Println("\n--- Demo 3: Discover Services ---")
-	services, _, err := consulClient.Health().Service("my-service", "", true, nil)
+	services, _, err := client.Health().Service("my-service", "", true, nil)
 	if err != nil {
 		fmt.Printf("Failed to discover services: %v\n", err)
-		return
+		return fmt.Errorf("Failed to discover services: %w", err)
 	}
 	fmt.Printf("Found %d healthy instances of 'my-service'\n", len(services))
 	for _, svc := range services {
@@ -114,27 +148,31 @@ func main() {
 
 	// Demo 4: Get service by ID
 	fmt.Println("\n--- Demo 4: Get Service by ID ---")
-	service, _, err := consulClient.Health().Service("my-service-1", "", true, nil)
+	service, _, err := client.Health().Service("my-service-1", "", true, nil)
 	if err != nil {
 		fmt.Printf("Failed to get service: %v\n", err)
-		return
+		return fmt.Errorf("Failed to get service: %w", err)
 	}
 	if len(service) > 0 {
 		svc := service[0].Service
 		fmt.Printf("Service: %s, Address: %s:%d\n", svc.ID, svc.Address, svc.Port)
 	}
+	return nil
+}
 
+// demoKVOperations 演示 KV 的写入、读取与列表（Demo 5-7）。
+func demoKVOperations(client *consulapi.Client) error {
 	// Demo 5: Set a key-value pair
 	fmt.Println("\n--- Demo 5: Set Key-Value ---")
-	kv := consulClient.KV()
+	kv := client.KV()
 	p := &consulapi.KVPair{
 		Key:   "config/my-service/debug",
 		Value: []byte("true"),
 	}
-	_, err = kv.Put(p, nil)
+	_, err := kv.Put(p, nil)
 	if err != nil {
 		fmt.Printf("Failed to set key-value: %v\n", err)
-		return
+		return fmt.Errorf("Failed to set key-value: %w", err)
 	}
 	fmt.Println("Key-value set: config/my-service/debug = true")
 
@@ -143,7 +181,7 @@ func main() {
 	pair, _, err := kv.Get("config/my-service/debug", nil)
 	if err != nil {
 		fmt.Printf("Failed to get key-value: %v\n", err)
-		return
+		return fmt.Errorf("Failed to get key-value: %w", err)
 	}
 	if pair != nil {
 		fmt.Printf("Key: %s, Value: %s\n", pair.Key, string(pair.Value))
@@ -154,38 +192,41 @@ func main() {
 	keys, _, err := kv.Keys("config/", "", nil)
 	if err != nil {
 		fmt.Printf("Failed to list keys: %v\n", err)
-		return
+		return fmt.Errorf("Failed to list keys: %w", err)
 	}
 	fmt.Printf("Found %d keys under 'config/'\n", len(keys))
 	for _, key := range keys {
 		fmt.Printf("  - %s\n", key)
 	}
+	return nil
+}
 
+// demoCleanup 演示注销服务与删除 KV 的清理流程（Demo 8-9）。
+func demoCleanup(client *consulapi.Client) error {
 	// Demo 8: Deregister services
 	fmt.Println("\n--- Demo 8: Deregister Services ---")
-	if err := consulClient.Agent().ServiceDeregister("my-service-1"); err != nil {
+	if err := client.Agent().ServiceDeregister("my-service-1"); err != nil {
 		fmt.Printf("Failed to deregister service: %v\n", err)
-		return
+		return fmt.Errorf("Failed to deregister service: %w", err)
 	}
 	fmt.Println("Service deregistered: my-service-1")
 
-	if err := consulClient.Agent().ServiceDeregister("my-service-2"); err != nil {
+	if err := client.Agent().ServiceDeregister("my-service-2"); err != nil {
 		fmt.Printf("Failed to deregister service: %v\n", err)
-		return
+		return fmt.Errorf("Failed to deregister service: %w", err)
 	}
 	fmt.Println("Service deregistered: my-service-2")
 
 	// Demo 9: Delete key-value
 	fmt.Println("\n--- Demo 9: Delete Key-Value ---")
-	_, err = kv.Delete("config/my-service/debug", nil)
+	_, err := client.KV().Delete("config/my-service/debug", nil)
 	if err != nil {
 		fmt.Printf("Failed to delete key-value: %v\n", err)
-		return
+		return fmt.Errorf("Failed to delete key-value: %w", err)
 	}
 	fmt.Println("Key-value deleted: config/my-service/debug")
 
 	// Wait a bit for deregistration to complete
 	time.Sleep(1 * time.Second)
-
-	fmt.Println("\n=== Example completed successfully ===")
+	return nil
 }

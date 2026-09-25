@@ -32,12 +32,12 @@ func main() {
 func run() error {
 	workFile, err := findGoWork()
 	if err != nil {
-		return err
+		return fmt.Errorf("locate go.work: %w", err)
 	}
 
 	modules, err := parseGoWork(workFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse go.work %q: %w", workFile, err)
 	}
 
 	if len(modules) == 0 {
@@ -157,7 +157,7 @@ func parseGoWork(path string) ([]moduleInfo, error) {
 func readModulePath(gomod string) (string, error) {
 	fileHandle, err := os.Open(gomod)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("open go.mod %q: %w", gomod, err)
 	}
 	defer fileHandle.Close()
 
@@ -174,8 +174,7 @@ func readModulePath(gomod string) (string, error) {
 // collectImports parses all .go files in a module dir and returns
 // imports that reference other workspace modules.
 func collectImports(m moduleInfo, modPaths map[string]bool) ([]string, error) {
-	var deps []string
-	seen := make(map[string]bool)
+	scanner := importScanner{modPaths: modPaths, seen: make(map[string]bool)}
 
 	err := filepath.Walk(m.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -192,13 +191,23 @@ func collectImports(m moduleInfo, modPaths map[string]bool) ([]string, error) {
 		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		return collectImportsFromFile(path, m.path, modPaths, seen, &deps)
+		return scanner.collectFile(path, m.path)
 	})
-	return deps, err
+	if err != nil {
+		return scanner.deps, fmt.Errorf("scan module %q: %w", m.dir, err)
+	}
+	return scanner.deps, nil
 }
 
-// collectImportsFromFile parses a single Go file and appends workspace imports.
-func collectImportsFromFile(filePath, modPath string, modPaths map[string]bool, seen map[string]bool, deps *[]string) error {
+// importScanner 收集单模块内的跨工作区依赖。
+type importScanner struct {
+	modPaths map[string]bool
+	seen     map[string]bool
+	deps     []string
+}
+
+// collectFile 解析单个 Go 文件并追加工作区依赖导入。
+func (s *importScanner) collectFile(filePath, modPath string) error {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ImportsOnly)
 	if err != nil {
@@ -208,11 +217,11 @@ func collectImportsFromFile(filePath, modPath string, modPaths map[string]bool, 
 	for _, imp := range f.Imports {
 		path := strings.Trim(imp.Path.Value, "\"")
 		// Find which workspace module this import belongs to.
-		for mod := range modPaths {
+		for mod := range s.modPaths {
 			if path == mod || strings.HasPrefix(path, mod+"/") {
-				if !seen[mod] && mod != modPath {
-					seen[mod] = true
-					*deps = append(*deps, mod)
+				if !s.seen[mod] && mod != modPath {
+					s.seen[mod] = true
+					s.deps = append(s.deps, mod)
 				}
 				break
 			}

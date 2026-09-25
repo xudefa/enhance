@@ -10,7 +10,7 @@ import (
 )
 
 func TestTracingMiddleware_WithTracer(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tracer := tracing.NewTracer(
@@ -51,7 +51,7 @@ func TestTracingMiddleware_WithTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithoutTracer(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
@@ -74,7 +74,7 @@ func TestTracingMiddleware_WithoutTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithError(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tracer := tracing.NewTracer(
@@ -112,7 +112,7 @@ func TestTracingMiddleware_WithError(t *testing.T) {
 }
 
 func TestTracingMiddleware_ContextPropagation(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	gin.SetMode(gin.TestMode)
 
 	tracer := tracing.NewTracer(

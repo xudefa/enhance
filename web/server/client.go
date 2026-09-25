@@ -46,14 +46,21 @@ func (c *NetClient) buildURL(path string, query map[string][]string) string {
 	return path
 }
 
+// httpCall 描述一次 HTTP 调用的方法、路径与请求体。
+type httpCall struct {
+	method string
+	path   string
+	body   any
+}
+
 // buildRequest 构建 HTTP 请求。
-func (c *NetClient) buildRequest(ctx context.Context, method, path string, body any, cfg *HTTPRequest) (*http.Request, error) {
-	reqBody, contentType, err := marshalRequestBody(body)
+func (c *NetClient) buildRequest(ctx context.Context, call httpCall, cfg *HTTPRequest) (*http.Request, error) {
+	reqBody, contentType, err := marshalRequestBody(call.body)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.buildURL(path, cfg.Query), reqBody)
+	req, err := http.NewRequestWithContext(ctx, call.method, c.buildURL(call.path, cfg.Query), reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request failed: %w", err)
 	}
@@ -129,41 +136,41 @@ func applyRequestHeaders(req *http.Request, cfg *HTTPRequest) {
 
 // Get 发送 GET 请求。
 func (c *NetClient) Get(ctx context.Context, path string, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "GET", path, nil, opts...)
+	return c.do(ctx, httpCall{method: "GET", path: path}, opts...)
 }
 
 // Head 发送 HEAD 请求。
 func (c *NetClient) Head(ctx context.Context, path string, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "HEAD", path, nil, opts...)
+	return c.do(ctx, httpCall{method: "HEAD", path: path}, opts...)
 }
 
 // Post 发送 POST 请求。
 func (c *NetClient) Post(ctx context.Context, path string, body any, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "POST", path, body, opts...)
+	return c.do(ctx, httpCall{method: "POST", path: path, body: body}, opts...)
 }
 
 // Put 发送 PUT 请求。
 func (c *NetClient) Put(ctx context.Context, path string, body any, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "PUT", path, body, opts...)
+	return c.do(ctx, httpCall{method: "PUT", path: path, body: body}, opts...)
 }
 
 // Patch 发送 PATCH 请求。
 func (c *NetClient) Patch(ctx context.Context, path string, body any, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "PATCH", path, body, opts...)
+	return c.do(ctx, httpCall{method: "PATCH", path: path, body: body}, opts...)
 }
 
 // Delete 发送 DELETE 请求。
 func (c *NetClient) Delete(ctx context.Context, path string, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "DELETE", path, nil, opts...)
+	return c.do(ctx, httpCall{method: "DELETE", path: path}, opts...)
 }
 
 // Options 发送 OPTIONS 请求。
 func (c *NetClient) Options(ctx context.Context, path string, opts ...RequestOption) (*HTTPResponse, error) {
-	return c.do(ctx, "OPTIONS", path, nil, opts...)
+	return c.do(ctx, httpCall{method: "OPTIONS", path: path}, opts...)
 }
 
 // do 执行 HTTP 请求并返回响应。
-func (c *NetClient) do(ctx context.Context, method, path string, body any, opts ...RequestOption) (*HTTPResponse, error) {
+func (c *NetClient) do(ctx context.Context, call httpCall, opts ...RequestOption) (*HTTPResponse, error) {
 	cfg := &HTTPRequest{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -174,7 +181,7 @@ func (c *NetClient) do(ctx context.Context, method, path string, body any, opts 
 		defer cancel()
 	}
 
-	req, err := c.buildRequest(ctx, method, path, body, cfg)
+	req, err := c.buildRequest(ctx, call, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}

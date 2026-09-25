@@ -44,7 +44,7 @@ func audit(root string) ([]PackageResult, Stats, error) {
 		}
 		fi, err := buildFileInfo(root, path)
 		if err != nil {
-			return err
+			return fmt.Errorf("build file info for %q: %w", path, err)
 		}
 		if fi == nil {
 			return nil // 文件解析失败，已输出跳过信息
@@ -66,7 +66,7 @@ func audit(root string) ([]PackageResult, Stats, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, Stats{}, err
+		return nil, Stats{}, fmt.Errorf("walk directory %q: %w", root, err)
 	}
 	keys := sortedKeys(groups)
 	results := make([]PackageResult, 0, len(keys))
@@ -81,11 +81,11 @@ func audit(root string) ([]PackageResult, Stats, error) {
 func buildFileInfo(root, path string) (*fileInfo, error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read file %q: %w", path, err)
 	}
 	rel, err := filepath.Rel(root, path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve relative path for %q: %w", path, err)
 	}
 	rel = filepath.ToSlash(rel)
 	fset := token.NewFileSet()

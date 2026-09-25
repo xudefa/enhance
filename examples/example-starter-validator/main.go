@@ -34,7 +34,27 @@ func main() {
 	fmt.Println("=== Validator Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
+	app := newApp()
+	defer app.Stop()
+
+	if err := app.Start(); err != nil {
+		fmt.Printf("Failed to start application: %v\n", err)
+		return
+	}
+
+	validate, err := getValidator(app)
+	if err != nil {
+		return
+	}
+
+	runStructValidation(validate)
+	runFieldValidation(validate)
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
 	app, err := boot.NewApplication(
 		boot.WithAppName("validator-example"),
 		boot.WithProfiles("default"),
@@ -42,21 +62,21 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
-	// Start the application (triggers auto-configuration)
-	if err := app.Start(); err != nil {
-		fmt.Printf("Failed to start application: %v\n", err)
-		return
-	}
-
-	// Get the validator from container
+// getValidator 从容器的 Bean 中获取校验器实例。
+func getValidator(app *boot.Boot) (*validator.Validate, error) {
 	validate, err := core.GetByName[*validator.Validate](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get validator: %v\n", err)
-		return
+		return nil, fmt.Errorf("Failed to get validator: %w", err)
 	}
+	return validate, nil
+}
 
+// runStructValidation 演示对结构体的整体校验（Test 1-3）。
+func runStructValidation(validate *validator.Validate) {
 	// Test 1: Valid user
 	fmt.Println("--- Test 1: Valid User ---")
 	validUser := User{
@@ -102,7 +122,10 @@ func main() {
 	} else {
 		fmt.Println("Validation passed (unexpected)")
 	}
+}
 
+// runFieldValidation 演示字段级与跨字段校验（Test 4-5）。
+func runFieldValidation(validate *validator.Validate) {
 	// Test 4: Field-level validation
 	fmt.Println("\n--- Test 4: Field-Level Validation ---")
 	field := "email"
@@ -142,6 +165,4 @@ func main() {
 	} else {
 		fmt.Println("Cross-field validation passed (unexpected)")
 	}
-
-	fmt.Println("\n=== Example completed successfully ===")
 }

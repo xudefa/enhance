@@ -19,11 +19,35 @@ import (
 	"github.com/xudefa/enhance/web/server"
 )
 
+// webRouter 演示路由器：既支持路由注册，又可直接作为 HTTP 处理器。
+type webRouter interface {
+	core.Router
+	http.Handler
+}
+
 func main() {
 	fmt.Println("=== enhance Web REST API Example ===")
 	fmt.Println()
 
 	// ---- 1. Create router ----
+	router := buildRouter()
+
+	srv := startServer(router)
+
+	fmt.Println()
+	fmt.Println("--- Test Requests ---")
+	testRequests()
+
+	fmt.Println()
+	fmt.Println("--- Graceful Shutdown ---")
+	gracefulShutdown(srv)
+
+	fmt.Println()
+	fmt.Println("=== Example completed successfully ===")
+}
+
+// buildRouter 创建路由器并注册全局中间件与全部路由。
+func buildRouter() webRouter {
 	router := server.NewRouter()
 
 	// ---- 2. Add global middleware ----
@@ -49,6 +73,15 @@ func main() {
 	})
 
 	// ---- 3. Register routes ----
+	registerWelcomeAndHealthRoutes(router)
+	registerUserRoutes(router)
+
+	return router
+}
+
+// registerWelcomeAndHealthRoutes 注册根路径、健康检查与错误演示路由。
+func registerWelcomeAndHealthRoutes(router webRouter) {
+	// GET / - welcome
 	router.GET("/", func(ctx core.Context) {
 		ctx.JSON(http.StatusOK, map[string]any{
 			"message": "Welcome to enhance REST API",
@@ -56,6 +89,26 @@ func main() {
 		})
 	})
 
+	// GET /health - health check
+	router.GET("/health", func(ctx core.Context) {
+		ctx.JSON(http.StatusOK, map[string]any{
+			"status": "UP",
+			"time":   time.Now().Format(time.RFC3339),
+		})
+	})
+
+	// GET /error - error handling demo
+	router.GET("/error", func(ctx core.Context) {
+		ctx.JSON(http.StatusInternalServerError, map[string]any{
+			"error":   "something went wrong",
+			"code":    "INTERNAL_ERROR",
+			"details": "simulated error for demo",
+		})
+	})
+}
+
+// registerUserRoutes 注册用户列表、详情与创建接口。
+func registerUserRoutes(router webRouter) {
 	// GET /users - list users
 	router.GET("/users", func(ctx core.Context) {
 		users := []map[string]any{
@@ -107,24 +160,10 @@ func main() {
 			"message": "user created",
 		})
 	})
+}
 
-	// GET /health - health check
-	router.GET("/health", func(ctx core.Context) {
-		ctx.JSON(http.StatusOK, map[string]any{
-			"status": "UP",
-			"time":   time.Now().Format(time.RFC3339),
-		})
-	})
-
-	// GET /error - error handling demo
-	router.GET("/error", func(ctx core.Context) {
-		ctx.JSON(http.StatusInternalServerError, map[string]any{
-			"error":   "something went wrong",
-			"code":    "INTERNAL_ERROR",
-			"details": "simulated error for demo",
-		})
-	})
-
+// startServer 创建并后台启动 HTTP 服务器，返回服务器实例。
+func startServer(router webRouter) *stdlib.Server {
 	// ---- 4. Create server ----
 	srv := stdlib.NewServer(
 		engine.WithHost("127.0.0.1"),
@@ -145,16 +184,12 @@ func main() {
 	// Wait for server to be ready
 	time.Sleep(100 * time.Millisecond)
 
-	// ---- 6. Make test requests ----
-	fmt.Println()
-	fmt.Println("--- Test Requests ---")
+	return srv
+}
 
-	testRequests()
-
+// gracefulShutdown 等待退出信号并优雅关闭服务器。
+func gracefulShutdown(srv *stdlib.Server) {
 	// ---- 7. Graceful shutdown ----
-	fmt.Println()
-	fmt.Println("--- Graceful Shutdown ---")
-
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -167,9 +202,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  Shutdown error: %v\n", err)
 	}
 	fmt.Println("  Server stopped gracefully")
-
-	fmt.Println()
-	fmt.Println("=== Example completed successfully ===")
 }
 
 // testRequests makes HTTP requests to the running server.

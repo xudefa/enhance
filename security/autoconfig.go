@@ -40,7 +40,6 @@ type SecurityAutoConfiguration struct {
 // Configure 执行自动配置
 func (c *SecurityAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	container := ctx.Container()
-	env := ctx.Environment()
 
 	// 从容器获取日志记录器，如果不存在则使用默认值
 	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
@@ -65,7 +64,7 @@ func (c *SecurityAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 	}
 	c.logger.Info(ctx.Context(), "AuthenticationManager 已注册")
 
-	filterChain := c.getOrBuildSecurityFilterChain(ctx, authManager, userDetailsService, env, container)
+	filterChain := c.getOrBuildSecurityFilterChain(ctx, authManager, userDetailsService)
 
 	// 使用接口类型注册，确保可以通过接口类型获取
 	if regErr := ctx.Container().RegisterInstance(filterChain, reflect.TypeOf(filterChain)); regErr != nil {
@@ -138,7 +137,9 @@ func (c *SecurityAutoConfiguration) buildAuthenticationManager(ctx boot.Applicat
 }
 
 // getOrBuildSecurityFilterChain 获取或构建 SecurityFilterChain
-func (c *SecurityAutoConfiguration) getOrBuildSecurityFilterChain(ctx boot.ApplicationContext, authManager AuthenticationManager, userDetailsService UserDetailsService, env *environment.Environment, container core.Container) SecurityFilterChain {
+func (c *SecurityAutoConfiguration) getOrBuildSecurityFilterChain(ctx boot.ApplicationContext, authManager AuthenticationManager, userDetailsService UserDetailsService) SecurityFilterChain {
+	container := ctx.Container()
+	env := ctx.Environment()
 	beans, err := container.Get(reflect.TypeOf((*SecurityFilterChain)(nil)).Elem())
 	if err != nil || len(beans) == 0 {
 		return c.buildSecurityFilterChain(authManager, userDetailsService, env, container)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -39,32 +40,63 @@ type EchoAutoConfiguration struct {
 	server     *echo.Echo
 	config     *EchoConfig
 	tracer     *tracing.Tracer
-	configured bool // 标记是否已配置，防止重复配置
+	mu         sync.Mutex      // 保护 Configure 的并发访问
+	configured bool            // 标记是否已配置，防止同一应用上下文重复配置
+	ctx        context.Context // 应用上下文
 }
 
 // Configure 配置 Echo Web 服务器。
 func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
-	// 防止重复配置
-	if c.configured {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.ctx == ctx.Context() {
 		return nil
 	}
+	// 新应用上下文（应用重启）时重新配置，更新 ctx/server 等状态
+	c.configured = false
+
 	container := ctx.Container()
 	env := ctx.Environment()
 
-	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
-		c.logger = logger
-	} else {
-		c.logger = log.Build()
-	}
+	c.resolveLogger(container)
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
 		return fmt.Errorf("failed to load Echo config: %w", err)
 	}
-
 	c.config = cfg
 
-	// 尝试从容器获取已存在的 Echo 实例，如果不存在则创建默认的
+	c.buildServer(ctx, container, cfg)
+
+	if err := c.registerComponents(ctx, container); err != nil {
+		return fmt.Errorf("failed to register Echo components: %w", err)
+	}
+
+	c.logger.Info(ctx.Context(), "Echo Web server configured",
+		log.KeyValue{Key: "port", Value: cfg.Port},
+		log.KeyValue{Key: "host", Value: cfg.Host},
+	)
+
+	c.configured = true
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
+	return nil
+}
+
+// resolveLogger 从容器获取日志记录器，缺省时使用默认实现。
+func (c *EchoAutoConfiguration) resolveLogger(container core.Container) {
+	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
+		c.logger = logger
+	} else {
+		c.logger = log.Build()
+	}
+}
+
+// buildServer 获取容器中已存在的 Echo 实例或创建默认实例，并附加中间件与追踪。
+func (c *EchoAutoConfiguration) buildServer(ctx boot.ApplicationContext, container core.Container, cfg *EchoConfig) {
 	if server, err := core.GetByName[*echo.Echo](container, ""); err == nil {
 		c.server = server
 		c.logger.Info(ctx.Context(), "using existing Echo Server instance from container")
@@ -85,25 +117,22 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		}
 	}
 
-	// 尝试从容器获取 Tracer 并注册 tracing 中间件
+	// 从容器获取 Tracer 并注册 tracing 中间件
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.server.Use(TracingMiddleware(tracer))
 		c.logger.Info(ctx.Context(), "Echo tracing middleware enabled")
 	}
+}
 
-	// 检查 Server 是否已注册（由外部传入）
-	serverAlreadyRegistered := false
-	if _, err := core.GetByName[*echo.Echo](container, ""); err == nil {
-		serverAlreadyRegistered = true
-	}
-
+// registerComponents 将 config、server、endpointRegistry 注册到容器。
+func (c *EchoAutoConfiguration) registerComponents(ctx boot.ApplicationContext, container core.Container) error {
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*EchoConfig]()); err != nil {
 		return fmt.Errorf("failed to register Echo Config: %w", err)
 	}
 
 	// 如果 Server 已存在，跳过注册
-	if !serverAlreadyRegistered {
+	if _, err := core.GetByName[*echo.Echo](container, ""); err != nil {
 		if err := container.RegisterInstance(c.server, reflect.TypeFor[*echo.Echo]()); err != nil {
 			return fmt.Errorf("failed to register Echo Server: %w", err)
 		}
@@ -116,13 +145,6 @@ func (c *EchoAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
-
-	c.logger.Info(ctx.Context(), "Echo Web server configured",
-		log.KeyValue{Key: "port", Value: cfg.Port},
-		log.KeyValue{Key: "host", Value: cfg.Host},
-	)
-
-	c.configured = true
 	return nil
 }
 

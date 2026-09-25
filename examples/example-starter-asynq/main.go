@@ -35,32 +35,59 @@ func main() {
 	fmt.Println("=== Asynq Starter Example ===")
 	fmt.Println()
 
+	app := newApp("asynq-example")
+	defer app.Stop()
+
+	if !startAsynqApp(app) {
+		return
+	}
+	client, ok := getAsynqClient(app)
+	if !ok {
+		return
+	}
+	defer client.Close()
+
+	runTaskDemos(client)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("asynq-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startAsynqApp 启动应用，触发 Asynq 自动配置。
+func startAsynqApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: Asynq connection failed: %v\n", err)
 		fmt.Println("This example requires a running Redis server.")
 		fmt.Println("Please start Redis and try again.")
-		return
+		return false
 	}
+	return true
+}
 
+// getAsynqClient 从容器中获取 Asynq 客户端。
+func getAsynqClient(app *boot.Boot) (*asynq.Client, bool) {
 	// Get the Asynq client from container
 	client, err := core.GetByName[*asynq.Client](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get asynq client: %v\n", err)
-		return
+		return nil, false
 	}
-	defer client.Close()
+	return client, true
+}
 
+// runTaskDemos 演示不同类型任务的入队操作。
+func runTaskDemos(client *asynq.Client) {
 	// Demo 1: Enqueue a simple task
 	fmt.Println("--- Demo 1: Enqueue Simple Task ---")
 	task := asynq.NewTask(TaskEmailDelivery, []byte(`{"user_id": 123, "subject": "Welcome!"}`))

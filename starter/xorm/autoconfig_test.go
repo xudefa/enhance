@@ -5,7 +5,7 @@ import (
 )
 
 func TestXormConfigDefaults(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &XormConfig{
 		Type:            DefaultXORMType,
 		Host:            DefaultXORMHost,
@@ -44,7 +44,7 @@ func TestXormConfigDefaults(t *testing.T) {
 }
 
 func TestBuildDSNMySQL(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	autoConfig := &XormAutoConfiguration{}
 	cfg := &XormConfig{
 		Type:     "mysql",
@@ -64,7 +64,7 @@ func TestBuildDSNMySQL(t *testing.T) {
 }
 
 func TestBuildDSNPostgres(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	autoConfig := &XormAutoConfiguration{}
 	cfg := &XormConfig{
 		Type:     "postgres",
@@ -83,7 +83,7 @@ func TestBuildDSNPostgres(t *testing.T) {
 }
 
 func TestBuildDSNSQLite(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	autoConfig := &XormAutoConfiguration{}
 	cfg := &XormConfig{
 		Type:     "sqlite3",
@@ -98,7 +98,7 @@ func TestBuildDSNSQLite(t *testing.T) {
 }
 
 func TestBuildDSNDefault(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	autoConfig := &XormAutoConfiguration{}
 	cfg := &XormConfig{
 		Type:     "unknown",
@@ -118,7 +118,7 @@ func TestBuildDSNDefault(t *testing.T) {
 }
 
 func TestConfigKeys(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	tests := []struct {
 		name     string
 		key      string
@@ -148,7 +148,7 @@ func TestConfigKeys(t *testing.T) {
 }
 
 func TestDefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	tests := []struct {
 		name     string
 		value    interface{}

@@ -100,14 +100,25 @@ type WebSocketMiddleware interface {
 	Handle(conn Connection) error
 }
 
-// Connection WebSocket 连接接口。
+// Connection WebSocket 连接接口，提供身份与消息生命周期能力。
+// 属性存储与房间参与能力分别通过组合 AttributeStore 和 RoomParticipant 提供。
 type Connection interface {
 	ID() string
 	Send(message []byte) error
 	Close() error
 	IsClosed() bool
+	AttributeStore
+	RoomParticipant
+}
+
+// AttributeStore 连接属性存储接口，提供键值对读写能力。
+type AttributeStore interface {
 	SetAttribute(key string, value any)
 	GetAttribute(key string) (any, bool)
+}
+
+// RoomParticipant 房间成员接口，提供加入、离开与查询所在房间的能力。
+type RoomParticipant interface {
 	Join(roomID string) error
 	Leave(roomID string) error
 	Rooms() []string

@@ -23,6 +23,7 @@ type Logger struct {
 	Prefix string
 }
 
+// Log 打印带前缀的日志消息。
 func (l *Logger) Log(msg string) {
 	fmt.Printf("[%s] %s\n", l.Prefix, msg)
 }
@@ -32,6 +33,7 @@ type ChildLogger struct {
 	Prefix string
 }
 
+// Log 打印带子容器前缀的日志消息。
 func (l *ChildLogger) Log(msg string) {
 	fmt.Printf("[Child-%s] %s\n", l.Prefix, msg)
 }

@@ -27,6 +27,7 @@ const (
 // DatabaseAutoConfiguration 数据库自动配置
 type DatabaseAutoConfiguration struct{}
 
+// Configure 执行数据库自动配置，注册 Database Bean。
 func (c *DatabaseAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	fmt.Println("  [DatabaseAutoConfiguration] 正在配置数据库...")
 
@@ -42,6 +43,7 @@ func (c *DatabaseAutoConfiguration) Configure(ctx boot.ApplicationContext) error
 	return nil
 }
 
+// Order 返回数据库自动配置的优先级。
 func (c *DatabaseAutoConfiguration) Order() int {
 	return dataLayerPriority
 }
@@ -56,6 +58,7 @@ func init() {
 // UserServiceAutoConfiguration 用户服务自动配置
 type UserServiceAutoConfiguration struct{}
 
+// Configure 执行用户服务自动配置，依赖数据库 Bean 注册 UserService。
 func (c *UserServiceAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	fmt.Println("  [UserServiceAutoConfiguration] 正在配置用户服务...")
 
@@ -66,7 +69,7 @@ func (c *UserServiceAutoConfiguration) Configure(ctx boot.ApplicationContext) er
 			container := c[0].(core.Container)
 			db, err := core.GetByName[*Database](container, "")
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("get database bean: %w", err)
 			}
 			return &UserService{DB: db}, nil
 		}),
@@ -76,10 +79,12 @@ func (c *UserServiceAutoConfiguration) Configure(ctx boot.ApplicationContext) er
 	return nil
 }
 
+// Order 返回用户服务自动配置的优先级。
 func (c *UserServiceAutoConfiguration) Order() int {
 	return businessLayerPriority
 }
 
+// DependsOn 返回依赖的自动配置列表。
 func (c *UserServiceAutoConfiguration) DependsOn() []string {
 	return []string{"DatabaseAutoConfiguration"}
 }

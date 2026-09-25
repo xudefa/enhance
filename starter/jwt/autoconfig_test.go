@@ -7,7 +7,7 @@ import (
 )
 
 func TestJWTConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-jwt", environment.PriorityNormal, map[string]any{
 		"security.jwt.enabled":                  "true",
@@ -46,7 +46,7 @@ func TestJWTConfig_LoadConfig(t *testing.T) {
 }
 
 func TestJWTConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &JwtConfig{
 		SecretKey:              DefaultJWTSecretKey,
 		ExpiresDuration:        DefaultJWTExpiresDuration,

@@ -7,7 +7,7 @@ import (
 )
 
 func TestGrpcConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-grpc", environment.PriorityNormal, map[string]any{
 		"grpc.enabled":           "true",
@@ -39,7 +39,7 @@ func TestGrpcConfig_LoadConfig(t *testing.T) {
 }
 
 func TestGrpcConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &GrpcConfig{
 		Port:             DefaultGrpcPort,
 		EnableReflection: DefaultEnableReflection,

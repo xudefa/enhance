@@ -7,7 +7,7 @@ import (
 )
 
 func TestPrometheusConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-prometheus", environment.PriorityNormal, map[string]any{
 		"prometheus.enabled":             "true",
@@ -47,7 +47,7 @@ func TestPrometheusConfig_LoadConfig(t *testing.T) {
 }
 
 func TestPrometheusConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &PrometheusConfig{
 		Host:              DefaultPrometheusHost,
 		Port:              DefaultPrometheusPort,

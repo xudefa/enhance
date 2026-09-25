@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -41,32 +42,68 @@ type ChiAutoConfiguration struct {
 	server     *http.Server
 	config     *ChiConfig
 	tracer     *tracing.Tracer
-	configured bool // 标记是否已配置，防止重复配置
+	mu         sync.Mutex      // 保护 Configure 的并发访问
+	configured bool            // 标记是否已配置，防止同一应用上下文重复配置
+	ctx        context.Context // 应用上下文
 }
 
 // Configure 配置 Chi HTTP 路由器。
 func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
-	// 防止重复配置
-	if c.configured {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.ctx == ctx.Context() {
 		return nil
 	}
+	// 新应用上下文（应用重启）时重新配置，更新 ctx/server 等状态
+	c.configured = false
+
 	container := ctx.Container()
 	env := ctx.Environment()
 
-	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
-		c.logger = logger
-	} else {
-		c.logger = log.Build()
-	}
+	c.resolveLogger(container)
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
 		return fmt.Errorf("failed to load Chi config: %w", err)
 	}
-
 	c.config = cfg
 
-	// 尝试从容器获取已存在的 Router 实例，如果不存在则创建默认的
+	c.buildRouter(ctx, container, cfg)
+
+	c.server = &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Handler: c.router,
+	}
+
+	if err := c.registerComponents(ctx, container); err != nil {
+		return fmt.Errorf("failed to register Chi components: %w", err)
+	}
+
+	c.logger.Info(ctx.Context(), "Chi HTTP router configured",
+		log.KeyValue{Key: "port", Value: cfg.Port},
+		log.KeyValue{Key: "host", Value: cfg.Host},
+	)
+
+	c.configured = true
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
+	return nil
+}
+
+// resolveLogger 从容器获取日志记录器，缺省时使用默认实现。
+func (c *ChiAutoConfiguration) resolveLogger(container core.Container) {
+	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
+		c.logger = logger
+	} else {
+		c.logger = log.Build()
+	}
+}
+
+// buildRouter 获取容器中已存在的 Router 或创建默认 Router，并附加中间件与追踪。
+func (c *ChiAutoConfiguration) buildRouter(ctx boot.ApplicationContext, container core.Container, cfg *ChiConfig) {
 	if router, err := core.GetByName[*chi.Mux](container, ""); err == nil {
 		c.router = router
 		c.logger.Info(ctx.Context(), "using existing Chi Router instance from container")
@@ -86,30 +123,22 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		}
 	}
 
-	// 尝试从容器获取 Tracer 并注册 tracing 中间件
+	// 从容器获取 Tracer 并注册 tracing 中间件
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.router.Use(TracingMiddleware(tracer))
 		c.logger.Info(ctx.Context(), "Chi tracing middleware enabled")
 	}
+}
 
-	c.server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Handler: c.router,
-	}
-
-	// 检查 Router 是否已注册（由外部传入）
-	routerAlreadyRegistered := false
-	if _, err := core.GetByName[*chi.Mux](container, ""); err == nil {
-		routerAlreadyRegistered = true
-	}
-
+// registerComponents 将 config、router、server、endpointRegistry 注册到容器。
+func (c *ChiAutoConfiguration) registerComponents(ctx boot.ApplicationContext, container core.Container) error {
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*ChiConfig]()); err != nil {
 		return fmt.Errorf("failed to register Chi Config: %w", err)
 	}
 
 	// 如果 Router 已存在，跳过注册
-	if !routerAlreadyRegistered {
+	if _, err := core.GetByName[*chi.Mux](container, ""); err != nil {
 		if err := container.RegisterInstance(c.router, reflect.TypeFor[*chi.Mux]()); err != nil {
 			return fmt.Errorf("failed to register Chi Router: %w", err)
 		}
@@ -126,13 +155,6 @@ func (c *ChiAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
-
-	c.logger.Info(ctx.Context(), "Chi HTTP router configured",
-		log.KeyValue{Key: "port", Value: cfg.Port},
-		log.KeyValue{Key: "host", Value: cfg.Host},
-	)
-
-	c.configured = true
 	return nil
 }
 

@@ -17,6 +17,32 @@ func main() {
 	// 创建 Fiber App（不注册中间件，由自动配置处理）
 	fiberApp := fiber.New()
 
+	app := newTracingApplication()
+	defer app.Stop()
+
+	// 将 Fiber App 注册到容器中，自动配置会复用这个实例
+	ctx := app.Context()
+	registerRouter(ctx, fiberApp)
+
+	// 启动应用（执行自动配置和启动器）
+	// TracingAutoConfiguration 会创建并注册 Tracer
+	// FiberAutoConfiguration 会从容器获取 Tracer 并注册 TracingMiddleware
+	// 注意：Configure() 阶段会自动添加 TracingMiddleware 到 fiberApp
+	startApplication(app)
+
+	// 启动后获取 Tracer（由 TracingAutoConfiguration 创建）
+	tracer := getTracer(ctx)
+
+	// 注册查看链路数据和业务端点
+	registerFiberRoutes(fiberApp, tracer)
+
+	// 打印启动信息并等待退出信号
+	printStartupBanner()
+	app.WaitForSignal()
+}
+
+// newTracingApplication 创建带链路追踪与 Actuator 配置的 Fiber 应用，失败时直接退出。
+func newTracingApplication() *boot.Boot {
 	app, err := boot.NewApplication(
 		boot.WithAppName("fiber-tracing-example"),
 		boot.WithProperty("fiber.enabled", "true"),
@@ -30,28 +56,34 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create application: %v", err)
 	}
-	defer app.Stop()
+	return app
+}
 
-	// 将 Fiber App 注册到容器中，自动配置会复用这个实例
-	ctx := app.Context()
+// registerRouter 将 Fiber App 注册到 IoC 容器中，自动配置会复用该实例。
+func registerRouter(ctx boot.ApplicationContext, fiberApp *fiber.App) {
 	if err := ctx.Container().RegisterInstance(fiberApp, reflect.TypeFor[*fiber.App]()); err != nil {
 		log.Fatalf("Failed to register fiber app: %v", err)
 	}
+}
 
-	// 启动应用（执行自动配置和启动器）
-	// TracingAutoConfiguration 会创建并注册 Tracer
-	// FiberAutoConfiguration 会从容器获取 Tracer 并注册 TracingMiddleware
-	// 注意：Configure() 阶段会自动添加 TracingMiddleware 到 fiberApp
+// startApplication 启动应用，执行自动配置与启动器，失败时直接退出。
+func startApplication(app *boot.Boot) {
 	if err := app.Start(); err != nil {
 		log.Fatalf("Failed to start application: %v", err)
 	}
+}
 
-	// 启动后获取 Tracer（由 TracingAutoConfiguration 创建）
+// getTracer 从容器中获取由 TracingAutoConfiguration 创建的 Tracer。
+func getTracer(ctx boot.ApplicationContext) *tracing.Tracer {
 	tracer, err := core.GetByName[*tracing.Tracer](ctx.Container(), "")
 	if err != nil {
 		log.Fatal("Tracer not found, please ensure tracing starter is enabled")
 	}
+	return tracer
+}
 
+// registerFiberRoutes 注册查看链路数据与业务测试端点。
+func registerFiberRoutes(fiberApp *fiber.App, tracer *tracing.Tracer) {
 	// 注册查看链路数据的端点
 	fiberApp.Get("/api/spans", func(c *fiber.Ctx) error {
 		spans := tracer.GetSpans()
@@ -72,7 +104,10 @@ func main() {
 			"error": "This is a test error",
 		})
 	})
+}
 
+// printStartupBanner 打印服务启动横幅与可用端点列表。
+func printStartupBanner() {
 	// 等待服务器启动
 	time.Sleep(100 * time.Millisecond)
 
@@ -90,6 +125,4 @@ func main() {
 	log.Println("  GET /actuator/beans   - Bean list")
 	log.Println("  GET /actuator/info    - Application info")
 	log.Println("========================================")
-
-	app.WaitForSignal()
 }

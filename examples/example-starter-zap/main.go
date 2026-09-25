@@ -25,29 +25,58 @@ func main() {
 	fmt.Println("=== Zap Starter Example ===")
 	fmt.Println()
 
+	app := newApp("zap-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	logger, ok := getLogger(app)
+	if !ok {
+		return
+	}
+	logLevelsDemo(logger)
+	logDirectZapDemo(app)
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("zap-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Zap 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getLogger 从容器中获取增强框架日志器。
+func getLogger(app *boot.Boot) (log.Logger, bool) {
 	// Get the logger from container
 	logger, err := core.GetByName[log.Logger](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
-		return
+		return nil, false
 	}
+	return logger, true
+}
 
+// logLevelsDemo 演示不同级别与结构化日志输出。
+func logLevelsDemo(logger log.Logger) {
 	// Demonstrate logging at different levels
 	fmt.Println("--- Logging at Different Levels ---")
 
@@ -89,12 +118,15 @@ func main() {
 		log.KeyValue{Key: "host", Value: "localhost"},
 		log.KeyValue{Key: "port", Value: 5432},
 	)
+}
 
+// logDirectZapDemo 演示直接使用 Zap 日志器输出。
+func logDirectZapDemo(app *boot.Boot) {
 	// Demonstrate direct Zap usage
 	fmt.Println("\n--- Direct Zap Usage ---")
 
 	var zapLogger *zap.Logger
-	zapLogger, err = core.GetByName[*zap.Logger](app.Container(), "")
+	zapLogger, err := core.GetByName[*zap.Logger](app.Container(), "")
 	if err == nil {
 		zapLogger.Info("Direct Zap logging",
 			zap.String("service", "user-service"),
@@ -102,6 +134,4 @@ func main() {
 			zap.Bool("debug", false),
 		)
 	}
-
-	fmt.Println("\n=== Example completed successfully ===")
 }

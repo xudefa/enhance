@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -55,7 +56,7 @@ func newTestContainerBeanWithConstructor() *testContainerBeanWithConstructor {
 type testContainerBeanWithErrorConstructor struct{}
 
 func newTestContainerBeanWithErrorConstructor() (*testContainerBeanWithErrorConstructor, error) {
-	return nil, errIntentionalError
+	return nil, fmt.Errorf("construct test bean: %w", errIntentionalError)
 }
 
 // errIntentionalError is a sentinel error for testing.

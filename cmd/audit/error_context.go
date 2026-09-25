@@ -13,9 +13,16 @@ func analyzeErrorContext(f *fileInfo) []Finding {
 		return nil
 	}
 	var findings []Finding
+	recvNames := receiverNames(f.file)
 	ast.Inspect(f.file, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.ReturnStmt:
+			// 排除链式 builder"裸返回接收者"的误报（如返回 *BusinessError 接收者）。
+			if len(node.Results) == 1 {
+				if ident, ok := node.Results[0].(*ast.Ident); ok && recvNames[ident.Name] {
+					return true
+				}
+			}
 			for _, res := range node.Results {
 				if ident, ok := res.(*ast.Ident); ok && isErrorName(ident.Name) {
 					findings = append(findings, errorFinding(f, ident.Pos(),
@@ -33,6 +40,26 @@ func analyzeErrorContext(f *fileInfo) []Finding {
 		return true
 	})
 	return findings
+}
+
+// receiverNames 收集文件内所有方法的接收者标识符名称。
+func receiverNames(file *ast.File) map[string]bool {
+	names := make(map[string]bool)
+	ast.Inspect(file, func(n ast.Node) bool {
+		fn, ok := n.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil {
+			return true
+		}
+		for _, field := range fn.Recv.List {
+			for _, name := range field.Names {
+				if name.Name != "" {
+					names[name.Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return names
 }
 
 // isErrorName 判断标识符是否表示 error 值。

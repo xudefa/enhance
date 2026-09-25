@@ -45,6 +45,12 @@ func TracingMiddleware(tracer *tracing.Tracer) fiber.Handler {
 		span := tracer.StartSpan(spanName, opts...)
 		defer span.End()
 
+		// 在 c.Next() 之前设置响应头，确保响应头在响应发送前被写入
+		respHeaders := tracer.Inject(span.Context())
+		for k, v := range respHeaders {
+			c.Set(k, v)
+		}
+
 		err := c.Next()
 
 		span.SetTag("http.status_code", fmt.Sprintf("%d", c.Response().StatusCode()))
@@ -53,11 +59,6 @@ func TracingMiddleware(tracer *tracing.Tracer) fiber.Handler {
 			span.SetStatus(tracing.StatusError)
 		} else {
 			span.SetStatus(tracing.StatusOK)
-		}
-
-		respHeaders := tracer.Inject(span.Context())
-		for k, v := range respHeaders {
-			c.Set(k, v)
 		}
 
 		if err != nil {

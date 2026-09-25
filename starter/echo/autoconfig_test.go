@@ -7,7 +7,7 @@ import (
 )
 
 func TestEchoConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-echo", environment.PriorityNormal, map[string]any{
 		"echo.enabled":     "true",
@@ -46,7 +46,7 @@ func TestEchoConfig_LoadConfig(t *testing.T) {
 }
 
 func TestEchoConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &EchoConfig{
 		Host:          "0.0.0.0",
 		Port:          8080,

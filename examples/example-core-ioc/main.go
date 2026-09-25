@@ -41,6 +41,20 @@ func main() {
 
 	c := core.NewContainer()
 
+	registerDemoBeans(c)
+	initializeContainer(c)
+	retrieveBeans(c)
+	demoPrototypeScope(c)
+	demoBeanExistence(c)
+	demoConcurrentAccess(c)
+	destroyContainer(c)
+
+	fmt.Println()
+	fmt.Println("=== Example completed successfully ===")
+}
+
+// registerDemoBeans 注册演示所需的各类 Bean。
+func registerDemoBeans(c core.Container) {
 	// ---- 1. Register a singleton Database via factory ----
 	_ = core.Register[*Database](c,
 		core.WithName[*Database]("db"),
@@ -93,13 +107,19 @@ func main() {
 			return &RequestBean{ID: 1}, nil
 		}),
 	)
+}
 
+// initializeContainer 初始化容器，触发各 Bean 的 Init 回调。
+func initializeContainer(c core.Container) {
 	// ---- Initialize container (triggers Init callbacks) ----
 	fmt.Println("--- Initializing container ---")
 	if err := c.Initialize(); err != nil {
 		panic(err)
 	}
+}
 
+// retrieveBeans 通过泛型 API 获取并组合使用 Bean。
+func retrieveBeans(c core.Container) {
 	// ---- 5. Retrieve and use beans via generic API ----
 	fmt.Println()
 	fmt.Println("--- Retrieving beans ---")
@@ -116,20 +136,29 @@ func main() {
 	orderSvc.DB = db
 	orderSvc.UserSvc = userSvc
 	fmt.Printf("  OrderService -> DB=%s, UserSvc=%s\n", orderSvc.DB.DSN, orderSvc.UserSvc.Name)
+}
 
+// demoPrototypeScope 演示原型作用域每次获取都会创建新实例。
+func demoPrototypeScope(c core.Container) {
 	// ---- 6. Prototype scope: each Get creates a new instance ----
 	fmt.Println()
 	fmt.Println("--- Prototype scope ---")
 	req1 := core.MustGet[*RequestBean](c, "requestBean")
 	req2 := core.MustGet[*RequestBean](c, "requestBean")
 	fmt.Printf("  req1 == req2: %v (should be false)\n", req1 == req2)
+}
 
+// demoBeanExistence 演示 Bean 存在性检查。
+func demoBeanExistence(c core.Container) {
 	// ---- 7. Check bean existence ----
 	fmt.Println()
 	fmt.Println("--- Bean existence ---")
 	fmt.Printf("  Has[*Database]: %v\n", core.Has[*Database](c, "db"))
 	fmt.Printf("  Has[*UserService]: %v\n", core.Has[*UserService](c, "userService"))
+}
 
+// demoConcurrentAccess 演示容器的并发安全访问。
+func demoConcurrentAccess(c core.Container) {
 	// ---- 8. Concurrent access safety test ----
 	fmt.Println()
 	fmt.Println("--- Concurrent access test ---")
@@ -165,14 +194,14 @@ func main() {
 	if concurrentErrors == 0 {
 		fmt.Println("  All 20 concurrent operations succeeded!")
 	}
+}
 
+// destroyContainer 销毁容器，触发各 Bean 的 Destroy 回调。
+func destroyContainer(c core.Container) {
 	// ---- Destroy container ----
 	fmt.Println()
 	fmt.Println("--- Destroying container ---")
 	if err := c.Destroy(); err != nil {
 		panic(err)
 	}
-
-	fmt.Println()
-	fmt.Println("=== Example completed successfully ===")
 }

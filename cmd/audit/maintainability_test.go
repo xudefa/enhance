@@ -27,7 +27,7 @@ func TestAnalyzeMaintainability_LongFunc(t *testing.T) {
 	t.Parallel()
 	var sb strings.Builder
 	sb.WriteString("package p\nfunc F() int {\n")
-	for i := 0; i < 60; i++ {
+	for i := 0; i < 90; i++ {
 		sb.WriteString("\tvalue := 0\n")
 	}
 	sb.WriteString("\treturn 0\n}\n")
@@ -35,12 +35,42 @@ func TestAnalyzeMaintainability_LongFunc(t *testing.T) {
 	findings := analyzeMaintainability(f)
 	found := false
 	for _, fd := range findings {
-		if strings.Contains(fd.Message, "50 行") {
+		if strings.Contains(fd.Message, "80 行") {
 			found = true
 		}
 	}
 	if !found {
 		t.Fatalf("未找到超长函数发现: %+v", findings)
+	}
+}
+
+func TestAnalyzeMaintainability_ShortFunc(t *testing.T) {
+	t.Parallel()
+	var sb strings.Builder
+	sb.WriteString("package p\nfunc F() int {\n")
+	for i := 0; i < 60; i++ {
+		sb.WriteString("\tvalue := 0\n")
+	}
+	sb.WriteString("\treturn 0\n}\n")
+	f := parseSnippet(t, sb.String(), false)
+	if findings := analyzeMaintainability(f); len(findings) != 0 {
+		t.Fatalf("60 行函数不应报告（规范 ≤80 行）: %+v", findings)
+	}
+}
+
+func TestAnalyzeMaintainability_LongTestFile(t *testing.T) {
+	t.Parallel()
+	f := parseSnippet(t, "package p\n"+strings.Repeat("func TestX() {}\n", 1100), true)
+	if findings := analyzeMaintainability(f); len(findings) == 0 {
+		t.Fatalf("超 1000 行的测试文件应被报告")
+	}
+}
+
+func TestAnalyzeMaintainability_TestFileWithinLimit(t *testing.T) {
+	t.Parallel()
+	f := parseSnippet(t, "package p\n"+strings.Repeat("func TestX() {}\n", 600), true)
+	if findings := analyzeMaintainability(f); len(findings) != 0 {
+		t.Fatalf("600 行测试文件不应报告（测试 ≤1000 行）: %+v", findings)
 	}
 }
 

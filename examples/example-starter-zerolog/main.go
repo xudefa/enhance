@@ -25,29 +25,58 @@ func main() {
 	fmt.Println("=== Zerolog Starter Example ===")
 	fmt.Println()
 
+	app := newApp("zerolog-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	logger, ok := getZerologLogger(app)
+	if !ok {
+		return
+	}
+	logLevelsDemo(logger)
+	logDirectZerologDemo(app)
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("zerolog-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Zerolog 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getZerologLogger 从容器中获取增强框架日志器。
+func getZerologLogger(app *boot.Boot) (log.Logger, bool) {
 	// Get the logger from container
 	logger, err := core.GetByName[log.Logger](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
-		return
+		return nil, false
 	}
+	return logger, true
+}
 
+// logLevelsDemo 演示不同级别与结构化日志输出。
+func logLevelsDemo(logger log.Logger) {
 	// Demonstrate logging at different levels
 	fmt.Println("--- Logging at Different Levels ---")
 
@@ -89,12 +118,15 @@ func main() {
 		log.KeyValue{Key: "host", Value: "localhost"},
 		log.KeyValue{Key: "port", Value: 5432},
 	)
+}
 
+// logDirectZerologDemo 演示直接使用 Zerolog 日志器输出。
+func logDirectZerologDemo(app *boot.Boot) {
 	// Demonstrate direct Zerolog usage
 	fmt.Println("\n--- Direct Zerolog Usage ---")
 
 	var zerologLogger *zerolog.Logger
-	zerologLogger, err = core.GetByName[*zerolog.Logger](app.Container(), "")
+	zerologLogger, err := core.GetByName[*zerolog.Logger](app.Container(), "")
 	if err == nil {
 		zerologLogger.Info().
 			Str("service", "user-service").
@@ -102,6 +134,4 @@ func main() {
 			Bool("debug", false).
 			Msg("Direct Zerolog logging")
 	}
-
-	fmt.Println("\n=== Example completed successfully ===")
 }

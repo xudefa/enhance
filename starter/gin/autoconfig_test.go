@@ -7,7 +7,7 @@ import (
 )
 
 func TestGinConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-gin", environment.PriorityNormal, map[string]any{
 		"gin.enabled":        "true",
@@ -45,7 +45,7 @@ func TestGinConfig_LoadConfig(t *testing.T) {
 }
 
 func TestGinConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 
 	autoConfig := &GinAutoConfiguration{}

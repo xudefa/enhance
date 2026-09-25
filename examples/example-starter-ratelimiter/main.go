@@ -30,22 +30,41 @@ func main() {
 	fmt.Println("=== RateLimiter Starter Example ===")
 	fmt.Println()
 
+	app := newApp("ratelimiter-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	runRateLimitSimulation()
+	runStrategyDemo()
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("ratelimiter-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 RateLimiter 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// runRateLimitSimulation 模拟固定速率与突发限制的限流行为。
+func runRateLimitSimulation() {
 	// Note: In a real scenario, you would get a rate limiter from the container
 	// For this example, we'll simulate the behavior
 	fmt.Println("--- Rate Limiting Demo ---")
@@ -86,7 +105,10 @@ func main() {
 		// Simulate time passing
 		time.Sleep(50 * time.Millisecond)
 	}
+}
 
+// runStrategyDemo 演示不同限流策略下的请求放行差异。
+func runStrategyDemo() {
 	// Demonstrate different rate limiting strategies
 	fmt.Println("\n--- Different Rate Limiting Strategies ---")
 

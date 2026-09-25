@@ -53,6 +53,31 @@ func main() {
 	// 手动注册服务到容器（替代 starter 自动配置）
 	c := app.Container()
 
+	registerUtilities(c)
+	if err := c.Initialize(); err != nil {
+		panic(err)
+	}
+
+	router := buildRouter(c)
+	logger := log.Build()
+
+	// 配置定时任务
+	setupCronJobs(core.MustGet[*cron.Cron](c, "cronMgr"), logger)
+
+	// 启动 HTTP 服务器
+	go func() {
+		logger.Info(context.Background(), "HTTP 服务器启动在 :8080")
+		if err := router.Run(":8080"); err != nil {
+			logger.Error(context.Background(), "HTTP 服务器启动失败", log.KeyValue{Key: "error", Value: err.Error()})
+		}
+	}()
+
+	// 启动应用
+	app.Start()
+}
+
+// registerUtilities 手动向容器注册 validator、限流器、cron 与 asynq 等服务。
+func registerUtilities(c core.Container) {
 	// 注册 validator
 	_ = core.Register[*validator.Validate](c,
 		core.WithName[*validator.Validate]("validator"),
@@ -86,16 +111,13 @@ func main() {
 			return asynq.NewClient(redisOpt), nil
 		}),
 	)
+}
 
-	// 初始化容器
-	if err := c.Initialize(); err != nil {
-		panic(err)
-	}
-
+// buildRouter 创建 Gin 路由并注册限流中间件与业务接口。
+func buildRouter(c core.Container) *gin.Engine {
 	// 获取所有服务实例
 	validate := core.MustGet[*validator.Validate](c, "validator")
 	limiter := core.MustGet[*rate.Limiter](c, "limiter")
-	cronMgr := core.MustGet[*cron.Cron](c, "cronMgr")
 	asynqClient := core.MustGet[*asynq.Client](c, "asynqClient")
 
 	// 创建 Gin 路由
@@ -119,22 +141,7 @@ func main() {
 	router.GET("/api/health", healthHandler())
 	router.POST("/api/tasks/email", sendEmailHandler(asynqClient))
 
-	// 创建日志记录器
-	logger := log.Build()
-
-	// 配置定时任务
-	setupCronJobs(cronMgr, logger)
-
-	// 启动 HTTP 服务器
-	go func() {
-		logger.Info(context.Background(), "HTTP 服务器启动在 :8080")
-		if err := router.Run(":8080"); err != nil {
-			logger.Error(context.Background(), "HTTP 服务器启动失败", log.KeyValue{Key: "error", Value: err.Error()})
-		}
-	}()
-
-	// 启动应用
-	app.Start()
+	return router
 }
 
 // createUserHandler 创建用户处理器（带验证）

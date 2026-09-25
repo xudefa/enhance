@@ -29,17 +29,9 @@ func main() {
 	fmt.Println("=== Redis Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
-	app, err := boot.NewApplication(
-		boot.WithAppName("redis-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := newApp()
 	defer app.Stop()
 
-	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: Redis connection failed: %v\n", err)
 		fmt.Println("This example requires a running Redis server.")
@@ -47,11 +39,9 @@ func main() {
 		return
 	}
 
-	// Get the Redis cache from container
 	ctx := context.Background()
-	redisCache, err := core.GetByName[cache.Cache](app.Container(), "")
+	redisCache, err := getCache(app)
 	if err != nil {
-		fmt.Printf("Failed to get cache: %v\n", err)
 		return
 	}
 
@@ -61,6 +51,40 @@ func main() {
 		fmt.Println("Warning: cache does not support Exists operation")
 	}
 
+	if err := demoBasicOps(ctx, redisCache, cacheInspector); err != nil {
+		return
+	}
+	if err := demoMultipleValues(ctx, redisCache, cacheInspector); err != nil {
+		return
+	}
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
+	app, err := boot.NewApplication(
+		boot.WithAppName("redis-example"),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// getCache 从容器的 Bean 中获取 Redis 缓存实例。
+func getCache(app *boot.Boot) (cache.Cache, error) {
+	redisCache, err := core.GetByName[cache.Cache](app.Container(), "")
+	if err != nil {
+		fmt.Printf("Failed to get cache: %v\n", err)
+		return nil, fmt.Errorf("Failed to get cache: %w", err)
+	}
+	return redisCache, nil
+}
+
+// demoBasicOps 演示单个键的写入、读取与存在性检查。
+func demoBasicOps(ctx context.Context, redisCache cache.Cache, inspector cache.CacheInspector) error {
 	// Demonstrate cache operations
 	fmt.Println("--- Cache Operations ---")
 
@@ -72,27 +96,31 @@ func main() {
 	fmt.Printf("Setting key: %s = %s (TTL: %v)\n", key, value, ttl)
 	if err := redisCache.Set(ctx, key, value, ttl); err != nil {
 		fmt.Printf("Set failed: %v\n", err)
-		return
+		return fmt.Errorf("Set failed: %w", err)
 	}
 
 	// Get the value
 	retrieved, err := redisCache.Get(ctx, key)
 	if err != nil {
 		fmt.Printf("Get failed: %v\n", err)
-		return
+		return fmt.Errorf("Get failed: %w", err)
 	}
 	fmt.Printf("Got value: %v\n", retrieved)
 
 	// Check if key exists
-	if cacheInspector != nil {
-		exists, err := cacheInspector.Exists(ctx, key)
+	if inspector != nil {
+		exists, err := inspector.Exists(ctx, key)
 		if err != nil {
 			fmt.Printf("Exists failed: %v\n", err)
-			return
+			return fmt.Errorf("Exists failed: %w", err)
 		}
 		fmt.Printf("Key exists: %v\n", exists)
 	}
+	return nil
+}
 
+// demoMultipleValues 演示多个键的写入、读取、删除与删除验证。
+func demoMultipleValues(ctx context.Context, redisCache cache.Cache, inspector cache.CacheInspector) error {
 	// Set multiple values
 	fmt.Println("\n--- Multiple Values ---")
 	users := map[string]string{
@@ -123,19 +151,18 @@ func main() {
 	fmt.Println("\n--- Delete ---")
 	if err := redisCache.Del(ctx, "user:1"); err != nil {
 		fmt.Printf("Del failed: %v\n", err)
-		return
+		return fmt.Errorf("Del failed: %w", err)
 	}
 	fmt.Println("Deleted: user:1")
 
 	// Verify deletion
-	if cacheInspector != nil {
-		exists, err := cacheInspector.Exists(ctx, "user:1")
+	if inspector != nil {
+		exists, err := inspector.Exists(ctx, "user:1")
 		if err != nil {
 			fmt.Printf("Exists check failed: %v\n", err)
-			return
+			return fmt.Errorf("Exists check failed: %w", err)
 		}
 		fmt.Printf("user:1 exists after deletion: %v\n", exists)
 	}
-
-	fmt.Println("\n=== Example completed successfully ===")
+	return nil
 }

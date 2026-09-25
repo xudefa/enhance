@@ -31,45 +31,72 @@ func main() {
 	fmt.Println("=== Chi Starter Example ===")
 	fmt.Println()
 
+	app := newApp("chi-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	router, ok := getChiRouter(app)
+	if !ok {
+		return
+	}
+	registerRoutes(router)
+	waitForSignal(app)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("chi-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Chi 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getChiRouter 从容器中获取 Chi 路由器。
+func getChiRouter(app *boot.Boot) (*chi.Mux, bool) {
 	// Get the Chi router from container
 	chiRouter, err := core.GetByName[*chi.Mux](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get chi router: %v\n", err)
-		return
+		return nil, false
 	}
+	return chiRouter, true
+}
 
+// registerRoutes 注册中间件与 HTTP 路由。
+func registerRoutes(router *chi.Mux) {
 	// Use middleware
-	chiRouter.Use(middleware.Logger)
-	chiRouter.Use(middleware.Recoverer)
-	chiRouter.Use(middleware.RequestID)
+	router.Use(middleware.Logger)
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.RequestID)
 
 	// Register routes
 	fmt.Println("--- Registering Routes ---")
 
 	// Root route
-	chiRouter.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"message": "Welcome to Chi Starter Example", "version": "1.0.0"}`))
 	})
 
 	// Hello route with query parameter
-	chiRouter.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/hello", func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Query().Get("name")
 		if name == "" {
 			name = "World"
@@ -79,13 +106,13 @@ func main() {
 	})
 
 	// Health check endpoint
-	chiRouter.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status": "UP"}`))
 	})
 
 	// User routes with sub-router
-	chiRouter.Route("/users", func(subRouter chi.Router) {
+	router.Route("/users", func(subRouter chi.Router) {
 		subRouter.Get("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`[{"id": 1, "name": "John Doe"}, {"id": 2, "name": "Jane Doe"}]`))
@@ -107,7 +134,9 @@ func main() {
 	fmt.Println()
 	fmt.Println("Server is running on http://localhost:8080")
 	fmt.Println("Press Ctrl+C to stop")
+}
 
-	// Wait for signal
+// waitForSignal 阻塞等待退出信号。
+func waitForSignal(app *boot.Boot) {
 	app.WaitForSignal()
 }

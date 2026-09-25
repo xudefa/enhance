@@ -52,6 +52,12 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 			span := tracer.StartSpan(spanName, opts...)
 			defer span.End()
 
+			// 在 next.ServeHTTP 之前设置响应头，确保响应头在响应发送前被写入
+			respHeaders := tracer.Inject(span.Context())
+			for k, v := range respHeaders {
+				w.Header().Set(k, v)
+			}
+
 			rw := &responseWriter{ResponseWriter: w}
 			next.ServeHTTP(rw, r)
 
@@ -61,11 +67,6 @@ func TracingMiddleware(tracer *tracing.Tracer) func(http.Handler) http.Handler {
 				span.SetStatus(tracing.StatusError)
 			} else {
 				span.SetStatus(tracing.StatusOK)
-			}
-
-			respHeaders := tracer.Inject(span.Context())
-			for k, v := range respHeaders {
-				w.Header().Set(k, v)
 			}
 		})
 	}

@@ -29,17 +29,9 @@ func main() {
 	fmt.Println("=== RabbitMQ Starter Example ===")
 	fmt.Println()
 
-	// Create application with boot
-	app, err := boot.NewApplication(
-		boot.WithAppName("rabbitmq-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := newApp()
 	defer app.Stop()
 
-	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: RabbitMQ connection failed: %v\n", err)
 		fmt.Println("This example requires a running RabbitMQ server.")
@@ -47,16 +39,52 @@ func main() {
 		return
 	}
 
-	// Get the RabbitMQ channel from container
-	ch, err := core.GetByName[*amqp.Channel](app.Container(), "")
+	ch, err := getChannel(app)
 	if err != nil {
-		fmt.Printf("Failed to get RabbitMQ channel: %v\n", err)
 		return
 	}
 	defer ch.Close()
 
 	ctx := context.Background()
 
+	queueName, err := demoDeclareAndPublish(ctx, ch)
+	if err != nil {
+		return
+	}
+	if err := demoConsume(ctx, ch, queueName); err != nil {
+		return
+	}
+	if err := demoQueueInfo(ch); err != nil {
+		return
+	}
+
+	fmt.Println("\n=== Example completed successfully ===")
+}
+
+// newApp 创建应用实例，配置名称与激活的 Profile。
+func newApp() *boot.Boot {
+	app, err := boot.NewApplication(
+		boot.WithAppName("rabbitmq-example"),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// getChannel 从容器的 Bean 中获取 RabbitMQ 通道。
+func getChannel(app *boot.Boot) (*amqp.Channel, error) {
+	ch, err := core.GetByName[*amqp.Channel](app.Container(), "")
+	if err != nil {
+		fmt.Printf("Failed to get RabbitMQ channel: %v\n", err)
+		return nil, fmt.Errorf("Failed to get RabbitMQ channel: %w", err)
+	}
+	return ch, nil
+}
+
+// demoDeclareAndPublish 演示声明队列并发布单条与多条消息（Demo 1-3）。
+func demoDeclareAndPublish(ctx context.Context, ch *amqp.Channel) (string, error) {
 	// Demo 1: Declare a queue
 	fmt.Println("--- Demo 1: Declare Queue ---")
 	queue, err := ch.QueueDeclare(
@@ -69,7 +97,7 @@ func main() {
 	)
 	if err != nil {
 		fmt.Printf("Failed to declare queue: %v\n", err)
-		return
+		return "", fmt.Errorf("Failed to declare queue: %w", err)
 	}
 	fmt.Printf("Queue declared: %s (messages: %d, consumers: %d)\n", queue.Name, queue.Messages, queue.Consumers)
 
@@ -89,7 +117,7 @@ func main() {
 		})
 	if err != nil {
 		fmt.Printf("Failed to publish message: %v\n", err)
-		return
+		return "", fmt.Errorf("Failed to publish message: %w", err)
 	}
 	fmt.Println("Message published")
 
@@ -118,21 +146,25 @@ func main() {
 		}
 		fmt.Printf("Message %d published\n", i+1)
 	}
+	return queue.Name, nil
+}
 
+// demoConsume 演示在超时时间内的消息消费（Demo 4）。
+func demoConsume(ctx context.Context, ch *amqp.Channel, queueName string) error {
 	// Demo 4: Consume messages
 	fmt.Println("\n--- Demo 4: Consume Messages ---")
 	msgs, err := ch.Consume(
-		queue.Name, // queue
-		"",         // consumer
-		true,       // auto-ack
-		false,      // exclusive
-		false,      // no-local
-		false,      // no-wait
-		nil,        // args
+		queueName, // queue
+		"",        // consumer
+		true,      // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
 	)
 	if err != nil {
 		fmt.Printf("Failed to consume messages: %v\n", err)
-		return
+		return fmt.Errorf("Failed to consume messages: %w", err)
 	}
 
 	// Read messages with timeout
@@ -158,12 +190,17 @@ func main() {
 	}
 
 done:
+	return nil
+}
+
+// demoQueueInfo 演示获取队列信息、清空与删除队列（Demo 5-7）。
+func demoQueueInfo(ch *amqp.Channel) error {
 	// Demo 5: Get queue info
 	fmt.Println("\n--- Demo 5: Queue Info ---")
-	queue, err = ch.QueueInspect("enhance-queue")
+	queue, err := ch.QueueInspect("enhance-queue")
 	if err != nil {
 		fmt.Printf("Failed to get queue info: %v\n", err)
-		return
+		return fmt.Errorf("Failed to get queue info: %w", err)
 	}
 	fmt.Printf("Queue: %s\n", queue.Name)
 	fmt.Printf("Messages: %d\n", queue.Messages)
@@ -174,7 +211,7 @@ done:
 	purged, err := ch.QueuePurge("enhance-queue", false)
 	if err != nil {
 		fmt.Printf("Failed to purge queue: %v\n", err)
-		return
+		return fmt.Errorf("Failed to purge queue: %w", err)
 	}
 	fmt.Printf("Purged %d messages\n", purged)
 
@@ -183,9 +220,8 @@ done:
 	_, err = ch.QueueDelete("enhance-queue", false, false, false)
 	if err != nil {
 		fmt.Printf("Failed to delete queue: %v\n", err)
-		return
+		return fmt.Errorf("Failed to delete queue: %w", err)
 	}
 	fmt.Println("Queue deleted")
-
-	fmt.Println("\n=== Example completed successfully ===")
+	return nil
 }

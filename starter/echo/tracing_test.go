@@ -10,7 +10,7 @@ import (
 )
 
 func TestTracingMiddleware_WithTracer(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)
@@ -48,7 +48,7 @@ func TestTracingMiddleware_WithTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithoutTracer(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	e := echo.New()
 	e.Use(TracingMiddleware(nil))
 	e.GET("/test", func(c echo.Context) error {
@@ -68,7 +68,7 @@ func TestTracingMiddleware_WithoutTracer(t *testing.T) {
 }
 
 func TestTracingMiddleware_WithError(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)
@@ -103,7 +103,7 @@ func TestTracingMiddleware_WithError(t *testing.T) {
 }
 
 func TestTracingMiddleware_ContextPropagation(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	tracer := tracing.NewTracer(
 		tracing.WithServiceName("test-service"),
 	)

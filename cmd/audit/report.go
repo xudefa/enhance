@@ -146,7 +146,7 @@ func writeJSONReport(path string, generated time.Time, stats Stats, results []Pa
 	}
 	jsonData, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal audit report to JSON: %w", err)
 	}
 	return os.WriteFile(path, jsonData, 0o644)
 }

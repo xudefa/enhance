@@ -46,7 +46,13 @@ func (v *TagValidator) validateCrossField(field reflect.Value, rule, fieldName s
 		}
 	}
 
-	return v.applyCrossValidation(field, otherValue, otherFieldName, validationType, fieldName)
+	return v.applyCrossValidation(crossFieldCheck{
+		field:          field,
+		other:          otherValue,
+		fieldName:      fieldName,
+		otherFieldName: otherFieldName,
+		validationType: validationType,
+	})
 }
 
 // crossRuleFormatError 构造跨字段规则格式错误。
@@ -89,32 +95,41 @@ func crossMismatchError(fieldName string, field reflect.Value, message string) e
 	}
 }
 
+// crossFieldCheck 跨字段比较的参数集合。
+type crossFieldCheck struct {
+	field          reflect.Value
+	other          reflect.Value
+	fieldName      string
+	otherFieldName string
+	validationType string
+}
+
 // applyCrossValidation 根据比较类型执行跨字段比较。
-func (v *TagValidator) applyCrossValidation(field, otherValue reflect.Value, otherFieldName, validationType, fieldName string) error {
-	switch validationType {
+func (v *TagValidator) applyCrossValidation(check crossFieldCheck) error {
+	switch check.validationType {
 	case "eq":
-		if !v.fieldsEqual(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须与 %s 相等", otherFieldName))
+		if !v.fieldsEqual(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须与 %s 相等", check.otherFieldName))
 		}
 	case "ne":
-		if v.fieldsEqual(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须与 %s 不相等", otherFieldName))
+		if v.fieldsEqual(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须与 %s 不相等", check.otherFieldName))
 		}
 	case "gt":
-		if !v.fieldGreaterThan(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须大于 %s", otherFieldName))
+		if !v.fieldGreaterThan(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须大于 %s", check.otherFieldName))
 		}
 	case "gte":
-		if !v.fieldGreaterThanOrEqual(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须大于或等于 %s", otherFieldName))
+		if !v.fieldGreaterThanOrEqual(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须大于或等于 %s", check.otherFieldName))
 		}
 	case "lt":
-		if !v.fieldLessThan(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须小于 %s", otherFieldName))
+		if !v.fieldLessThan(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须小于 %s", check.otherFieldName))
 		}
 	case "lte":
-		if !v.fieldLessThanOrEqual(field, otherValue) {
-			return crossMismatchError(fieldName, field, fmt.Sprintf("字段必须小于或等于 %s", otherFieldName))
+		if !v.fieldLessThanOrEqual(check.field, check.other) {
+			return crossMismatchError(check.fieldName, check.field, fmt.Sprintf("字段必须小于或等于 %s", check.otherFieldName))
 		}
 	}
 	return nil

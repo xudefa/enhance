@@ -3,7 +3,7 @@ module github.com/xudefa/enhance/examples/example-enhance-jwt-casbin
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.6
+	github.com/xudefa/enhance v0.0.7
 	github.com/xudefa/enhance/starter/casbin v0.0.7
 	github.com/xudefa/enhance/starter/jwt v0.0.7
 )

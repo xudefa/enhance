@@ -61,19 +61,23 @@ var (
 	nextID = int64(1)
 )
 
+// webStackComponents Web 栈核心组件集合，供定时任务与路由注册使用。
+type webStackComponents struct {
+	logger        log.Logger
+	engine        *gin.Engine
+	validate      *validator.Validate
+	registry      metrics.MeterRegistry
+	cronScheduler *cron.Cron
+	requestCtr    metrics.Counter
+}
+
 func main() {
 	fmt.Println("=== Integrated Web Stack Example ===")
 	fmt.Println()
 	fmt.Println("Starters: gin + zerolog + prometheus + cron + validator + swagger")
 	fmt.Println()
 
-	app, err := boot.NewApplication(
-		boot.WithAppName("web-stack-example"),
-		boot.WithProfiles("default"),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create application: %v", err))
-	}
+	app := buildWebStackApplication()
 	defer app.Stop()
 
 	if err := app.Start(); err != nil {
@@ -81,26 +85,56 @@ func main() {
 		return
 	}
 
-	logger, _ := core.GetByName[log.Logger](app.Container(), "")
-	engine, _ := core.GetByName[*gin.Engine](app.Container(), "")
-	validate, _ := core.GetByName[*validator.Validate](app.Container(), "")
-	registry, _ := core.GetByName[metrics.MeterRegistry](app.Container(), "")
-	cronScheduler, _ := core.GetByName[*cron.Cron](app.Container(), "")
+	components := setupWebStack(app)
+	registerWebStackRoutes(components)
+	printWebStackInfo()
+
+	components.cronScheduler.Start()
+	app.WaitForSignal()
+}
+
+// buildWebStackApplication 创建 Web 栈演示应用。
+func buildWebStackApplication() *boot.Boot {
+	app, err := boot.NewApplication(
+		boot.WithAppName("web-stack-example"),
+		boot.WithProfiles("default"),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create application: %v", err))
+	}
+	return app
+}
+
+// setupWebStack 从容器获取组件，注册定时任务与指标。
+func setupWebStack(app *boot.Boot) *webStackComponents {
+	comp := &webStackComponents{}
+	comp.logger, _ = core.GetByName[log.Logger](app.Container(), "")
+	comp.engine, _ = core.GetByName[*gin.Engine](app.Container(), "")
+	comp.validate, _ = core.GetByName[*validator.Validate](app.Container(), "")
+	comp.registry, _ = core.GetByName[metrics.MeterRegistry](app.Container(), "")
+	comp.cronScheduler, _ = core.GetByName[*cron.Cron](app.Container(), "")
 
 	// Register cron jobs
-	cronScheduler.AddFunc("*/30 * * * * *", func() {
-		if logger != nil {
-			logger.Info(nil, "Scheduled task: heartbeat check")
+	comp.cronScheduler.AddFunc("*/30 * * * * *", func() {
+		if comp.logger != nil {
+			comp.logger.Info(nil, "Scheduled task: heartbeat check")
 		}
 	})
 
 	// Register metrics
-	requestCounter := registry.Counter("http_requests_total")
-	requestCounter.Inc()
+	comp.requestCtr = comp.registry.Counter("http_requests_total")
+	comp.requestCtr.Inc()
+
+	return comp
+}
+
+// registerWebStackRoutes 注册 Web 栈的用户管理路由。
+func registerWebStackRoutes(comp *webStackComponents) {
+	engine := comp.engine
 
 	// Register routes
 	engine.GET("/", func(c *gin.Context) {
-		requestCounter.Inc()
+		comp.requestCtr.Inc()
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Integrated Web Stack Example",
 			"stack":   []string{"gin", "zerolog", "prometheus", "cron", "validator", "swagger"},
@@ -114,18 +148,18 @@ func main() {
 	api := engine.Group("/api")
 	{
 		api.GET("/users", func(c *gin.Context) {
-			requestCounter.Inc()
+			comp.requestCtr.Inc()
 			c.JSON(http.StatusOK, users)
 		})
 
 		api.POST("/users", func(c *gin.Context) {
-			requestCounter.Inc()
+			comp.requestCtr.Inc()
 			var req CreateUserRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			if err := validate.Struct(req); err != nil {
+			if err := comp.validate.Struct(req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
@@ -136,8 +170,8 @@ func main() {
 				Age:   req.Age,
 			}
 			users = append(users, user)
-			if logger != nil {
-				logger.Info(nil, "User created",
+			if comp.logger != nil {
+				comp.logger.Info(nil, "User created",
 					log.KeyValue{Key: "user_id", Value: user.ID},
 					log.KeyValue{Key: "name", Value: user.Name},
 				)
@@ -146,7 +180,7 @@ func main() {
 		})
 
 		api.GET("/users/:id", func(c *gin.Context) {
-			requestCounter.Inc()
+			comp.requestCtr.Inc()
 			id := c.Param("id")
 			for _, u := range users {
 				if fmt.Sprintf("%d", u.ID) == id {
@@ -157,7 +191,10 @@ func main() {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		})
 	}
+}
 
+// printWebStackInfo 输出路由清单与启动信息。
+func printWebStackInfo() {
 	fmt.Println("Routes:")
 	fmt.Println("  GET  /             - Welcome message")
 	fmt.Println("  GET  /health       - Health check")
@@ -169,7 +206,4 @@ func main() {
 	fmt.Println("Server is running on http://localhost:8080")
 	fmt.Println("Metrics: http://localhost:9090/metrics")
 	fmt.Println("Press Ctrl+C to stop")
-
-	cronScheduler.Start()
-	app.WaitForSignal()
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNacosConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-nacos", environment.PriorityNormal, map[string]any{
 		"nacos.enabled":      "true",
@@ -44,7 +44,7 @@ func TestNacosConfig_LoadConfig(t *testing.T) {
 }
 
 func TestNacosConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &NacosConfig{
 		ServerAddr:  DefaultNacosAddr,
 		Port:        DefaultNacosPort,

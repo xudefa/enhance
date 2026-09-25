@@ -338,10 +338,10 @@ type BeanProvider func(c core.Container) error
 
 // ==================== Plugin 接口 ====================
 
-// Plugin 插件接口，定义插件的生命周期和元信息。
+// Plugin 插件接口，定义插件的生命周期。
 //
 // 插件是比 Starter 更高级的抽象，提供独立的生命周期管理和依赖管理。
-// 每个插件可以独立启用/禁用，并声明对其他插件的依赖。
+// 每个插件可以独立启用/禁用。版本与依赖元信息通过组合 PluginMeta 提供。
 //
 // 示例:
 //
@@ -355,11 +355,16 @@ type BeanProvider func(c core.Container) error
 //	func (p *MyPlugin) Stop(ctx PluginContext) error { /* 停止 */ return nil }
 type Plugin interface {
 	Name() string
-	Version() string
-	Dependencies() []string
 	Init(ctx PluginContext) error
 	Start(ctx PluginContext) error
 	Stop(ctx PluginContext) error
+	PluginMeta
+}
+
+// PluginMeta 插件元信息接口，供 Plugin 组合，提供版本与依赖声明。
+type PluginMeta interface {
+	Version() string
+	Dependencies() []string
 }
 
 // PluginContext 插件上下文，提供插件运行时的环境信息。
@@ -374,10 +379,15 @@ type PluginContext interface {
 type PluginState int
 
 const (
+	// PluginStateRegistered 插件已注册但尚未初始化。
 	PluginStateRegistered PluginState = iota
+	// PluginStateInitialized 插件已完成初始化。
 	PluginStateInitialized
+	// PluginStateStarted 插件已启动。
 	PluginStateStarted
+	// PluginStateStopped 插件已停止。
 	PluginStateStopped
+	// PluginStateError 插件进入错误状态。
 	PluginStateError
 )
 

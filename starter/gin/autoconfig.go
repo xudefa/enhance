@@ -60,28 +60,62 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	container := ctx.Container()
 	env := ctx.Environment()
 
-	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
-		c.logger = logger
-	} else {
-		c.logger = log.Build()
-	}
+	c.resolveLogger(container)
 
 	cfg, err := c.loadConfig(env)
 	if err != nil {
 		return fmt.Errorf("failed to load Gin config: %w", err)
 	}
-
 	c.config = cfg
+	c.applyMode(cfg.Mode)
 
-	if cfg.Mode == "release" {
-		gin.SetMode(gin.ReleaseMode)
-	} else if cfg.Mode == "test" {
-		gin.SetMode(gin.TestMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
+	c.buildEngine(ctx, container, cfg)
+
+	c.server = &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Handler: c.engine,
 	}
 
-	// 尝试从容器获取已存在的 Engine 实例，如果不存在则创建默认的
+	if err := c.registerComponents(ctx, container); err != nil {
+		return fmt.Errorf("failed to register Gin components: %w", err)
+	}
+
+	c.logger.Info(ctx.Context(), "Gin Web server configured",
+		log.KeyValue{Key: "port", Value: cfg.Port},
+		log.KeyValue{Key: "host", Value: cfg.Host},
+		log.KeyValue{Key: "mode", Value: cfg.Mode},
+	)
+
+	c.configured = true
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
+	return nil
+}
+
+// resolveLogger 从容器获取日志记录器，缺省时使用默认实现。
+func (c *GinAutoConfiguration) resolveLogger(container core.Container) {
+	if logger, err := core.GetByName[log.Logger](container, ""); err == nil {
+		c.logger = logger
+	} else {
+		c.logger = log.Build()
+	}
+}
+
+// applyMode 根据配置设置 Gin 的运行模式。
+func (c *GinAutoConfiguration) applyMode(mode string) {
+	switch mode {
+	case "release":
+		gin.SetMode(gin.ReleaseMode)
+	case "test":
+		gin.SetMode(gin.TestMode)
+	default:
+		gin.SetMode(gin.DebugMode)
+	}
+}
+
+// buildEngine 获取容器中已存在的 Engine 或创建默认 Engine，并附加中间件与追踪。
+func (c *GinAutoConfiguration) buildEngine(ctx boot.ApplicationContext, container core.Container, cfg *GinConfig) {
 	if engine, err := core.GetByName[*gin.Engine](container, ""); err == nil {
 		c.engine = engine
 		c.logger.Info(ctx.Context(), "using existing Gin Engine instance from container")
@@ -95,30 +129,22 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		}
 	}
 
-	// 尝试从容器获取 Tracer 并注册 tracing 中间件
+	// 从容器获取 Tracer 并注册 tracing 中间件
 	if tracer, err := core.GetByName[*tracing.Tracer](container, ""); err == nil {
 		c.tracer = tracer
 		c.engine.Use(TracingMiddleware(tracer))
 		c.logger.Info(ctx.Context(), "Gin tracing middleware enabled")
 	}
+}
 
-	c.server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Handler: c.engine,
-	}
-
-	// 检查 Engine 是否已注册（由外部传入）
-	engineAlreadyRegistered := false
-	if _, err := core.GetByName[*gin.Engine](container, ""); err == nil {
-		engineAlreadyRegistered = true
-	}
-
+// registerComponents 将 config、engine、server、endpointRegistry 注册到容器。
+func (c *GinAutoConfiguration) registerComponents(ctx boot.ApplicationContext, container core.Container) error {
 	if err := container.RegisterInstance(c.config, reflect.TypeFor[*GinConfig]()); err != nil {
 		return fmt.Errorf("failed to register Gin Config: %w", err)
 	}
 
 	// 如果 Engine 已存在，跳过注册
-	if !engineAlreadyRegistered {
+	if _, err := core.GetByName[*gin.Engine](container, ""); err != nil {
 		if err := container.RegisterInstance(c.engine, reflect.TypeFor[*gin.Engine]()); err != nil {
 			return fmt.Errorf("failed to register Gin Engine: %w", err)
 		}
@@ -135,18 +161,6 @@ func (c *GinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
-
-	c.logger.Info(ctx.Context(), "Gin Web server configured",
-		log.KeyValue{Key: "port", Value: cfg.Port},
-		log.KeyValue{Key: "host", Value: cfg.Host},
-		log.KeyValue{Key: "mode", Value: cfg.Mode},
-	)
-
-	c.configured = true
-
-	// 存储应用上下文
-	c.ctx = ctx.Context()
-
 	return nil
 }
 

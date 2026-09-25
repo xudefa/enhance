@@ -35,6 +35,20 @@ type NotificationEvent struct {
 	Message string
 }
 
+// eventTracker 汇总事件处理统计与日志，供演示验证与输出。
+type eventTracker struct {
+	syncHandled    atomic.Int32
+	orderedHandled atomic.Int32
+	failedHandled  atomic.Int32
+	mu             sync.Mutex
+	eventLog       []string
+}
+
+// newEventTracker 创建事件跟踪器。
+func newEventTracker() *eventTracker {
+	return &eventTracker{eventLog: make([]string, 0)}
+}
+
 func main() {
 	fmt.Println("=== enhance Event-Driven Architecture Example ===")
 	fmt.Println()
@@ -43,34 +57,48 @@ func main() {
 	bus := event.NewEventBus()
 	dlq := event.NewDeadLetterQueue()
 
-	// Track events for verification
-	var syncHandled atomic.Int32
-	var orderedHandled atomic.Int32
-	var failedHandled atomic.Int32
-	var mu sync.Mutex
-	eventLog := make([]string, 0)
+	tr := newEventTracker()
+	registerSyncHandlers(bus, dlq, tr)
 
+	busWithOrder := event.NewEventBusWithOrdering()
+	registerOrderedHandlers(busWithOrder, tr)
+
+	publishEvents(bus)
+	publishOrderedEvent(busWithOrder)
+
+	printResults(tr)
+	printDeadLetterStats(dlq)
+	printEventLog(tr)
+
+	demoAsyncPublisher()
+
+	fmt.Println()
+	fmt.Println("=== Example completed successfully ===")
+}
+
+// registerSyncHandlers 注册同步处理器，其中 Notification 处理器会失败并写入死信队列。
+func registerSyncHandlers(bus event.EventBus, dlq *event.DeadLetterQueue, tr *eventTracker) {
 	// ---- 2. Register sync handlers ----
 	bus.Subscribe("OrderCreated", func(e event.ApplicationEvent) {
 		evt := e.(*OrderCreatedEvent)
-		syncHandled.Add(1)
-		mu.Lock()
-		eventLog = append(eventLog, fmt.Sprintf("sync:OrderCreated(%s, %.0f)", evt.OrderID, evt.Amount))
-		mu.Unlock()
+		tr.syncHandled.Add(1)
+		tr.mu.Lock()
+		tr.eventLog = append(tr.eventLog, fmt.Sprintf("sync:OrderCreated(%s, %.0f)", evt.OrderID, evt.Amount))
+		tr.mu.Unlock()
 	})
 
 	bus.Subscribe("PaymentProcessed", func(e event.ApplicationEvent) {
 		evt := e.(*PaymentProcessedEvent)
-		syncHandled.Add(1)
-		mu.Lock()
-		eventLog = append(eventLog, fmt.Sprintf("sync:PaymentProcessed(%s, %s)", evt.OrderID, evt.Status))
-		mu.Unlock()
+		tr.syncHandled.Add(1)
+		tr.mu.Lock()
+		tr.eventLog = append(tr.eventLog, fmt.Sprintf("sync:PaymentProcessed(%s, %s)", evt.OrderID, evt.Status))
+		tr.mu.Unlock()
 	})
 
 	// ---- 3. Register a handler that always fails (for DLQ demo) ----
 	bus.Subscribe("Notification", func(e event.ApplicationEvent) {
 		evt := e.(*NotificationEvent)
-		failedHandled.Add(1)
+		tr.failedHandled.Add(1)
 		// Simulate a processing failure
 		fe := event.FailedEvent{
 			Event:      evt,
@@ -79,32 +107,37 @@ func main() {
 			MaxRetries: 3,
 		}
 		dlq.Add(fe)
-		mu.Lock()
-		eventLog = append(eventLog, fmt.Sprintf("fail:Notification(%s)", evt.Message))
-		mu.Unlock()
+		tr.mu.Lock()
+		tr.eventLog = append(tr.eventLog, fmt.Sprintf("fail:Notification(%s)", evt.Message))
+		tr.mu.Unlock()
 	})
+}
 
+// registerOrderedHandlers 注册带执行优先级的处理器。
+func registerOrderedHandlers(bus *event.EventBusWithOrdering, tr *eventTracker) {
 	// ---- 4. Register a handler with ordering (via EventBusWithOrdering) ----
-	busWithOrder := event.NewEventBusWithOrdering()
-	busWithOrder.SubscribeWithConfig("PaymentProcessed", event.ListenerConfig{
+	bus.SubscribeWithConfig("PaymentProcessed", event.ListenerConfig{
 		Handler: func(e event.ApplicationEvent) {
 			evt := e.(*PaymentProcessedEvent)
-			orderedHandled.Add(1)
-			mu.Lock()
-			eventLog = append(eventLog, fmt.Sprintf("ordered:PaymentProcessed(%s)", evt.OrderID))
-			mu.Unlock()
+			tr.orderedHandled.Add(1)
+			tr.mu.Lock()
+			tr.eventLog = append(tr.eventLog, fmt.Sprintf("ordered:PaymentProcessed(%s)", evt.OrderID))
+			tr.mu.Unlock()
 		},
 		Order: 10,
 	})
-	busWithOrder.SubscribeWithConfig("PaymentProcessed", event.ListenerConfig{
+	bus.SubscribeWithConfig("PaymentProcessed", event.ListenerConfig{
 		Handler: func(e event.ApplicationEvent) {
-			mu.Lock()
-			eventLog = append(eventLog, fmt.Sprintf("ordered:PaymentAudit(%s)", e.(*PaymentProcessedEvent).OrderID))
-			mu.Unlock()
+			tr.mu.Lock()
+			tr.eventLog = append(tr.eventLog, fmt.Sprintf("ordered:PaymentAudit(%s)", e.(*PaymentProcessedEvent).OrderID))
+			tr.mu.Unlock()
 		},
 		Order: 20,
 	})
+}
 
+// publishEvents 发布订单、支付与通知事件。
+func publishEvents(bus event.EventBus) {
 	// ---- 5. Publish events ----
 	fmt.Println("--- Publishing events ---")
 	bus.Publish(&OrderCreatedEvent{
@@ -124,22 +157,31 @@ func main() {
 		BaseEvent: event.BaseEvent{EventType: "Notification"},
 		Message:   "Your order has been placed",
 	})
+}
 
+// publishOrderedEvent 通过有序事件总线发布支付完成事件。
+func publishOrderedEvent(bus *event.EventBusWithOrdering) {
 	// ---- 6. Publish via EventBusWithOrdering (ordered handlers) ----
 	fmt.Println("--- Publishing via ordered bus ---")
-	busWithOrder.Publish(&PaymentProcessedEvent{
+	bus.Publish(&PaymentProcessedEvent{
 		BaseEvent: event.BaseEvent{EventType: "PaymentProcessed"},
 		OrderID:   "ORD-002",
 		Status:    "SUCCESS",
 	})
+}
 
+// printResults 输出各处理器被调用次数。
+func printResults(tr *eventTracker) {
 	// ---- 7. Verify results ----
 	fmt.Println()
 	fmt.Println("--- Results ---")
-	fmt.Printf("  Sync handlers invoked: %d\n", syncHandled.Load())
-	fmt.Printf("  Ordered handlers invoked: %d\n", orderedHandled.Load())
-	fmt.Printf("  Failed handlers invoked: %d\n", failedHandled.Load())
+	fmt.Printf("  Sync handlers invoked: %d\n", tr.syncHandled.Load())
+	fmt.Printf("  Ordered handlers invoked: %d\n", tr.orderedHandled.Load())
+	fmt.Printf("  Failed handlers invoked: %d\n", tr.failedHandled.Load())
+}
 
+// printDeadLetterStats 输出死信队列统计信息。
+func printDeadLetterStats(dlq *event.DeadLetterQueue) {
 	// ---- 8. Check dead letter queue ----
 	fmt.Println()
 	fmt.Println("--- Dead Letter Queue ---")
@@ -149,14 +191,20 @@ func main() {
 	for eventType, count := range dlqStats.EventTypeCount {
 		fmt.Printf("  - %s: %d event(s)\n", eventType, count)
 	}
+}
 
+// printEventLog 输出事件处理日志。
+func printEventLog(tr *eventTracker) {
 	// ---- 9. Print event log ----
 	fmt.Println()
 	fmt.Println("--- Event Processing Log ---")
-	for i, entry := range eventLog {
+	for i, entry := range tr.eventLog {
 		fmt.Printf("  %d. %s\n", i+1, entry)
 	}
+}
 
+// demoAsyncPublisher 演示异步事件发布器。
+func demoAsyncPublisher() {
 	// ---- 10. Demonstrate async publisher ----
 	fmt.Println()
 	fmt.Println("--- Async Publisher ---")
@@ -179,7 +227,4 @@ func main() {
 	time.Sleep(200 * time.Millisecond)
 	publisher.Close()
 	fmt.Printf("  Async events processed: %d\n", asyncCount.Load())
-
-	fmt.Println()
-	fmt.Println("=== Example completed successfully ===")
 }

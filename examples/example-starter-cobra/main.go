@@ -23,29 +23,56 @@ import (
 )
 
 func main() {
+	app := newApp("cobra-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	rootCmd, ok := getRootCmd(app)
+	if !ok {
+		return
+	}
+	buildCommands(rootCmd)
+	executeCommand(rootCmd)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("cobra-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Cobra 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getRootCmd 从容器中获取根命令。
+func getRootCmd(app *boot.Boot) (*cobra.Command, bool) {
 	// Get the root command from container
 	rootCmd, err := core.GetByName[*cobra.Command](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get root command: %v\n", err)
-		return
+		return nil, false
 	}
+	return rootCmd, true
+}
 
+// buildCommands 添加 greet、version 与 config 命令。
+func buildCommands(rootCmd *cobra.Command) {
 	// Add a "greet" command
 	greetCmd := &cobra.Command{
 		Use:   "greet",
@@ -108,7 +135,10 @@ func main() {
 
 	configCmd.AddCommand(configShowCmd, configSetCmd)
 	rootCmd.AddCommand(configCmd)
+}
 
+// executeCommand 执行根命令。
+func executeCommand(rootCmd *cobra.Command) {
 	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Printf("Error: %v\n", err)

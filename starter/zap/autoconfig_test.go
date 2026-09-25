@@ -7,7 +7,7 @@ import (
 )
 
 func TestZapConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-zap", environment.PriorityNormal, map[string]any{
 		"log.zap.enabled":     "true",
@@ -42,7 +42,7 @@ func TestZapConfig_LoadConfig(t *testing.T) {
 }
 
 func TestZapConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &ZapConfig{
 		Level:      DefaultZapLevel,
 		Format:     DefaultZapFormat,

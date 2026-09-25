@@ -251,10 +251,17 @@ func testStdlibServerStartListenAndServe(t *testing.T, server *Server, port int)
 	}
 }
 
-func testStdlibServerStopShutdownStart(t *testing.T, server *Server, port int) (started, done chan struct{}, addr string) {
+// stdlibShutdownFixture 优雅关闭测试的共享状态。
+type stdlibShutdownFixture struct {
+	started chan struct{}
+	done    chan struct{}
+	addr    string
+}
+
+func testStdlibServerStopShutdownStart(t *testing.T, server *Server, port int) stdlibShutdownFixture {
 	t.Helper()
-	started = make(chan struct{})
-	done = make(chan struct{})
+	started := make(chan struct{})
+	done := make(chan struct{})
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -271,7 +278,7 @@ func testStdlibServerStopShutdownStart(t *testing.T, server *Server, port int) (
 		errCh <- server.Start()
 	}()
 
-	addr = "http://127.0.0.1:" + fmt.Sprintf("%d", port)
+	addr := "http://127.0.0.1:" + fmt.Sprintf("%d", port)
 	for i := 0; i < 50; i++ {
 		time.Sleep(10 * time.Millisecond)
 		resp, err := http.Get(addr + "/health")
@@ -280,18 +287,18 @@ func testStdlibServerStopShutdownStart(t *testing.T, server *Server, port int) (
 			break
 		}
 	}
-	return started, done, addr
+	return stdlibShutdownFixture{started: started, done: done, addr: addr}
 }
 
-func testStdlibServerStopShutdownWait(t *testing.T, server *Server, started, done chan struct{}, addr string) {
+func testStdlibServerStopShutdownWait(t *testing.T, server *Server, fixture stdlibShutdownFixture) {
 	t.Helper()
 	slowDone := make(chan struct{})
 	go func() {
 		defer close(slowDone)
-		http.Get(addr + "/slow")
+		http.Get(fixture.addr + "/slow")
 	}()
 
-	<-started
+	<-fixture.started
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -301,7 +308,7 @@ func testStdlibServerStopShutdownWait(t *testing.T, server *Server, started, don
 		stopDone <- server.Stop(ctx)
 	}()
 
-	close(done)
+	close(fixture.done)
 
 	select {
 	case stopErr := <-stopDone:
@@ -342,8 +349,8 @@ func TestServer_Stop_ShutdownWaitsForInFlight(t *testing.T) {
 		engine.WithPort(port),
 	)
 
-	started, done, addr := testStdlibServerStopShutdownStart(t, server, port)
-	testStdlibServerStopShutdownWait(t, server, started, done, addr)
+	fixture := testStdlibServerStopShutdownStart(t, server, port)
+	testStdlibServerStopShutdownWait(t, server, fixture)
 }
 
 func TestNewServer_WithTLSOptions(t *testing.T) {
@@ -412,8 +419,8 @@ func TestServer_Stop_ShutdownWaitsForInFlight_Coverage(t *testing.T) {
 		engine.WithPort(port),
 	)
 
-	started, done, addr := testStdlibServerStopShutdownStart(t, server, port)
-	testStdlibServerStopShutdownWait(t, server, started, done, addr)
+	fixture := testStdlibServerStopShutdownStart(t, server, port)
+	testStdlibServerStopShutdownWait(t, server, fixture)
 }
 
 func TestFactory_CreateServer_WithOptions_Coverage(t *testing.T) {

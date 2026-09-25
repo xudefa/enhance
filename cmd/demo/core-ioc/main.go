@@ -6,10 +6,12 @@ import (
 	"github.com/xudefa/enhance/core"
 )
 
+// UserRepository 用户数据仓库，内存存储用户信息。
 type UserRepository struct {
 	data map[string]string
 }
 
+// NewUserRepository 创建用户数据仓库。
 func NewUserRepository() *UserRepository {
 	return &UserRepository{
 		data: map[string]string{
@@ -19,19 +21,23 @@ func NewUserRepository() *UserRepository {
 	}
 }
 
+// Find 按 ID 查找用户名称。
 func (r *UserRepository) Find(id string) (string, bool) {
 	name, ok := r.data[id]
 	return name, ok
 }
 
+// UserService 用户服务，封装用户查询逻辑。
 type UserService struct {
 	repo *UserRepository
 }
 
+// NewUserService 创建用户服务。
 func NewUserService(repo *UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
+// GetUser 按 ID 获取用户名称。
 func (s *UserService) GetUser(id string) (string, bool) {
 	return s.repo.Find(id)
 }

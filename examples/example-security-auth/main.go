@@ -47,6 +47,21 @@ func main() {
 	ctx := context.Background()
 	logger := &SimpleLogger{}
 
+	userDetailsService, encoder := setupUsersAndEncoder()
+	authManager := setupAuthManager(userDetailsService, encoder, logger)
+	voter := authorization.NewWebExpressionVoter()
+
+	authenticateUsers(ctx, authManager)
+	demoRoleAuthorization(ctx, voter)
+	demoSecurityBuilder(userDetailsService, encoder, authManager)
+	demoUnanimousDecision(ctx, voter)
+
+	fmt.Println()
+	fmt.Println("=== Example completed successfully ===")
+}
+
+// setupUsersAndEncoder 创建内存用户与密码编码器。
+func setupUsersAndEncoder() (*security.InMemoryUserDetailsService, *security.NoOpPasswordEncoder) {
 	// ---- 1. Set up UserDetailsService with in-memory users ----
 	fmt.Println("--- 1. Creating Users ---")
 	userDetailsService := security.NewInMemoryUserDetailsService()
@@ -56,14 +71,20 @@ func main() {
 	fmt.Printf("  Created %d users\n", userDetailsService.UserCount())
 
 	// ---- 2. Create PasswordEncoder ----
-	encoder := security.NewNoOpPasswordEncoder()
+	return userDetailsService, security.NewNoOpPasswordEncoder()
+}
 
+// setupAuthManager 创建基于 Dao 的认证管理器。
+func setupAuthManager(userDetailsService *security.InMemoryUserDetailsService, encoder *security.NoOpPasswordEncoder, logger *SimpleLogger) security.AuthenticationManager {
 	// ---- 3. Create AuthenticationManager with DaoAuthenticationProvider ----
 	fmt.Println()
 	fmt.Println("--- 2. Setting up Authentication Manager ---")
 	provider := security.NewDaoAuthenticationProvider(userDetailsService, encoder, logger)
-	authManager := security.NewProviderManager(provider)
+	return security.NewProviderManager(provider)
+}
 
+// authenticateUsers 演示成功与失败的登录认证流程。
+func authenticateUsers(ctx context.Context, authManager security.AuthenticationManager) {
 	// ---- 4. Authenticate users ----
 	fmt.Println()
 	fmt.Println("--- 3. Authenticating Users ---")
@@ -101,12 +122,14 @@ func main() {
 	if err != nil {
 		fmt.Printf("  unknown user: %v (expected)\n", err)
 	}
+}
 
+// demoRoleAuthorization 演示基于角色的授权决策。
+func demoRoleAuthorization(ctx context.Context, voter authorization.AccessDecisionVoter) {
 	// ---- 5. Role-based authorization ----
 	fmt.Println()
 	fmt.Println("--- 4. Role-Based Authorization ---")
 
-	voter := authorization.NewWebExpressionVoter()
 	decisionManager := authorization.NewAffirmativeBased(voter)
 
 	adminAuth := security.NewAuthenticatedUsernamePasswordAuthenticationToken(
@@ -150,7 +173,10 @@ func main() {
 	fmt.Println("  Resource: /public")
 	testDecision(testDecisionArgs{ctx, decisionManager, userAuth, "/public",
 		[]string{"permitAll"}})
+}
 
+// demoSecurityBuilder 演示安全构建器的配置。
+func demoSecurityBuilder(userDetailsService *security.InMemoryUserDetailsService, encoder *security.NoOpPasswordEncoder, authManager security.AuthenticationManager) {
 	// ---- 6. SecurityBuilder demo ----
 	fmt.Println()
 	fmt.Println("--- 5. SecurityBuilder Configuration ---")
@@ -165,11 +191,21 @@ func main() {
 		EnableHttpBasic().
 		Build()
 	fmt.Printf("  Security config built: %T\n", secConfig)
+}
 
+// demoUnanimousDecision 演示一票否决式授权决策管理器。
+func demoUnanimousDecision(ctx context.Context, voter authorization.AccessDecisionVoter) {
 	// ---- 7. Unanimous-based decision manager ----
 	fmt.Println()
 	fmt.Println("--- 6. Unanimous-Based Decision Manager ---")
 	unanimousMgr := authorization.NewUnanimousBased(voter)
+
+	adminAuth := security.NewAuthenticatedUsernamePasswordAuthenticationToken(
+		"admin", []string{"ROLE_ADMIN", "ROLE_USER"})
+	userAuth := security.NewAuthenticatedUsernamePasswordAuthenticationToken(
+		"user", []string{"ROLE_USER"})
+	managerAuth := security.NewAuthenticatedUsernamePasswordAuthenticationToken(
+		"manager", []string{"ROLE_MANAGER", "ROLE_USER"})
 
 	fmt.Println("  Admin (has ROLE_ADMIN):")
 	testDecision(testDecisionArgs{ctx, unanimousMgr, adminAuth, "/resource",
@@ -182,9 +218,6 @@ func main() {
 	fmt.Println("  Manager (has ROLE_MANAGER):")
 	testDecision(testDecisionArgs{ctx, unanimousMgr, managerAuth, "/resource",
 		[]string{"hasRole('ADMIN')"}})
-
-	fmt.Println()
-	fmt.Println("=== Example completed successfully ===")
 }
 
 // testDecisionArgs 授权决策测试参数。

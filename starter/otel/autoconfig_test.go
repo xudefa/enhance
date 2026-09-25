@@ -7,7 +7,7 @@ import (
 )
 
 func TestOtelConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-otel", environment.PriorityNormal, map[string]any{
 		"otel.enabled":       "true",
@@ -40,7 +40,7 @@ func TestOtelConfig_LoadConfig(t *testing.T) {
 }
 
 func TestOtelConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &OtelConfig{
 		Endpoint:       DefaultOtelEndpoint,
 		ServiceName:    DefaultServiceName,

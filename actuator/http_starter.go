@@ -113,33 +113,52 @@ func (s *ActuatorHttpStarter) Stop(ctx boot.ApplicationContext) error {
 func (s *ActuatorHttpStarter) buildEndpointConfigs(env *environment.Environment) []EndpointConfig {
 	endpoints := make([]EndpointConfig, 0, 6)
 
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.health", true), endpoints,
-		http.MethodGet, JoinPath(s.basePath, "/health"), "Health Check", http.HandlerFunc(s.actuator.HealthHandler))
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.metrics", true), endpoints,
-		http.MethodGet, JoinPath(s.basePath, "/metrics"), "Application Metrics", http.HandlerFunc(s.actuator.MetricsHandler))
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.env", true), endpoints,
-		http.MethodGet, JoinPath(s.basePath, "/env"), "Environment Information", http.HandlerFunc(s.actuator.EnvHandler))
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.beans", true), endpoints,
-		http.MethodGet, JoinPath(s.basePath, "/beans"), "Spring Beans", http.HandlerFunc(s.actuator.BeansHandler))
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.info", true), endpoints,
-		http.MethodGet, JoinPath(s.basePath, "/info"), "Application Info", http.HandlerFunc(s.actuator.InfoHandler))
-	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.prometheus", true), endpoints,
-		http.MethodGet, "/metrics", "Prometheus Metrics", http.HandlerFunc(s.actuator.PrometheusHandler))
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.health", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        JoinPath(s.basePath, "/health"),
+		Description: "Health Check",
+		Handler:     http.HandlerFunc(s.actuator.HealthHandler),
+	})
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.metrics", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        JoinPath(s.basePath, "/metrics"),
+		Description: "Application Metrics",
+		Handler:     http.HandlerFunc(s.actuator.MetricsHandler),
+	})
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.env", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        JoinPath(s.basePath, "/env"),
+		Description: "Environment Information",
+		Handler:     http.HandlerFunc(s.actuator.EnvHandler),
+	})
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.beans", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        JoinPath(s.basePath, "/beans"),
+		Description: "Spring Beans",
+		Handler:     http.HandlerFunc(s.actuator.BeansHandler),
+	})
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.info", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        JoinPath(s.basePath, "/info"),
+		Description: "Application Info",
+		Handler:     http.HandlerFunc(s.actuator.InfoHandler),
+	})
+	endpoints = s.appendEndpointIf(env.GetBool("actuator.expose.prometheus", true), endpoints, EndpointConfig{
+		Method:      http.MethodGet,
+		Path:        "/metrics",
+		Description: "Prometheus Metrics",
+		Handler:     http.HandlerFunc(s.actuator.PrometheusHandler),
+	})
 
 	return endpoints
 }
 
 // appendEndpointIf 按开关追加端点配置。
-func (s *ActuatorHttpStarter) appendEndpointIf(enabled bool, endpoints []EndpointConfig, method, path, description string, handler http.Handler) []EndpointConfig {
+func (s *ActuatorHttpStarter) appendEndpointIf(enabled bool, endpoints []EndpointConfig, config EndpointConfig) []EndpointConfig {
 	if !enabled {
 		return endpoints
 	}
-	return append(endpoints, EndpointConfig{
-		Method:      method,
-		Path:        path,
-		Handler:     handler,
-		Description: description,
-	})
+	return append(endpoints, config)
 }
 
 // registerViaEndpointRegistry 通过 HttpEndpointRegistry 接口注册端点

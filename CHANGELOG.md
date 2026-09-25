@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Enhanced Makefile with AI maintainability checks
+- Refactored `Plugin` interface to compose optional `PluginMeta` sub-interface
+- Refactored `CasbinEnforcer` interface to compose `PolicyManager` sub-interface
+- Refactored `Connection` interface to compose `AttributeStore` and `RoomParticipant` sub-interfaces
 
 ### Deprecated
 - Nothing

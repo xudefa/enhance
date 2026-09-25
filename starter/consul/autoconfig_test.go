@@ -7,7 +7,7 @@ import (
 )
 
 func TestConsulConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-consul", environment.PriorityNormal, map[string]any{
 		ConsulEnabled: "true",
@@ -41,7 +41,7 @@ func TestConsulConfig_LoadConfig(t *testing.T) {
 }
 
 func TestConsulConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &ConsulConfig{
 		Host: DefaultConsulHost,
 		Port: DefaultConsulPort,

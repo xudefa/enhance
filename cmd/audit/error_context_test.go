@@ -124,3 +124,29 @@ func TestX(t *testing.T) {
 		t.Fatalf("测试文件不应报告: %+v", findings)
 	}
 }
+
+func TestAnalyzeErrorContext_SkipsReceiverReturn(t *testing.T) {
+	t.Parallel()
+	f := parseSnippet(t, `package p
+type Builder struct{ v int }
+func (b *Builder) WithValue(v int) *Builder {
+	b.v = v
+	return b
+}`, false)
+	if findings := analyzeErrorContext(f); len(findings) != 0 {
+		t.Fatalf("链式 builder 返回接收者不应报告: %+v", findings)
+	}
+}
+
+func TestAnalyzeErrorContext_ReportsOtherReceiverNameCollision(t *testing.T) {
+	t.Parallel()
+	f := parseSnippet(t, `package p
+func F() error {
+	e := errors.New("boom")
+	return e
+}`, false)
+	findings := analyzeErrorContext(f)
+	if len(findings) != 1 {
+		t.Fatalf("非接收者裸返回 e 应报告，得到 %+v", findings)
+	}
+}

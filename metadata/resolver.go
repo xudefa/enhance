@@ -267,10 +267,10 @@ func (r *tagAnnotationResolverImpl) convertValue(value string) any {
 // 返回值:
 //   - Annotation: 注解，未找到时返回空注解
 func (r *tagAnnotationResolverImpl) GetAnnotation(target any, name string) Annotation {
-	t := reflect.TypeOf(target)
+	targetType := reflect.TypeOf(target)
 
 	// 性能优化：使用名称索引缓存 O(1) 查找
-	if nameMap, ok := r.nameCache.Load(t); ok {
+	if nameMap, ok := r.nameCache.Load(targetType); ok {
 		if ann, found := nameMap.(map[string]Annotation)[name]; found {
 			cloned := cloneAnnotations([]Annotation{ann})
 			return cloned[0]
@@ -278,7 +278,7 @@ func (r *tagAnnotationResolverImpl) GetAnnotation(target any, name string) Annot
 		return Annotation{}
 	}
 
-	annotations := r.ResolveAnnotations(t)
+	annotations := r.ResolveAnnotations(targetType)
 	for _, ann := range annotations {
 		if ann.Name == name {
 			return ann
@@ -297,15 +297,15 @@ func (r *tagAnnotationResolverImpl) GetAnnotation(target any, name string) Annot
 // 返回值:
 //   - bool: 是否存在
 func (r *tagAnnotationResolverImpl) HasAnnotation(target any, name string) bool {
-	t := reflect.TypeOf(target)
+	targetType := reflect.TypeOf(target)
 
 	// 性能优化：使用名称索引缓存 O(1) 查找
-	if nameMap, ok := r.nameCache.Load(t); ok {
+	if nameMap, ok := r.nameCache.Load(targetType); ok {
 		_, found := nameMap.(map[string]Annotation)[name]
 		return found
 	}
 
-	annotations := r.ResolveAnnotations(t)
+	annotations := r.ResolveAnnotations(targetType)
 	for _, ann := range annotations {
 		if ann.Name == name {
 			return true

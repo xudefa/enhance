@@ -29,34 +29,61 @@ func main() {
 	fmt.Println("=== Fiber Starter Example ===")
 	fmt.Println()
 
+	app := newApp("fiber-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	fiberApp, ok := getFiberApp(app)
+	if !ok {
+		return
+	}
+	registerRoutes(fiberApp)
+	waitForSignal(app)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("fiber-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Fiber 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getFiberApp 从容器中获取 Fiber 应用实例。
+func getFiberApp(app *boot.Boot) (*fiber.App, bool) {
 	// Get the Fiber app from container
 	fiberApp, err := core.GetByName[*fiber.App](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get fiber app: %v\n", err)
-		return
+		return nil, false
 	}
+	return fiberApp, true
+}
 
+// registerRoutes 注册 HTTP 路由。
+func registerRoutes(f *fiber.App) {
 	// Register routes
 	fmt.Println("--- Registering Routes ---")
 
 	// Root route
-	fiberApp.Get("/", func(c *fiber.Ctx) error {
+	f.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"message": "Welcome to Fiber Starter Example",
 			"version": "1.0.0",
@@ -64,7 +91,7 @@ func main() {
 	})
 
 	// Hello route with query parameter
-	fiberApp.Get("/hello", func(c *fiber.Ctx) error {
+	f.Get("/hello", func(c *fiber.Ctx) error {
 		name := c.Query("name", "World")
 		return c.JSON(fiber.Map{
 			"message": fmt.Sprintf("Hello, %s!", name),
@@ -72,21 +99,21 @@ func main() {
 	})
 
 	// Health check endpoint
-	fiberApp.Get("/health", func(c *fiber.Ctx) error {
+	f.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status": "UP",
 		})
 	})
 
 	// User routes
-	fiberApp.Get("/users", func(c *fiber.Ctx) error {
+	f.Get("/users", func(c *fiber.Ctx) error {
 		return c.JSON([]fiber.Map{
 			{"id": 1, "name": "John Doe", "email": "john@example.com"},
 			{"id": 2, "name": "Jane Doe", "email": "jane@example.com"},
 		})
 	})
 
-	fiberApp.Get("/users/:id", func(c *fiber.Ctx) error {
+	f.Get("/users/:id", func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		return c.JSON(fiber.Map{
 			"id":    id,
@@ -104,7 +131,9 @@ func main() {
 	fmt.Println()
 	fmt.Println("Server is running on http://localhost:3000")
 	fmt.Println("Press Ctrl+C to stop")
+}
 
-	// Wait for signal
+// waitForSignal 阻塞等待退出信号。
+func waitForSignal(app *boot.Boot) {
 	app.WaitForSignal()
 }

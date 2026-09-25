@@ -2,8 +2,10 @@
 package fiber
 
 import (
+	"context"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -37,15 +39,23 @@ type FiberAutoConfiguration struct {
 	app        *fiber.App
 	config     *FiberConfig
 	tracer     *tracing.Tracer
-	configured bool // 标记是否已配置，防止重复配置
+	mu         sync.Mutex      // 保护 Configure 的并发访问
+	configured bool            // 标记是否已配置，防止同一应用上下文重复配置
+	ctx        context.Context // 应用上下文
 }
 
 // Configure 配置 Fiber Web 服务器。
 func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
-	// 防止重复配置
-	if c.configured {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// 同一应用上下文的 AutoConfig 与 Starter 双注册会调用两次 Configure，直接跳过
+	if c.configured && c.ctx == ctx.Context() {
 		return nil
 	}
+	// 新应用上下文（应用重启）时重新配置，更新 ctx/server 等状态
+	c.configured = false
+
 	container := ctx.Container()
 	env := ctx.Environment()
 
@@ -62,23 +72,8 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 	c.config = cfg
 
-	// 尝试从容器获取已存在的 Fiber App 实例，如果不存在则创建默认的
-	if app, err := core.GetByName[*fiber.App](container, ""); err == nil {
-		c.app = app
-		c.logger.Info(ctx.Context(), "using existing Fiber App instance from container")
-	} else {
-		c.app = fiber.New(fiber.Config{
-			Prefork:       cfg.Prefork,
-			BodyLimit:     cfg.BodyLimit,
-			Concurrency:   cfg.Concurrency,
-			ReadTimeout:   time.Duration(cfg.ReadTimeout) * time.Second,
-			WriteTimeout:  time.Duration(cfg.WriteTimeout) * time.Second,
-			IdleTimeout:   time.Duration(cfg.IdleTimeout) * time.Second,
-			ServerHeader:  cfg.ServerHeader,
-			AppName:       cfg.AppName,
-			CaseSensitive: cfg.CaseSensitive,
-			StrictRouting: cfg.StrictRouting,
-		})
+	if err := c.resolveApp(container, cfg, ctx.Context()); err != nil {
+		return fmt.Errorf("failed to resolve Fiber app: %w", err)
 	}
 
 	// 尝试从容器获取 Tracer 并注册 tracing 中间件
@@ -88,6 +83,47 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		c.logger.Info(ctx.Context(), "Fiber tracing middleware enabled")
 	}
 
+	if err := c.registerInstances(container, ctx.Context()); err != nil {
+		return fmt.Errorf("failed to register Fiber instances: %w", err)
+	}
+
+	c.logger.Info(ctx.Context(), "Fiber Web server configured",
+		log.KeyValue{Key: "port", Value: cfg.Port},
+		log.KeyValue{Key: "host", Value: cfg.Host},
+	)
+
+	c.configured = true
+	// 存储应用上下文
+	c.ctx = ctx.Context()
+
+	return nil
+}
+
+// resolveApp 从容器获取已存在的 Fiber App 实例，不存在则创建默认实例。
+func (c *FiberAutoConfiguration) resolveApp(container core.Container, cfg *FiberConfig, ctx context.Context) error {
+	if app, err := core.GetByName[*fiber.App](container, ""); err == nil {
+		c.app = app
+		c.logger.Info(ctx, "using existing Fiber App instance from container")
+		return nil
+	}
+
+	c.app = fiber.New(fiber.Config{
+		Prefork:       cfg.Prefork,
+		BodyLimit:     cfg.BodyLimit,
+		Concurrency:   cfg.Concurrency,
+		ReadTimeout:   time.Duration(cfg.ReadTimeout) * time.Second,
+		WriteTimeout:  time.Duration(cfg.WriteTimeout) * time.Second,
+		IdleTimeout:   time.Duration(cfg.IdleTimeout) * time.Second,
+		ServerHeader:  cfg.ServerHeader,
+		AppName:       cfg.AppName,
+		CaseSensitive: cfg.CaseSensitive,
+		StrictRouting: cfg.StrictRouting,
+	})
+	return nil
+}
+
+// registerInstances 将配置、App 与 HttpEndpointRegistry 注册到容器。
+func (c *FiberAutoConfiguration) registerInstances(container core.Container, ctx context.Context) error {
 	// 检查 App 是否已注册（由外部传入）
 	appAlreadyRegistered := false
 	if _, err := core.GetByName[*fiber.App](container, ""); err == nil {
@@ -108,17 +144,10 @@ func (c *FiberAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	// 注册 HttpEndpointRegistry,允许 Actuator 等模块自动挂载端点到 Fiber
 	endpointRegistry := NewFiberEndpointRegistry(c.app)
 	if err := container.RegisterInstance(endpointRegistry, reflect.TypeFor[actuator.HttpEndpointRegistry]()); err != nil {
-		c.logger.Warn(ctx.Context(), "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
+		c.logger.Warn(ctx, "failed to register HttpEndpointRegistry, Actuator endpoints will not be mounted automatically",
 			log.KeyValue{Key: "error", Value: err.Error()},
 		)
 	}
-
-	c.logger.Info(ctx.Context(), "Fiber Web server configured",
-		log.KeyValue{Key: "port", Value: cfg.Port},
-		log.KeyValue{Key: "host", Value: cfg.Host},
-	)
-
-	c.configured = true
 	return nil
 }
 

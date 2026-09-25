@@ -7,7 +7,7 @@ import (
 )
 
 func TestKafkaConfig_LoadConfig(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	env := environment.NewEnvironment()
 	env.AddPropertySource(environment.NewMapPropertySource("test-kafka", environment.PriorityNormal, map[string]any{
 		"kafka.enabled":  "true",
@@ -38,7 +38,7 @@ func TestKafkaConfig_LoadConfig(t *testing.T) {
 }
 
 func TestKafkaConfig_DefaultValues(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	cfg := &KafkaConfig{
 		Topic:   DefaultTopic,
 		GroupID: DefaultGroupID,
@@ -53,7 +53,7 @@ func TestKafkaConfig_DefaultValues(t *testing.T) {
 }
 
 func TestNewKafkaQueue(t *testing.T) {
-	tt.Parallel()
+	t.Parallel()
 	brokers := []string{"localhost:9092"}
 	topic := "test-topic"
 	groupID := "test-group"

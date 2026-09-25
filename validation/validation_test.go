@@ -522,8 +522,8 @@ func TestRequestValidation_InvalidJSON(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/test", strings.NewReader("{invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 
-	result := rv.Validate(req)
-	if result == nil {
+	validationResult := rv.Validate(req)
+	if validationResult == nil {
 		t.Error("expected non-nil result")
 	}
 }

@@ -88,6 +88,30 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 		return fmt.Errorf("Casbin config validation failed: %w", err)
 	}
 
+	enforcer, err := c.resolveAndRegisterEnforcer(ctx, container, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to resolve Casbin enforcer: %w", err)
+	}
+
+	if err := c.registerVoter(ctx, container, enforcer); err != nil {
+		return fmt.Errorf("failed to register Casbin voter: %w", err)
+	}
+
+	if cfg.AutoLoad {
+		c.ctx = ctx.Context()
+		c.startAutoReload(enforcer, cfg)
+	}
+
+	c.logger.Info(ctx.Context(), "Casbin configuration complete",
+		log.KeyValue{Key: "model-type", Value: cfg.ModelType},
+		log.KeyValue{Key: "policy-type", Value: cfg.PolicyType},
+	)
+
+	return nil
+}
+
+// resolveAndRegisterEnforcer 获取容器中已有的 CasbinEnforcer 或创建默认实例并注册。
+func (c *CasbinAutoConfiguration) resolveAndRegisterEnforcer(ctx boot.ApplicationContext, container core.Container, cfg *CasbinConfig) (security.CasbinEnforcer, error) {
 	var enforcer security.CasbinEnforcer
 	if beans, err := container.Get(reflect.TypeFor[security.CasbinEnforcer]()); err == nil && len(beans) > 0 {
 		enforcer, _ = beans[0].(security.CasbinEnforcer)
@@ -105,7 +129,7 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 
 		created, err := NewCasbinEnforcer(ctx.Context(), c.logger, modelPath, policyPath)
 		if err != nil {
-			return fmt.Errorf("failed to create CasbinEnforcer: %w", err)
+			return nil, fmt.Errorf("failed to create CasbinEnforcer: %w", err)
 		}
 		enforcer = created
 		c.logger.Info(ctx.Context(), "creating default CasbinEnforcer instance",
@@ -115,16 +139,21 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	}
 
 	if err := container.RegisterInstance(enforcer, reflect.TypeFor[security.CasbinEnforcer]()); err != nil {
-		return fmt.Errorf("failed to register CasbinEnforcer: %w", err)
+		return nil, fmt.Errorf("failed to register CasbinEnforcer: %w", err)
 	}
 	// 同时注册具体类型，方便直接获取 DefaultCasbinEnforcer 使用其扩展方法
 	if defaultEnforcer, ok := enforcer.(*DefaultCasbinEnforcer); ok {
 		if err := container.RegisterInstance(defaultEnforcer, reflect.TypeFor[*DefaultCasbinEnforcer]()); err != nil {
-			return fmt.Errorf("failed to register DefaultCasbinEnforcer: %w", err)
+			return nil, fmt.Errorf("failed to register DefaultCasbinEnforcer: %w", err)
 		}
 	}
 	c.logger.Info(ctx.Context(), "CasbinEnforcer registered")
 
+	return enforcer, nil
+}
+
+// registerVoter 创建并注册 CasbinVoter。
+func (c *CasbinAutoConfiguration) registerVoter(ctx boot.ApplicationContext, container core.Container, enforcer security.CasbinEnforcer) error {
 	voter, err := security.NewCasbinVoter(enforcer)
 	if err != nil {
 		return fmt.Errorf("failed to create CasbinVoter: %w", err)
@@ -138,16 +167,6 @@ func (c *CasbinAutoConfiguration) Configure(ctx boot.ApplicationContext) error {
 	if err == nil && len(admBeans) > 0 {
 		c.logger.Info(ctx.Context(), "AccessDecisionManager detected, CasbinVoter ready")
 	}
-
-	if cfg.AutoLoad {
-		c.ctx = ctx.Context()
-		c.startAutoReload(enforcer, cfg)
-	}
-
-	c.logger.Info(ctx.Context(), "Casbin configuration complete",
-		log.KeyValue{Key: "model-type", Value: cfg.ModelType},
-		log.KeyValue{Key: "policy-type", Value: cfg.PolicyType},
-	)
 
 	return nil
 }

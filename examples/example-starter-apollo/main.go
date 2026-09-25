@@ -27,32 +27,57 @@ func main() {
 	fmt.Println("=== Apollo Starter Example ===")
 	fmt.Println()
 
+	app := newApp("apollo-example")
+	defer app.Stop()
+
+	if !startApolloApp(app) {
+		return
+	}
+	if !getApolloClient(app) {
+		return
+	}
+	runApolloDemo(app)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("apollo-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApolloApp 启动应用，触发 Apollo 自动配置。
+func startApolloApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Warning: Apollo connection failed: %v\n", err)
 		fmt.Println("This example requires a running Apollo server.")
 		fmt.Println("Please start Apollo and try again.")
-		return
+		return false
 	}
+	return true
+}
 
+// getApolloClient 从容器中获取 Apollo 客户端。
+func getApolloClient(app *boot.Boot) bool {
 	// Get the Apollo client from container
 	apolloClient, err := core.GetByName[agollo.Client](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get Apollo client: %v\n", err)
-		return
+		return false
 	}
 	_ = apolloClient // Suppress unused variable warning
+	return true
+}
 
+// runApolloDemo 演示 Apollo 配置获取、变更监听与发布等常见操作。
+func runApolloDemo(app *boot.Boot) {
 	// Demo 1: Get configuration
 	fmt.Println("--- Demo 1: Get Configuration ---")
 	config := app.Container()

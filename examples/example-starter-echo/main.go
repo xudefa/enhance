@@ -31,38 +31,65 @@ func main() {
 	fmt.Println("=== Echo Starter Example ===")
 	fmt.Println()
 
+	app := newApp("echo-example")
+	defer app.Stop()
+
+	if !startApp(app) {
+		return
+	}
+	echoInstance, ok := getEchoInstance(app)
+	if !ok {
+		return
+	}
+	registerRoutes(echoInstance)
+	waitForSignal(app)
+}
+
+// newApp 创建 enhance 应用，创建失败时 panic。
+func newApp(name string) *boot.Boot {
 	// Create application with boot
 	app, err := boot.NewApplication(
-		boot.WithAppName("echo-example"),
+		boot.WithAppName(name),
 		boot.WithProfiles("default"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create application: %v", err))
 	}
-	defer app.Stop()
+	return app
+}
 
+// startApp 启动应用，触发 Echo 自动配置。
+func startApp(app *boot.Boot) bool {
 	// Start the application (triggers auto-configuration)
 	if err := app.Start(); err != nil {
 		fmt.Printf("Failed to start application: %v\n", err)
-		return
+		return false
 	}
+	return true
+}
 
+// getEchoInstance 从容器中获取 Echo 实例。
+func getEchoInstance(app *boot.Boot) (*echo.Echo, bool) {
 	// Get the Echo instance from container
 	echoInstance, err := core.GetByName[*echo.Echo](app.Container(), "")
 	if err != nil {
 		fmt.Printf("Failed to get echo instance: %v\n", err)
-		return
+		return nil, false
 	}
+	return echoInstance, true
+}
 
+// registerRoutes 注册中间件与 HTTP 路由。
+func registerRoutes(e *echo.Echo) {
 	// Register middleware
-	echoInstance.Use(middleware.Logger())
-	echoInstance.Use(middleware.Recover())
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
 
 	// Register routes
 	fmt.Println("--- Registering Routes ---")
 
 	// Root route
-	echoInstance.GET("/", func(c echo.Context) error {
+	e.GET("/", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"message": "Welcome to Echo Starter Example",
 			"version": "1.0.0",
@@ -70,7 +97,7 @@ func main() {
 	})
 
 	// Hello route with query parameter
-	echoInstance.GET("/hello", func(c echo.Context) error {
+	e.GET("/hello", func(c echo.Context) error {
 		name := c.QueryParam("name")
 		if name == "" {
 			name = "World"
@@ -81,21 +108,21 @@ func main() {
 	})
 
 	// Health check endpoint
-	echoInstance.GET("/health", func(c echo.Context) error {
+	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"status": "UP",
 		})
 	})
 
 	// User routes
-	echoInstance.GET("/users", func(c echo.Context) error {
+	e.GET("/users", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, []map[string]interface{}{
 			{"id": 1, "name": "John Doe", "email": "john@example.com"},
 			{"id": 2, "name": "Jane Doe", "email": "jane@example.com"},
 		})
 	})
 
-	echoInstance.GET("/users/:id", func(c echo.Context) error {
+	e.GET("/users/:id", func(c echo.Context) error {
 		id := c.Param("id")
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"id":    id,
@@ -113,7 +140,9 @@ func main() {
 	fmt.Println()
 	fmt.Println("Server is running on http://localhost:8080")
 	fmt.Println("Press Ctrl+C to stop")
+}
 
-	// Wait for signal
+// waitForSignal 阻塞等待退出信号。
+func waitForSignal(app *boot.Boot) {
 	app.WaitForSignal()
 }
