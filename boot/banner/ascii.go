@@ -2,7 +2,6 @@ package banner
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -44,21 +43,7 @@ func NewASCIIArtBanner(art string, color string) Banner {
 //
 // 参数 version 为应用版本号，会显示在横幅底部。
 func (b *ASCIIArtBanner) Print(version string) error {
-	if b.mode == BannerModeOff {
-		return nil
-	}
-
-	text := b.render(version)
-	if b.mode == BannerModeLog {
-		fmt.Printf("[enhance] %s\n", text)
-		return nil
-	}
-
-	_, err := fmt.Fprintln(os.Stdout, text)
-	if err != nil {
-		return fmt.Errorf("failed to print ascii art banner: %w", err)
-	}
-	return nil
+	return printBanner(b.mode, b.render(version), "ascii art banner")
 }
 
 // Mode 返回当前横幅的输出模式。

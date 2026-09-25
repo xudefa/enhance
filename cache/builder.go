@@ -68,24 +68,7 @@ func (h *CacheHelper) Set(ctx context.Context, key string, value any, ttl time.D
 
 // GetOrSet 获取缓存值，如果不存在则使用提供的函数获取并缓存
 func (h *CacheHelper) GetOrSet(ctx context.Context, key string, fn func() (any, error), ttl time.Duration) (any, error) {
-	// 尝试从缓存获取
-	cached, err := h.cache.Get(ctx, key)
-	if err == nil {
-		return cached, nil
-	}
-
-	// 缓存未命中，调用函数获取
-	computed, err := fn()
-	if err != nil {
-		return nil, fmt.Errorf("加载缓存值失败: %w", err)
-	}
-
-	// 存储到缓存
-	if setErr := h.cache.Set(ctx, key, computed, ttl); setErr != nil {
-		return computed, fmt.Errorf("failed to cache value: %w", setErr)
-	}
-
-	return computed, nil
+	return cacheGetOrSet(h.cache, key, fn, ctx, ttl)
 }
 
 // Invalidate 使缓存失效
@@ -109,18 +92,12 @@ func (h *CacheHelper) Clear(ctx context.Context) error {
 
 // Exists 检查键是否存在
 func (h *CacheHelper) Exists(ctx context.Context, key string) (bool, error) {
-	if inspector, ok := h.cache.(CacheInspector); ok {
-		return inspector.Exists(ctx, key)
-	}
-	return false, fmt.Errorf("cache does not support Exists operation")
+	return cacheExists(h.cache, ctx, key)
 }
 
 // TTL 获取键的剩余过期时间
 func (h *CacheHelper) TTL(ctx context.Context, key string) (time.Duration, error) {
-	if inspector, ok := h.cache.(CacheInspector); ok {
-		return inspector.TTL(ctx, key)
-	}
-	return 0, fmt.Errorf("cache does not support TTL operation")
+	return cacheTTL(h.cache, ctx, key)
 }
 
 // CacheTemplate 缓存模板，提供常用的缓存操作模板
@@ -162,25 +139,22 @@ func (t *CacheTemplate) Del(ctx context.Context, key string) error {
 
 // Exists 检查键是否存在
 func (t *CacheTemplate) Exists(ctx context.Context, key string) (bool, error) {
-	if inspector, ok := t.cache.(CacheInspector); ok {
-		return inspector.Exists(ctx, t.Key(key))
-	}
-	return false, fmt.Errorf("cache does not support Exists operation")
+	return cacheExists(t.cache, ctx, t.Key(key))
 }
 
 // TTL 获取键的剩余过期时间
 func (t *CacheTemplate) TTL(ctx context.Context, key string) (time.Duration, error) {
-	if inspector, ok := t.cache.(CacheInspector); ok {
-		return inspector.TTL(ctx, t.Key(key))
-	}
-	return 0, fmt.Errorf("cache does not support TTL operation")
+	return cacheTTL(t.cache, ctx, t.Key(key))
 }
 
 // GetOrSet 获取或设置缓存值
 func (t *CacheTemplate) GetOrSet(ctx context.Context, key string, fn func() (any, error), ttl time.Duration) (any, error) {
-	fullKey := t.Key(key)
+	return cacheGetOrSet(t.cache, t.Key(key), fn, ctx, ttl)
+}
 
-	cached, err := t.cache.Get(ctx, fullKey)
+// cacheGetOrSet 缓存 GetOrSet 公共逻辑，消除 CacheHelper/CacheTemplate 重复
+func cacheGetOrSet(c Cache, key string, fn func() (any, error), ctx context.Context, ttl time.Duration) (any, error) {
+	cached, err := c.Get(ctx, key)
 	if err == nil {
 		return cached, nil
 	}
@@ -190,11 +164,27 @@ func (t *CacheTemplate) GetOrSet(ctx context.Context, key string, fn func() (any
 		return nil, fmt.Errorf("加载缓存值失败: %w", err)
 	}
 
-	if setErr := t.cache.Set(ctx, fullKey, computed, ttl); setErr != nil {
+	if setErr := c.Set(ctx, key, computed, ttl); setErr != nil {
 		return computed, fmt.Errorf("failed to cache value: %w", setErr)
 	}
 
 	return computed, nil
+}
+
+// cacheExists 缓存 Exists 公共逻辑
+func cacheExists(c Cache, ctx context.Context, key string) (bool, error) {
+	if inspector, ok := c.(CacheInspector); ok {
+		return inspector.Exists(ctx, key)
+	}
+	return false, fmt.Errorf("cache does not support Exists operation")
+}
+
+// cacheTTL 缓存 TTL 公共逻辑
+func cacheTTL(c Cache, ctx context.Context, key string) (time.Duration, error) {
+	if inspector, ok := c.(CacheInspector); ok {
+		return inspector.TTL(ctx, key)
+	}
+	return 0, fmt.Errorf("cache does not support TTL operation")
 }
 
 // CacheConfig 缓存配置

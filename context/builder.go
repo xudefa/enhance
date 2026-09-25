@@ -284,14 +284,19 @@ func (h *ApplicationContextHelper) GetActiveProfiles() []string {
 	return h.ctx.Environment().GetActiveProfiles()
 }
 
+// acceptsProfile 检查是否接受指定 profile，复用公共模式
+func (h *ApplicationContextHelper) acceptsProfile(profile string) bool {
+	return h.ctx.Environment().AcceptsProfile(profile)
+}
+
 // IsDev 检查是否为开发环境
 func (h *ApplicationContextHelper) IsDev() bool {
-	return h.ctx.Environment().AcceptsProfile("dev")
+	return h.acceptsProfile("dev")
 }
 
 // IsProd 检查是否为生产环境
 func (h *ApplicationContextHelper) IsProd() bool {
-	return h.ctx.Environment().AcceptsProfile("prod")
+	return h.acceptsProfile("prod")
 }
 
 // PublishEvent 发布事件
@@ -301,25 +306,24 @@ func (h *ApplicationContextHelper) PublishEvent(eventType string) {
 	})
 }
 
+// publishTypedEvent 发布指定类型的事件，复用公共模式
+func (h *ApplicationContextHelper) publishTypedEvent(eventType string) {
+	h.ctx.EventPublisher().Publish(&event.BaseEvent{EventType: eventType})
+}
+
 // PublishStarted 发布应用启动事件
 func (h *ApplicationContextHelper) PublishStarted() {
-	h.ctx.EventPublisher().Publish(&event.BaseEvent{
-		EventType: event.EventApplicationStarted,
-	})
+	h.publishTypedEvent(event.EventApplicationStarted)
 }
 
 // PublishReady 发布应用就绪事件
 func (h *ApplicationContextHelper) PublishReady() {
-	h.ctx.EventPublisher().Publish(&event.BaseEvent{
-		EventType: event.EventApplicationReady,
-	})
+	h.publishTypedEvent(event.EventApplicationReady)
 }
 
 // PublishStopped 发布应用停止事件
 func (h *ApplicationContextHelper) PublishStopped() {
-	h.ctx.EventPublisher().Publish(&event.BaseEvent{
-		EventType: event.EventApplicationStopped,
-	})
+	h.publishTypedEvent(event.EventApplicationStopped)
 }
 
 // Invoke 调用函数并自动注入依赖

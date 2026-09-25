@@ -25,25 +25,29 @@ func (f *MessageQueueFactory) CreateInMemoryQueue(name string, opts ...QueueOpti
 	return queue
 }
 
-// GetQueue 获取队列
-func (f *MessageQueueFactory) GetQueue(name string) (Queue, error) {
+// loadQueue 从工厂加载队列，复用公共查找逻辑
+func (f *MessageQueueFactory) loadQueue(name string) (Queue, error) {
 	entry, ok := f.queues.Load(name)
 	if !ok {
 		return nil, fmt.Errorf("queue %s does not exist", name)
 	}
-	q, _ := entry.(Queue)
+	q, ok := entry.(Queue)
+	if !ok {
+		return nil, fmt.Errorf("queue %s has invalid type", name)
+	}
 	return q, nil
+}
+
+// GetQueue 获取队列
+func (f *MessageQueueFactory) GetQueue(name string) (Queue, error) {
+	return f.loadQueue(name)
 }
 
 // DeleteQueue 删除队列
 func (f *MessageQueueFactory) DeleteQueue(name string) error {
-	entry, ok := f.queues.Load(name)
-	if !ok {
-		return fmt.Errorf("queue %s does not exist", name)
-	}
-	queue, ok := entry.(Queue)
-	if !ok {
-		return fmt.Errorf("queue %s has invalid type", name)
+	queue, err := f.loadQueue(name)
+	if err != nil {
+		return err
 	}
 	if err := queue.Close(); err != nil {
 		return fmt.Errorf("failed to close queue %s: %w", name, err)

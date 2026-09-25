@@ -7,6 +7,36 @@ import (
 	"time"
 )
 
+// writeJSON 写入 JSON 响应，复用公共模式
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// getPathID 获取路径参数 ID，回退到查询参数，复用公共模式
+func getPathID(r *http.Request, paramName string) (string, bool) {
+	id := r.PathValue(paramName)
+	if id == "" {
+		id = r.URL.Query().Get(paramName)
+	}
+	return id, id != ""
+}
+
+// getInstanceByID 通过 ID 获取实例，失败时写入错误响应，复用公共模式
+func (s *AdminServer) getInstanceByID(w http.ResponseWriter, r *http.Request) (*ApplicationInstance, bool) {
+	id, ok := getPathID(r, "id")
+	if !ok {
+		http.Error(w, "Instance ID required", http.StatusBadRequest)
+		return nil, false
+	}
+	instance, err := s.registry.GetInstance(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return nil, false
+	}
+	return instance, true
+}
+
 // AdminServer Admin 服务器
 type AdminServer struct {
 	registry *ApplicationRegistry
@@ -45,19 +75,13 @@ func (s *AdminServer) registerRoutes() {
 
 // handleListApplications 处理列出应用请求
 func (s *AdminServer) handleListApplications(w http.ResponseWriter, r *http.Request) {
-	apps := s.registry.ListApplications()
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(apps)
+	writeJSON(w, s.registry.ListApplications())
 }
 
 // handleGetApplication 处理获取应用请求
 func (s *AdminServer) handleGetApplication(w http.ResponseWriter, r *http.Request) {
-	appID := r.PathValue("id")
-	if appID == "" {
-		appID = r.URL.Query().Get("id")
-	}
-	if appID == "" {
+	appID, ok := getPathID(r, "id")
+	if !ok {
 		http.Error(w, "Application ID required", http.StatusBadRequest)
 		return
 	}
@@ -68,53 +92,27 @@ func (s *AdminServer) handleGetApplication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(app)
+	writeJSON(w, app)
 }
 
 // handleListInstances 处理列出实例请求
 func (s *AdminServer) handleListInstances(w http.ResponseWriter, r *http.Request) {
-	instances := s.registry.ListInstances()
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(instances)
+	writeJSON(w, s.registry.ListInstances())
 }
 
 // handleGetInstance 处理获取实例请求
 func (s *AdminServer) handleGetInstance(w http.ResponseWriter, r *http.Request) {
-	instanceID := r.PathValue("id")
-	if instanceID == "" {
-		instanceID = r.URL.Query().Get("id")
-	}
-	if instanceID == "" {
-		http.Error(w, "Instance ID required", http.StatusBadRequest)
+	instance, ok := s.getInstanceByID(w, r)
+	if !ok {
 		return
 	}
-
-	instance, err := s.registry.GetInstance(instanceID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(instance)
+	writeJSON(w, instance)
 }
 
 // handleGetHealth 处理获取健康信息请求
 func (s *AdminServer) handleGetHealth(w http.ResponseWriter, r *http.Request) {
-	instanceID := r.PathValue("id")
-	if instanceID == "" {
-		instanceID = r.URL.Query().Get("id")
-	}
-	if instanceID == "" {
-		http.Error(w, "Instance ID required", http.StatusBadRequest)
-		return
-	}
-
-	instance, err := s.registry.GetInstance(instanceID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+	instance, ok := s.getInstanceByID(w, r)
+	if !ok {
 		return
 	}
 
@@ -127,24 +125,13 @@ func (s *AdminServer) handleGetHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(health)
+	writeJSON(w, health)
 }
 
 // handleGetMetrics 处理获取指标信息请求
 func (s *AdminServer) handleGetMetrics(w http.ResponseWriter, r *http.Request) {
-	instanceID := r.PathValue("id")
-	if instanceID == "" {
-		instanceID = r.URL.Query().Get("id")
-	}
-	if instanceID == "" {
-		http.Error(w, "Instance ID required", http.StatusBadRequest)
-		return
-	}
-
-	instance, err := s.registry.GetInstance(instanceID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+	instance, ok := s.getInstanceByID(w, r)
+	if !ok {
 		return
 	}
 
@@ -157,8 +144,7 @@ func (s *AdminServer) handleGetMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(metrics)
+	writeJSON(w, metrics)
 }
 
 // handleOverallHealth 处理整体健康状态请求
@@ -188,8 +174,7 @@ func (s *AdminServer) handleOverallHealth(w http.ResponseWriter, r *http.Request
 		"timestamp": time.Now(),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(overall)
+	writeJSON(w, overall)
 }
 
 // handleRegister 处理注册请求
@@ -223,9 +208,8 @@ func (s *AdminServer) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	s.registry.Register(&instance)
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, map[string]string{
 		"message": "Instance registered successfully",
 		"id":      instance.ID,
 	})
@@ -254,9 +238,7 @@ func (s *AdminServer) handleDeregister(w http.ResponseWriter, r *http.Request) {
 
 	s.registry.Deregister(req.InstanceID)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	writeJSON(w, map[string]string{
 		"message": "Instance deregistered successfully",
 	})
 }

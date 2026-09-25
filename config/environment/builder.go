@@ -141,19 +141,24 @@ func (h *EnvironmentHelper) GetRequiredProperty(key string) (any, error) {
 	return h.env.GetRequiredProperty(h.key(key))
 }
 
+// acceptsProfile 检查是否接受指定 profile，复用公共模式
+func (h *EnvironmentHelper) acceptsProfile(profile string) bool {
+	return h.env.AcceptsProfile(profile)
+}
+
 // IsDev 检查是否为开发环境
 func (h *EnvironmentHelper) IsDev() bool {
-	return h.env.AcceptsProfile("dev")
+	return h.acceptsProfile("dev")
 }
 
 // IsProd 检查是否为生产环境
 func (h *EnvironmentHelper) IsProd() bool {
-	return h.env.AcceptsProfile("prod")
+	return h.acceptsProfile("prod")
 }
 
 // IsTest 检查是否为测试环境
 func (h *EnvironmentHelper) IsTest() bool {
-	return h.env.AcceptsProfile("test")
+	return h.acceptsProfile("test")
 }
 
 // GetActiveProfile 获取当前激活的 Profile

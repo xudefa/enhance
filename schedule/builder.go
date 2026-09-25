@@ -149,12 +149,7 @@ func (h *ScheduleHelper) GetTaskCount() int {
 
 // HasTask 检查任务是否已注册。
 func (h *ScheduleHelper) HasTask(name string) bool {
-	for _, task := range h.scheduler.RegisteredTasks() {
-		if task.Name() == name {
-			return true
-		}
-	}
-	return false
+	return h.scheduler.HasTask(name)
 }
 
 // StartAndBlock 启动调度器并阻塞，直到收到停止信号。

@@ -132,9 +132,7 @@ func (c *DefaultContext) AbortWithStatus(code int) {
 // AbortWithStatusJSON 中止请求并返回 JSON
 func (c *DefaultContext) AbortWithStatusJSON(code int, body any) {
 	c.aborted = true
-	c.writer.Header().Set("Content-Type", "application/json")
-	c.writer.WriteHeader(code)
-	_ = json.NewEncoder(c.writer).Encode(body)
+	_ = c.JSON(code, body)
 }
 
 // Next 执行下一个中间件

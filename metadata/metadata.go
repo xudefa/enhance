@@ -125,7 +125,7 @@ func (g *metadataGeneratorImpl) extractProperties(t reflect.Type, groupName stri
 
 		configTag := field.Tag.Get("config")
 		if configTag == "" {
-			configTag = groupName + "." + g.camelToKebab(field.Name)
+			configTag = groupName + "." + CamelToKebab(field.Name)
 		}
 
 		description := field.Tag.Get("description")
@@ -135,9 +135,7 @@ func (g *metadataGeneratorImpl) extractProperties(t reflect.Type, groupName stri
 		deprecated := field.Tag.Get("deprecated") == "true"
 		deprecationReason := field.Tag.Get("deprecationReason")
 
-		if strings.Contains(strings.ToLower(field.Name), "password") ||
-			strings.Contains(strings.ToLower(field.Name), "secret") ||
-			strings.Contains(strings.ToLower(field.Name), "token") {
+		if IsSensitiveFieldName(field.Name) {
 			secret = true
 		}
 
@@ -166,11 +164,11 @@ func (g *metadataGeneratorImpl) extractGroupName(structName string) string {
 	name := strings.TrimSuffix(structName, "Config")
 	name = strings.TrimSuffix(name, "Properties")
 
-	return g.camelToKebab(name)
+	return CamelToKebab(name)
 }
 
-// camelToKebab 驼峰命名转短横线命名。
-func (g *metadataGeneratorImpl) camelToKebab(s string) string {
+// CamelToKebab 驼峰命名转短横线命名（包级公共函数，可复用）。
+func CamelToKebab(s string) string {
 	var builder strings.Builder
 	for i, c := range s {
 		if i > 0 && c >= 'A' && c <= 'Z' {
@@ -302,4 +300,18 @@ func ValidateProperty(name string, value string, metadata PropertyMetadata) erro
 	}
 
 	return nil
+}
+
+// sensitiveFieldKeywords 敏感字段名关键词列表，与 actuator/sanitize.go 保持语义一致
+var sensitiveFieldKeywords = []string{"password", "secret", "token"}
+
+// IsSensitiveFieldName 判断字段名是否包含敏感关键词
+func IsSensitiveFieldName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, kw := range sensitiveFieldKeywords {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
 }

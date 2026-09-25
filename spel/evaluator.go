@@ -65,15 +65,24 @@ func isSimpleProperty(expr string) bool {
 	return !allDigits
 }
 
+// getRootObject 获取根对象，nil 时返回错误，复用公共逻辑
+func getRootObject(ctx EvaluationContext) (any, error) {
+	root := ctx.GetRootObject()
+	if root == nil {
+		return nil, fmt.Errorf("root object is nil")
+	}
+	return root, nil
+}
+
 // GetValue 求值属性表达式，优先读取变量，其次读取根对象属性。
 func (e *propertyExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
 	if variableValue, ok := ctx.GetVariable(e.property); ok {
 		return variableValue, nil
 	}
 
-	root := ctx.GetRootObject()
-	if root == nil {
-		return nil, fmt.Errorf("root object is nil")
+	root, err := getRootObject(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	return ctx.GetPropertyAccessor().GetProperty(root, e.property)
@@ -81,9 +90,9 @@ func (e *propertyExpressionImpl) GetValue(ctx EvaluationContext) (any, error) {
 
 // SetValue 将值写入根对象的指定属性。
 func (e *propertyExpressionImpl) SetValue(ctx EvaluationContext, value any) error {
-	root := ctx.GetRootObject()
-	if root == nil {
-		return fmt.Errorf("root object is nil")
+	root, err := getRootObject(ctx)
+	if err != nil {
+		return err
 	}
 
 	return ctx.GetPropertyAccessor().SetProperty(root, e.property, value)

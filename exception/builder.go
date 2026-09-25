@@ -76,9 +76,13 @@ func (b *ExceptionHandlerBuilder) MustBuild() ExceptionHandler {
 	return handler
 }
 
-// ErrorResponseBuilder 错误响应构建器
+// ErrorResponseBuilder 错误响应构建器，委托给 NewErrorResponse 实现
 type ErrorResponseBuilder struct {
-	response ErrorResponse
+	code      int
+	message   string
+	requestID string
+	traceID   string
+	details   any
 }
 
 // NewErrorResponseBuilder 创建错误响应构建器
@@ -88,40 +92,49 @@ func NewErrorResponseBuilder() *ErrorResponseBuilder {
 
 // Code 设置HTTP状态码
 func (b *ErrorResponseBuilder) Code(code int) *ErrorResponseBuilder {
-	b.response.Code = code
+	b.code = code
 	return b
 }
 
 // Message 设置错误消息
 func (b *ErrorResponseBuilder) Message(message string) *ErrorResponseBuilder {
-	b.response.Message = message
+	b.message = message
 	return b
 }
 
 // RequestID 设置请求ID
 func (b *ErrorResponseBuilder) RequestID(requestID string) *ErrorResponseBuilder {
-	b.response.RequestID = requestID
+	b.requestID = requestID
 	return b
 }
 
 // TraceID 设置链路追踪ID
 func (b *ErrorResponseBuilder) TraceID(traceID string) *ErrorResponseBuilder {
-	b.response.TraceID = traceID
+	b.traceID = traceID
 	return b
 }
 
 // Details 设置错误详情
 func (b *ErrorResponseBuilder) Details(details any) *ErrorResponseBuilder {
-	b.response.Details = details
+	b.details = details
 	return b
 }
 
-// Build 构建错误响应
+// Build 构建错误响应，复用 NewErrorResponse + 函数式选项
 func (b *ErrorResponseBuilder) Build() ErrorResponse {
-	return b.response
+	resp := NewErrorResponse(b.code, b.message,
+		WithRequestID(b.requestID),
+		WithTraceID(b.traceID),
+		WithDetails(b.details),
+	)
+	return *resp
 }
 
 // ToJSON 将错误响应转换为JSON字节
 func (b *ErrorResponseBuilder) ToJSON() ([]byte, error) {
-	return b.response.ToJSON()
+	return NewErrorResponse(b.code, b.message,
+		WithRequestID(b.requestID),
+		WithTraceID(b.traceID),
+		WithDetails(b.details),
+	).ToJSON()
 }

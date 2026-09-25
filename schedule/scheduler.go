@@ -427,3 +427,11 @@ func (s *DefaultScheduler) RegisteredTasks() []Task {
 
 	return tasks
 }
+
+// HasTask 检查指定名称的任务是否已注册。
+func (s *DefaultScheduler) HasTask(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, exists := s.tasks[name]
+	return exists
+}

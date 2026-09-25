@@ -28,6 +28,12 @@ func (e *NoOpPasswordEncoder) Matches(rawPassword, encodedPassword string) bool 
 	return subtle.ConstantTimeCompare([]byte(rawPassword), []byte(encodedPassword)) == 1
 }
 
+// sha256Base64 对输入进行 SHA256 哈希并返回 Base64 编码，复用公共逻辑
+func sha256Base64(input string) string {
+	hash := sha256.Sum256([]byte(input))
+	return base64.StdEncoding.EncodeToString(hash[:])
+}
+
 // Sha256PasswordEncoder 基于 SHA256 的密码编码器
 //
 // Deprecated: 此实现不使用 salt，易受彩虹表攻击。
@@ -42,8 +48,7 @@ func NewSha256PasswordEncoder() *Sha256PasswordEncoder {
 
 // Encode 使用 SHA256 算法编码密码
 func (e *Sha256PasswordEncoder) Encode(rawPassword string) string {
-	hash := sha256.Sum256([]byte(rawPassword))
-	return base64.StdEncoding.EncodeToString(hash[:])
+	return sha256Base64(rawPassword)
 }
 
 // Matches 比较编码后的密码
@@ -65,9 +70,7 @@ func NewStandardPasswordEncoder(secret string) *StandardPasswordEncoder {
 
 // Encode 使用密钥对密码进行编码
 func (e *StandardPasswordEncoder) Encode(rawPassword string) string {
-	combined := e.secret + rawPassword
-	hash := sha256.Sum256([]byte(combined))
-	return base64.StdEncoding.EncodeToString(hash[:])
+	return sha256Base64(e.secret + rawPassword)
 }
 
 // Matches 比较编码后的密码

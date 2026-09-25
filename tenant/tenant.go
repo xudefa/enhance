@@ -241,17 +241,21 @@ func (m *tenantManagerImpl) RegisterTenant(tenant *Tenant) {
 	m.tenants[tenant.ID] = tenant
 }
 
+// getTenantLocked 在持有读锁的情况下获取租户，复用公共查找逻辑
+func (m *tenantManagerImpl) getTenantLocked(tenantID string) (*Tenant, error) {
+	tenant, exists := m.tenants[tenantID]
+	if !exists {
+		return nil, fmt.Errorf("tenant %s not found", tenantID)
+	}
+	return tenant, nil
+}
+
 // GetTenant 获取租户。
 func (m *tenantManagerImpl) GetTenant(tenantID string) (*Tenant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	tenant, exists := m.tenants[tenantID]
-	if !exists {
-		return nil, fmt.Errorf("tenant %s not found", tenantID)
-	}
-
-	return tenant, nil
+	return m.getTenantLocked(tenantID)
 }
 
 // SetCurrentTenant 设置当前租户。
@@ -262,9 +266,9 @@ func (m *tenantManagerImpl) SetCurrentTenant(tenantID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	tenant, exists := m.tenants[tenantID]
-	if !exists {
-		return fmt.Errorf("tenant %s not found", tenantID)
+	tenant, err := m.getTenantLocked(tenantID)
+	if err != nil {
+		return err
 	}
 
 	m.currentTenant = tenant
@@ -326,11 +330,20 @@ func (m *tenantMiddlewareImpl) Handle(next http.Handler) http.Handler {
 	})
 }
 
-// IsolateDatabase 数据库隔离。
-func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
+// getTenantForIsolation 获取租户用于隔离操作，统一错误包装
+func (i *tenantIsolationImpl) getTenantForIsolation(tenantID string) (*Tenant, error) {
 	tenant, err := i.manager.GetTenant(tenantID)
 	if err != nil {
-		return "", fmt.Errorf("查询租户 %s 失败: %w", tenantID, err)
+		return nil, fmt.Errorf("查询租户 %s 失败: %w", tenantID, err)
+	}
+	return tenant, nil
+}
+
+// IsolateDatabase 数据库隔离。
+func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
+	tenant, err := i.getTenantForIsolation(tenantID)
+	if err != nil {
+		return "", err
 	}
 
 	if tenant.Database == "" {
@@ -342,9 +355,9 @@ func (i *tenantIsolationImpl) IsolateDatabase(tenantID string) (string, error) {
 
 // IsolateSchema 模式隔离。
 func (i *tenantIsolationImpl) IsolateSchema(tenantID string) (string, error) {
-	_, err := i.manager.GetTenant(tenantID)
+	_, err := i.getTenantForIsolation(tenantID)
 	if err != nil {
-		return "", fmt.Errorf("查询租户 %s 失败: %w", tenantID, err)
+		return "", err
 	}
 
 	return fmt.Sprintf("tenant_%s", tenantID), nil

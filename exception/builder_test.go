@@ -243,8 +243,8 @@ func TestErrorResponseBuilder_EmptyResponse(t *testing.T) {
 	t.Parallel()
 	response := NewErrorResponseBuilder().Build()
 
-	if response.Timestamp != 0 {
-		t.Errorf("expected Timestamp 0 for empty response, got %d", response.Timestamp)
+	if response.Timestamp == 0 {
+		t.Error("expected non-zero Timestamp for response built via NewErrorResponse")
 	}
 }
 

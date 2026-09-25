@@ -253,9 +253,9 @@ func validateNumberRule(rule ValidationRule, value string) error {
 	if value == "" {
 		return nil
 	}
-	num, err := strconv.ParseFloat(value, 64)
+	num, err := parseRuleNumber(value, rule)
 	if err != nil {
-		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+		return err
 	}
 	if rule.Min != nil && num < *rule.Min {
 		return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %f", rule.Field, *rule.Min))
@@ -309,9 +309,9 @@ func validateMinRule(rule ValidationRule, value string) error {
 		return nil
 	}
 	if rule.Min != nil {
-		num, err := strconv.ParseFloat(value, 64)
+		num, err := parseRuleNumber(value, rule)
 		if err != nil {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+			return err
 		}
 		if num < *rule.Min {
 			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at least %f", rule.Field, *rule.Min))
@@ -326,15 +326,24 @@ func validateMaxRule(rule ValidationRule, value string) error {
 		return nil
 	}
 	if rule.Max != nil {
-		num, err := strconv.ParseFloat(value, 64)
+		num, err := parseRuleNumber(value, rule)
 		if err != nil {
-			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+			return err
 		}
 		if num > *rule.Max {
 			return fmt.Errorf("%s", rule.MessageOrDefault("%s must be at most %f", rule.Field, *rule.Max))
 		}
 	}
 	return nil
+}
+
+// parseRuleNumber 解析验证规则中的数值，统一错误处理
+func parseRuleNumber(value string, rule ValidationRule) (float64, error) {
+	num, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s", rule.MessageOrDefault("%s must be a number", rule.Field))
+	}
+	return num, nil
 }
 
 // validateLengthRule 验证长度范围。

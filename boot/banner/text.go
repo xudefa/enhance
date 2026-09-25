@@ -2,7 +2,6 @@ package banner
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -50,21 +49,7 @@ func NewTextBanner(template string, properties map[string]any) Banner {
 //
 // 参数 version 为应用版本号，会自动添加到 properties 中。
 func (b *TextBanner) Print(version string) error {
-	if b.mode == BannerModeOff {
-		return nil
-	}
-
-	text := b.render(version)
-	if b.mode == BannerModeLog {
-		fmt.Printf("[enhance] %s\n", text)
-		return nil
-	}
-
-	_, err := fmt.Fprintln(os.Stdout, text)
-	if err != nil {
-		return fmt.Errorf("failed to print text banner: %w", err)
-	}
-	return nil
+	return printBanner(b.mode, b.render(version), "text banner")
 }
 
 // Mode 返回当前横幅的输出模式。

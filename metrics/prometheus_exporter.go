@@ -49,19 +49,27 @@ func (e *PrometheusExporter) writeMetric(metric Metric) error {
 	}
 }
 
+// writeMetricHeader 写入指标头，出错时包装错误，复用公共模式
+func (e *PrometheusExporter) writeMetricHeader(name, mtype, label string) error {
+	if err := e.writeHeader(name, mtype); err != nil {
+		return fmt.Errorf("写 %s 指标 %s 失败: %w", label, name, err)
+	}
+	return nil
+}
+
 // writeCounter 写入 Counter 指标（Prometheus 要求 counter 名称以 _total 结尾）
 func (e *PrometheusExporter) writeCounter(metric Metric, labels string) error {
 	name := metric.Name + "_total"
-	if err := e.writeHeader(name, "counter"); err != nil {
-		return fmt.Errorf("写 Counter 指标 %s 失败: %w", name, err)
+	if err := e.writeMetricHeader(name, "counter", "Counter"); err != nil {
+		return err
 	}
 	return e.writeLine(name, labels, metric.Value)
 }
 
 // writeGauge 写入 Gauge 指标
 func (e *PrometheusExporter) writeGauge(metric Metric, labels string) error {
-	if err := e.writeHeader(metric.Name, "gauge"); err != nil {
-		return fmt.Errorf("写 Gauge 指标 %s 失败: %w", metric.Name, err)
+	if err := e.writeMetricHeader(metric.Name, "gauge", "Gauge"); err != nil {
+		return err
 	}
 	return e.writeLine(metric.Name, labels, metric.Value)
 }
@@ -70,8 +78,8 @@ func (e *PrometheusExporter) writeGauge(metric Metric, labels string) error {
 //
 // 快照未包含桶边界数据，因此只导出累计桶（le="+Inf"）、总和与计数。
 func (e *PrometheusExporter) writeHistogram(metric Metric, labels string) error {
-	if err := e.writeHeader(metric.Name, "histogram"); err != nil {
-		return fmt.Errorf("写 Histogram 指标 %s 失败: %w", metric.Name, err)
+	if err := e.writeMetricHeader(metric.Name, "histogram", "Histogram"); err != nil {
+		return err
 	}
 	bucketLabels := `{le="+Inf"}`
 	if labels != "" {

@@ -149,27 +149,32 @@ func (b *BaseEventBuilder) Publish(bus EventBus) {
 	bus.Publish(b.Build())
 }
 
+// newTypedEvent 创建指定类型的事件构建器，复用公共模式
+func newTypedEvent(eventType string) *BaseEventBuilder {
+	return NewBaseEventBuilder().Type(eventType).Now()
+}
+
 // ApplicationStartedEvent 创建应用启动事件
 func ApplicationStartedEvent() *BaseEventBuilder {
-	return NewBaseEventBuilder().Type(EventApplicationStarted).Now()
+	return newTypedEvent(EventApplicationStarted)
 }
 
 // ApplicationReadyEvent 创建应用就绪事件
 func ApplicationReadyEvent() *BaseEventBuilder {
-	return NewBaseEventBuilder().Type(EventApplicationReady).Now()
+	return newTypedEvent(EventApplicationReady)
 }
 
 // ApplicationStoppedEvent 创建应用停止事件
 func ApplicationStoppedEvent() *BaseEventBuilder {
-	return NewBaseEventBuilder().Type(EventApplicationStopped).Now()
+	return newTypedEvent(EventApplicationStopped)
 }
 
 // ContextRefreshedEvent 创建上下文刷新事件
 func ContextRefreshedEvent() *BaseEventBuilder {
-	return NewBaseEventBuilder().Type(EventContextRefreshed).Now()
+	return newTypedEvent(EventContextRefreshed)
 }
 
 // EnvironmentPreparedEvent 创建环境准备事件
 func EnvironmentPreparedEvent() *BaseEventBuilder {
-	return NewBaseEventBuilder().Type(EventEnvironmentPrepared).Now()
+	return newTypedEvent(EventEnvironmentPrepared)
 }

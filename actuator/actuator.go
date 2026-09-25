@@ -15,6 +15,14 @@ import (
 	"github.com/xudefa/enhance/metrics"
 )
 
+// writeJSONResponse 写入 JSON 响应，出错时返回 500，复用公共模式
+func writeJSONResponse(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // Actuator 运维端点管理器
 //
 // 提供多种运维端点，包括健康检查、指标收集、环境信息、Bean 列表等。
@@ -81,11 +89,7 @@ func (a *Actuator) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := a.metricsRegistry.Collect()
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(m); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	writeJSONResponse(w, m)
 }
 
 // envPropertyItem 环境属性键值项。
@@ -115,11 +119,7 @@ func (a *Actuator) EnvHandler(w http.ResponseWriter, r *http.Request) {
 
 	sourceInfoList := a.buildEnvSourceInfoList(env.GetPropertySources())
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(sourceInfoList); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	writeJSONResponse(w, sourceInfoList)
 }
 
 // buildEnvSourceInfoList 构建环境属性源信息列表。
@@ -173,13 +173,7 @@ func (a *Actuator) BeansHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]any{
-		"beans": beans,
-	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	writeJSONResponse(w, map[string]any{"beans": beans})
 }
 
 // SetHealthAggregator 设置健康检查聚合器
@@ -258,11 +252,7 @@ func (a *Actuator) InfoHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(appInfo); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	writeJSONResponse(w, appInfo)
 }
 
 // PrometheusHandler Prometheus 指标 HTTP 处理器

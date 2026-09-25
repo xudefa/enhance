@@ -209,14 +209,7 @@ func (r *MemoryRegistry) Register(ctx context.Context, info InstanceInfo) error 
 	defer r.mu.Unlock()
 
 	r.instances[info.ServiceName] = append(r.instances[info.ServiceName], info)
-
-	// 通知watchers
-	for _, ch := range r.watchers[info.ServiceName] {
-		select {
-		case ch <- r.instances[info.ServiceName]:
-		default:
-		}
-	}
+	r.notifyWatchers(info.ServiceName)
 
 	return nil
 }
@@ -233,16 +226,20 @@ func (r *MemoryRegistry) Deregister(ctx context.Context, info InstanceInfo) erro
 			break
 		}
 	}
+	r.notifyWatchers(info.ServiceName)
 
-	// 通知watchers
-	for _, ch := range r.watchers[info.ServiceName] {
+	return nil
+}
+
+// notifyWatchers 通知订阅指定服务的 watchers，调用方须持有 r.mu 锁
+func (r *MemoryRegistry) notifyWatchers(serviceName string) {
+	current := r.instances[serviceName]
+	for _, ch := range r.watchers[serviceName] {
 		select {
-		case ch <- r.instances[info.ServiceName]:
+		case ch <- current:
 		default:
 		}
 	}
-
-	return nil
 }
 
 // Discover 发现服务的健康实例列表。

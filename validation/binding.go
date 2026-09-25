@@ -3,6 +3,7 @@ package validation
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -16,12 +17,7 @@ type DefaultBinder struct {
 
 // NewDefaultBinder 创建默认绑定器实例
 func NewDefaultBinder(validator Validator) *DefaultBinder {
-	if validator == nil {
-		validator = NewTagValidator()
-	}
-	return &DefaultBinder{
-		Validator: validator,
-	}
+	return &DefaultBinder{Validator: defaultValidatorOrDefault(validator)}
 }
 
 // Bind 将请求参数绑定到目标对象，根据请求的内容类型选择适当的绑定方式
@@ -53,24 +49,12 @@ func (b *DefaultBinder) Bind(req *http.Request, obj any) error {
 
 // bindJSON 从JSON请求体绑定数据到对象
 func (b *DefaultBinder) bindJSON(req *http.Request, obj any) error {
-	decoder := json.NewDecoder(req.Body)
-	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
-	err := decoder.Decode(obj)
-	if err != nil {
-		return fmt.Errorf("failed to decode JSON request body: %w", err)
-	}
-
-	// 验证绑定的对象
-	return b.Validator.Validate(obj)
+	return decodeAndValidateJSON(req.Body, obj, b.Validator)
 }
 
 // bindForm 从表单数据绑定到对象
 func (b *DefaultBinder) bindForm(req *http.Request, obj any) error {
-	if err := req.ParseForm(); err != nil {
-		return fmt.Errorf("failed to parse form request: %w", err)
-	}
-
-	return b.bindQuery(req.Form, obj)
+	return parseAndBindForm(req, obj, b.Validator)
 }
 
 // bindQuery 从查询参数绑定数据到对象
@@ -172,6 +156,32 @@ func extractFieldName(fieldType reflect.StructField) string {
 	return fieldType.Name
 }
 
+// decodeAndValidateJSON 从 io.Reader 解码 JSON 并验证，复用公共逻辑
+func decodeAndValidateJSON(body io.Reader, obj any, v Validator) error {
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(obj); err != nil {
+		return fmt.Errorf("failed to decode JSON request body: %w", err)
+	}
+	return v.Validate(obj)
+}
+
+// parseAndBindForm 解析表单并绑定字段值，复用公共逻辑
+func parseAndBindForm(req *http.Request, obj any, v Validator) error {
+	if err := req.ParseForm(); err != nil {
+		return fmt.Errorf("failed to parse form request: %w", err)
+	}
+	return bindFieldsFromValues(req.Form, obj, v)
+}
+
+// defaultValidatorOrDefault 返回传入的验证器，若为 nil 则返回默认 TagValidator
+func defaultValidatorOrDefault(v Validator) Validator {
+	if v == nil {
+		return NewTagValidator()
+	}
+	return v
+}
+
 // JSONBinder 专门用于JSON绑定的绑定器
 type JSONBinder struct {
 	Validator Validator
@@ -179,25 +189,12 @@ type JSONBinder struct {
 
 // NewJSONBinder 创建JSON绑定器实例
 func NewJSONBinder(validator Validator) *JSONBinder {
-	if validator == nil {
-		validator = NewTagValidator()
-	}
-	return &JSONBinder{
-		Validator: validator,
-	}
+	return &JSONBinder{Validator: defaultValidatorOrDefault(validator)}
 }
 
 // BindJSON 仅从JSON请求体绑定数据
 func (j *JSONBinder) BindJSON(req *http.Request, obj any) error {
-	decoder := json.NewDecoder(req.Body)
-	decoder.DisallowUnknownFields() // 严格模式，不允许未知字段
-	err := decoder.Decode(obj)
-	if err != nil {
-		return fmt.Errorf("failed to decode JSON request body: %w", err)
-	}
-
-	// 验证绑定的对象
-	return j.Validator.Validate(obj)
+	return decodeAndValidateJSON(req.Body, obj, j.Validator)
 }
 
 // FormBinder 专门用于表单绑定的绑定器
@@ -207,21 +204,12 @@ type FormBinder struct {
 
 // NewFormBinder 创建表单绑定器实例
 func NewFormBinder(validator Validator) *FormBinder {
-	if validator == nil {
-		validator = NewTagValidator()
-	}
-	return &FormBinder{
-		Validator: validator,
-	}
+	return &FormBinder{Validator: defaultValidatorOrDefault(validator)}
 }
 
 // BindForm 仅从表单数据绑定
 func (f *FormBinder) BindForm(req *http.Request, obj any) error {
-	if err := req.ParseForm(); err != nil {
-		return fmt.Errorf("failed to parse form request: %w", err)
-	}
-
-	return bindFieldsFromValues(req.Form, obj, f.Validator)
+	return parseAndBindForm(req, obj, f.Validator)
 }
 
 // QueryBinder 专门用于查询参数绑定的绑定器
@@ -231,20 +219,10 @@ type QueryBinder struct {
 
 // NewQueryBinder 创建查询参数绑定器实例
 func NewQueryBinder(validator Validator) *QueryBinder {
-	if validator == nil {
-		validator = NewTagValidator()
-	}
-	return &QueryBinder{
-		Validator: validator,
-	}
+	return &QueryBinder{Validator: defaultValidatorOrDefault(validator)}
 }
 
 // BindQuery 仅从查询参数绑定
 func (q *QueryBinder) BindQuery(req *http.Request, obj any) error {
-	return q.bindQuery(req.URL.Query(), obj)
-}
-
-// bindQuery 内部方法，从查询参数绑定数据到对象
-func (q *QueryBinder) bindQuery(values map[string][]string, obj any) error {
-	return bindFieldsFromValues(values, obj, q.Validator)
+	return bindFieldsFromValues(req.URL.Query(), obj, q.Validator)
 }

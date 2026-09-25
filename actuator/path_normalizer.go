@@ -1,6 +1,8 @@
 package actuator
 
-import "strings"
+import (
+	"strings"
+)
 
 // PathNormalizer 路径标准化工具
 type PathNormalizer struct{}
@@ -11,22 +13,37 @@ func (PathNormalizer) NormalizePath(path string) string {
 		return "/"
 	}
 
-	// 确保路径以 / 开头
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	path = EnsureLeadingSlash(path)
 
-	// 移除末尾的 / (除非路径就是 /)
 	if len(path) > 1 && strings.HasSuffix(path, "/") {
 		path = path[:len(path)-1]
 	}
 
-	// 将连续的 // 替换为单个 /
-	for strings.Contains(path, "//") {
-		path = strings.ReplaceAll(path, "//", "/")
-	}
+	path = collapseDoubleSlashes(path)
 
 	return path
+}
+
+// collapseDoubleSlashes 将连续的 // 替换为单个 /，一次遍历完成
+func collapseDoubleSlashes(path string) string {
+	if !strings.Contains(path, "//") {
+		return path
+	}
+	var b strings.Builder
+	b.Grow(len(path))
+	prevSlash := false
+	for _, r := range path {
+		if r == '/' {
+			if prevSlash {
+				continue
+			}
+			prevSlash = true
+		} else {
+			prevSlash = false
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // EnsureLeadingSlash 确保路径以 / 开头

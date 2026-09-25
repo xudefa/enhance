@@ -9,6 +9,15 @@ import (
 	"sync"
 )
 
+// marshalAuditEvent 将审计事件序列化为 JSON，复用公共逻辑
+func marshalAuditEvent(event Event) ([]byte, error) {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return nil, fmt.Errorf("序列化事件失败: %w", err)
+	}
+	return payload, nil
+}
+
 // consoleWriterImpl EventWriter 接口的控制台实现。
 type consoleWriterImpl struct {
 	mu     sync.Mutex
@@ -34,9 +43,9 @@ func (w *consoleWriterImpl) Write(event Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	payload, err := json.Marshal(event)
+	payload, err := marshalAuditEvent(event)
 	if err != nil {
-		return fmt.Errorf("序列化事件失败: %w", err)
+		return err
 	}
 
 	if _, err = fmt.Fprintln(w.output, string(payload)); err != nil {
@@ -70,9 +79,9 @@ func (w *fileWriterImpl) Write(event Event) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	payload, err := json.Marshal(event)
+	payload, err := marshalAuditEvent(event)
 	if err != nil {
-		return fmt.Errorf("序列化事件失败: %w", err)
+		return err
 	}
 
 	if _, err = w.writer.Write(payload); err != nil {

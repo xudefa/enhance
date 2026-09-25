@@ -28,24 +28,18 @@ func DefaultErrorHandler(c any, err error) {
 
 	switch ctx := c.(type) {
 	case http.ResponseWriter:
+		jsonBytes := buildValidationJSONError(err)
 		ctx.Header().Set("Content-Type", "application/json")
 		ctx.WriteHeader(http.StatusBadRequest)
-		resp := &ErrorResponse{
-			Code:    http.StatusBadRequest,
-			Message: err.Error(),
-		}
-		if jsonBytes, jsonErr := resp.ToJSON(); jsonErr == nil {
+		if jsonBytes != nil {
 			_, _ = ctx.Write(jsonBytes)
 		}
 
 	case ResponseWriter:
-		ctx.SetStatusCode(http.StatusBadRequest)
+		jsonBytes := buildValidationJSONError(err)
 		ctx.SetHeader("Content-Type", "application/json")
-		resp := &ErrorResponse{
-			Code:    http.StatusBadRequest,
-			Message: err.Error(),
-		}
-		if jsonBytes, jsonErr := resp.ToJSON(); jsonErr == nil {
+		ctx.SetStatusCode(http.StatusBadRequest)
+		if jsonBytes != nil {
 			_ = ctx.Write(jsonBytes)
 		}
 
@@ -58,6 +52,19 @@ func DefaultErrorHandler(c any, err error) {
 			handler(c, err)
 		}
 	}
+}
+
+// buildValidationJSONError 构建验证错误的 JSON 字节，消除 http.ResponseWriter/ResponseWriter 重复
+func buildValidationJSONError(err error) []byte {
+	resp := &ErrorResponse{
+		Code:    http.StatusBadRequest,
+		Message: err.Error(),
+	}
+	jsonBytes, jsonErr := resp.ToJSON()
+	if jsonErr != nil {
+		return nil
+	}
+	return jsonBytes
 }
 
 func findErrorHandlerMethod(c any) func(any, error) {
@@ -97,25 +104,21 @@ func NewValidateMiddleware(config *MiddlewareConfig) ValidateMiddleware {
 		}
 
 		var err error
+		var wrapMsg string
 		if groupedValidator, ok := cfg.Validator.(*GroupedTagValidator); ok && len(cfg.Groups) > 0 {
 			err = groupedValidator.ValidateWithGroups(obj, cfg.Groups...)
-			if err != nil {
-				if cfg.ErrorHandler != nil {
-					cfg.ErrorHandler(c, err)
-				}
-				return fmt.Errorf("validate with groups: %w", err)
-			}
-			return nil
+			wrapMsg = "validate with groups"
+		} else {
+			err = cfg.Validator.Validate(obj)
+			wrapMsg = "validate"
 		}
 
-		err = cfg.Validator.Validate(obj)
 		if err != nil {
 			if cfg.ErrorHandler != nil {
 				cfg.ErrorHandler(c, err)
 			}
-			return fmt.Errorf("validate: %w", err)
+			return fmt.Errorf("%s: %w", wrapMsg, err)
 		}
-
 		return nil
 	}
 }
