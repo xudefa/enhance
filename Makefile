@@ -380,11 +380,11 @@ push-tags: ## 推送 tags 到远端
 
 _push-code: ## [内部] 推送代码到远端
 	@echo "=== 推送代码到 $(REMOTE) ==="
-	@git push $(REMOTE) main && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败，流程已中断"; echo "请手动执行: git push $(REMOTE) main"; exit 1; }
+	@git push $(REMOTE) master && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败，流程已中断"; echo "请手动执行: git push $(REMOTE) master"; exit 1; }
 
 push-code: ## 推送代码到远端
 	@echo "=== 推送代码到 $(REMOTE) ==="
-	@git push $(REMOTE) main && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败"; echo "请手动执行: git push $(REMOTE) main"; exit 1; }
+	@git push $(REMOTE) master && echo "✅ 代码推送完成" || { echo "❌ [错误] 推送代码失败"; echo "请手动执行: git push $(REMOTE) master"; exit 1; }
 
 create-remote-tags: create-tags push-tags ## 创建并推送 tags
 
