@@ -5,7 +5,7 @@ go 1.25.12
 require (
 	github.com/gofiber/fiber/v2 v2.52.0
 	github.com/xudefa/enhance v0.0.8
-	github.com/xudefa/enhance/starter/fiber v0.0.8
+	github.com/xudefa/enhance/starter/fiber v0.0.9
 )
 
 require (

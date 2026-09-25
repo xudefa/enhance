@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/go-playground/validator/v10 v10.16.0
-	github.com/xudefa/enhance v0.0.8
-	github.com/xudefa/enhance/starter/validator v0.0.8
+	github.com/xudefa/enhance v0.0.9
+	github.com/xudefa/enhance/starter/validator v0.0.9
 )
 
 require (

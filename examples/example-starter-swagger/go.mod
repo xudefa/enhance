@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-swagger
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.8
-	github.com/xudefa/enhance/starter/swagger v0.0.8
+	github.com/xudefa/enhance v0.0.9
+	github.com/xudefa/enhance/starter/swagger v0.0.9
 )
 
 require (
