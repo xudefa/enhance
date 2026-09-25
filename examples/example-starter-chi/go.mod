@@ -4,8 +4,8 @@ go 1.25.12
 
 require (
 	github.com/go-chi/chi/v5 v5.0.12
-	github.com/xudefa/enhance v0.0.7
-	github.com/xudefa/enhance/starter/chi v0.0.7
+	github.com/xudefa/enhance v0.0.8
+	github.com/xudefa/enhance/starter/chi v0.0.8
 )
 
 replace (

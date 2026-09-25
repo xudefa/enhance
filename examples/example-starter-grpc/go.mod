@@ -3,8 +3,8 @@ module github.com/xudefa/enhance/examples/example-starter-grpc
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.7
-	github.com/xudefa/enhance/starter/grpc v0.0.7
+	github.com/xudefa/enhance v0.0.8
+	github.com/xudefa/enhance/starter/grpc v0.0.8
 	google.golang.org/grpc v1.62.1
 )
 
