@@ -3,7 +3,7 @@ module github.com/xudefa/enhance/examples/example-enhance-kafka-otel
 go 1.25.12
 
 require (
-	github.com/xudefa/enhance v0.0.8
+	github.com/xudefa/enhance v0.0.9
 	github.com/xudefa/enhance/starter/kafka v0.0.9
 	github.com/xudefa/enhance/starter/otel v0.0.9
 	github.com/xudefa/enhance/starter/redis v0.0.9
