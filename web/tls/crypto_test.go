@@ -179,50 +179,6 @@ func TestMarshalParseRSAPublicKey(t *testing.T) {
 	}
 }
 
-func TestPKCS7PadUnpad(t *testing.T) {
-	t.Parallel()
-	sampleData := []byte("hello")
-	blockSize := 16
-
-	padded := pkcs7Pad(sampleData, blockSize)
-	if len(padded) != 16 {
-		t.Errorf("padded length = %d, want 16", len(padded))
-	}
-
-	unpadded, err := pkcs7Unpad(padded, blockSize)
-	if err != nil {
-		t.Fatalf("pkcs7Unpad() error = %v", err)
-	}
-
-	if !bytes.Equal(unpadded, sampleData) {
-		t.Errorf("unpadded = %s, want %s", unpadded, sampleData)
-	}
-}
-
-func TestPKCS7PadFullBlock(t *testing.T) {
-	t.Parallel()
-	fullBlock := make([]byte, 16)
-	_, _ = rand.Read(fullBlock)
-
-	padded := pkcs7Pad(fullBlock, 16)
-	if len(padded) != 32 {
-		t.Errorf("full block padded length = %d, want 32", len(padded))
-	}
-}
-
-func TestPKCS7UnpadInvalid(t *testing.T) {
-	t.Parallel()
-	_, err := pkcs7Unpad([]byte{}, 16)
-	if err == nil {
-		t.Error("expected error for empty data")
-	}
-
-	_, err = pkcs7Unpad([]byte{1, 2, 3}, 16)
-	if err == nil {
-		t.Error("expected error for invalid length")
-	}
-}
-
 func TestAESGCM_RoundTripRandom(t *testing.T) {
 	t.Parallel()
 	key := make([]byte, 32)

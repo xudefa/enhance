@@ -205,7 +205,10 @@ func (s *smtpSender) buildMultipartMessage(msg *Message, headers map[string]stri
 		"Content-Transfer-Encoding": {"7bit"},
 	})
 	if err == nil {
-		_, _ = part.Write([]byte(bodyContent))
+		if _, writeErr := part.Write([]byte(bodyContent)); writeErr != nil {
+			_ = mp.Close()
+			return ""
+		}
 	}
 
 	for _, a := range msg.Attachments {
@@ -218,10 +221,14 @@ func (s *smtpSender) buildMultipartMessage(msg *Message, headers map[string]stri
 		if err != nil {
 			continue
 		}
-		_, _ = part.Write([]byte(encoded))
+		if _, writeErr := part.Write([]byte(encoded)); writeErr != nil {
+			continue
+		}
 	}
 
-	_ = mp.Close()
+	if err := mp.Close(); err != nil {
+		return ""
+	}
 
 	headersBuf.WriteString(bodyBuf.String())
 	return headersBuf.String()

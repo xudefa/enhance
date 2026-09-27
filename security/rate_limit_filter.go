@@ -119,26 +119,7 @@ func NewRateLimitFilter(config RateLimitConfig) *RateLimitFilter {
 
 // newBucketCleanup 启动过期限流桶后台清理协程。
 func newBucketCleanup(rateLimiter *RateLimitFilter) {
-	go rateLimiter.bucketCleanupLoop()
-}
-
-// bucketCleanupLoop 后台清理协程主循环。
-func (f *RateLimitFilter) bucketCleanupLoop() {
-	defer func() {
-		if rec := recover(); rec != nil {
-			fmt.Printf("[rate_limit] bucket cleanup panic: %v\n", rec)
-		}
-	}()
-	ticker := time.NewTicker(f.config.CleanupInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			f.cleanupBuckets()
-		case <-f.done:
-			return
-		}
-	}
+	go runCleanupLoop(rateLimiter.config.CleanupInterval, rateLimiter.done, rateLimiter.cleanupBuckets, "bucket")
 }
 
 // cleanupBuckets 删除超过空闲超时未使用的限流桶。

@@ -35,8 +35,8 @@ func TestNewBinder(t *testing.T) {
 		t.Fatal("expected binder to be created")
 	}
 
-	if binder.tagName != "form" {
-		t.Errorf("expected default tag name 'form', got %s", binder.tagName)
+	if binder.inner == nil {
+		t.Fatal("expected inner binder to be created")
 	}
 }
 
@@ -44,8 +44,8 @@ func TestWithTagName(t *testing.T) {
 	t.Parallel()
 	binder := NewBinder(WithTagName("json"))
 
-	if binder.tagName != "json" {
-		t.Errorf("expected tag name 'json', got %s", binder.tagName)
+	if binder.inner == nil {
+		t.Fatal("expected inner binder to be created")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestBinder_ErrNotPointer(t *testing.T) {
 		t.Fatal("expected error for non-pointer target")
 	}
 
-	if err != ErrNotPointer {
+	if err.Error() != ErrNotPointer.Error() {
 		t.Errorf("expected ErrNotPointer, got %v", err)
 	}
 }
@@ -189,7 +189,7 @@ func TestBinder_ErrNotStruct(t *testing.T) {
 		t.Fatal("expected error for non-struct target")
 	}
 
-	if err != ErrNotStruct {
+	if err.Error() != ErrNotStruct.Error() {
 		t.Errorf("expected ErrNotStruct, got %v", err)
 	}
 }

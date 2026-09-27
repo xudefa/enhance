@@ -10,7 +10,9 @@ import (
 // writeJSON 写入 JSON 响应，复用公共模式
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // getPathID 获取路径参数 ID，回退到查询参数，复用公共模式

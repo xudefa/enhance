@@ -6,6 +6,27 @@ import (
 	"time"
 )
 
+// runCleanupLoop 运行限流器后台清理循环的公共逻辑。
+// 每隔 interval 调用 cleanup 函数，直到 done 通道关闭。
+// 捕获 panic 并打印日志，防止清理协程崩溃。
+func runCleanupLoop(interval time.Duration, done chan struct{}, cleanup func(), label string) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			fmt.Printf("[rate_limit] %s cleanup panic: %v\n", label, rec)
+		}
+	}()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			cleanup()
+		case <-done:
+			return
+		}
+	}
+}
+
 // LeakyBucketRateLimiter 漏桶限流器
 type LeakyBucketRateLimiter struct {
 	capacity  int
@@ -40,25 +61,7 @@ func NewLeakyBucketRateLimiter(capacity int, rate time.Duration) *LeakyBucketRat
 }
 
 func newLeakyBucketCleanup(limiter *LeakyBucketRateLimiter) {
-	go limiter.leakyBucketCleanupLoop()
-}
-
-func (r *LeakyBucketRateLimiter) leakyBucketCleanupLoop() {
-	defer func() {
-		if rec := recover(); rec != nil {
-			fmt.Printf("[rate_limit] leaky bucket cleanup panic: %v\n", rec)
-		}
-	}()
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			r.Cleanup()
-		case <-r.done:
-			return
-		}
-	}
+	go runCleanupLoop(1*time.Minute, limiter.done, limiter.Cleanup, "leaky bucket")
 }
 
 // Allow 检查指定 key 的请求是否允许通过（漏桶算法）。
@@ -157,25 +160,7 @@ func NewFixedWindowCounterRateLimiter(windowSize time.Duration, maxRequests int)
 }
 
 func newFixedWindowCleanup(limiter *FixedWindowCounterRateLimiter) {
-	go limiter.fixedWindowCleanupLoop()
-}
-
-func (r *FixedWindowCounterRateLimiter) fixedWindowCleanupLoop() {
-	defer func() {
-		if rec := recover(); rec != nil {
-			fmt.Printf("[rate_limit] fixed window cleanup panic: %v\n", rec)
-		}
-	}()
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			r.Cleanup()
-		case <-r.done:
-			return
-		}
-	}
+	go runCleanupLoop(1*time.Minute, limiter.done, limiter.Cleanup, "fixed window")
 }
 
 // Allow 检查指定 key 的请求是否允许通过（固定窗口计数算法）。

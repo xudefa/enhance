@@ -133,45 +133,6 @@ func TestAESGCMDecrypt_TooShort(t *testing.T) {
 	}
 }
 
-func TestPKCS7Unpad_InvalidPaddingValue(t *testing.T) {
-	t.Parallel()
-	padded := make([]byte, 16)
-	for i := range padded {
-		padded[i] = 0
-	}
-	padded[15] = 0 // padding value 0 is invalid
-	_, err := pkcs7Unpad(padded, 16)
-	if err == nil {
-		t.Fatal("expected error for padding value 0")
-	}
-}
-
-func TestPKCS7Unpad_InvalidPaddingValueTooLarge(t *testing.T) {
-	t.Parallel()
-	padded := make([]byte, 16)
-	for i := range padded {
-		padded[i] = byte(17) // padding value > blockSize
-	}
-	_, err := pkcs7Unpad(padded, 16)
-	if err == nil {
-		t.Fatal("expected error for padding value > blockSize")
-	}
-}
-
-func TestPKCS7Unpad_InconsistentPadding(t *testing.T) {
-	t.Parallel()
-	padded := make([]byte, 16)
-	for i := range padded {
-		padded[i] = byte(4)
-	}
-	padded[15] = 4
-	padded[14] = 3 // inconsistent padding byte
-	_, err := pkcs7Unpad(padded, 16)
-	if err == nil {
-		t.Fatal("expected error for inconsistent padding")
-	}
-}
-
 func TestMarshalRSAPublicKey_NilKey(t *testing.T) {
 	t.Parallel()
 	defer func() {

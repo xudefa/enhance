@@ -26,7 +26,7 @@ import (
 func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("tls: load x509 key pair failed: %w", err)
+		return nil, fmt.Errorf("https: load x509 key pair failed: %w", err)
 	}
 
 	return &tls.Config{

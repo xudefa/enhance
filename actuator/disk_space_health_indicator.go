@@ -79,7 +79,7 @@ func (d *DiskSpaceHealthIndicator) buildHealthResult(used, total, free uint64, u
 	healthResult.Details["path"] = d.path
 	healthResult.Details["total_bytes"] = total
 	healthResult.Details["used_bytes"] = used
-	healthResult.Details["free_bytes"] = total - used
+	healthResult.Details["free_bytes"] = free
 	healthResult.Details["usage_percent"] = fmt.Sprintf("%.2f%%", usagePercent*100)
 
 	if usagePercent > d.threshold {

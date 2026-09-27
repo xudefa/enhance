@@ -81,19 +81,19 @@ func setFieldValue(field reflect.Value, value string) error {
 	case reflect.String:
 		field.SetString(value)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		intVal, err := strconv.ParseInt(value, 10, 64)
+		intVal, err := strconv.ParseInt(value, 10, field.Type().Bits())
 		if err != nil {
 			return fmt.Errorf("parse int value: %w", err)
 		}
 		field.SetInt(intVal)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		uintVal, err := strconv.ParseUint(value, 10, 64)
+		uintVal, err := strconv.ParseUint(value, 10, field.Type().Bits())
 		if err != nil {
 			return fmt.Errorf("parse uint value: %w", err)
 		}
 		field.SetUint(uintVal)
 	case reflect.Float32, reflect.Float64:
-		floatVal, err := strconv.ParseFloat(value, 64)
+		floatVal, err := strconv.ParseFloat(value, field.Type().Bits())
 		if err != nil {
 			return fmt.Errorf("parse float value: %w", err)
 		}

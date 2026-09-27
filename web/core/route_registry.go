@@ -188,7 +188,9 @@ func writeHandlerResult(w http.ResponseWriter, results []reflect.Value) {
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(handlerResult.Interface())
+		if err := json.NewEncoder(w).Encode(handlerResult.Interface()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 

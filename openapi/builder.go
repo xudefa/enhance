@@ -127,7 +127,9 @@ func (b *DocumentBuilder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_, _ = w.Write(jsonBytes)
+	if _, err := w.Write(jsonBytes); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // extractBasePath 提取基础路径

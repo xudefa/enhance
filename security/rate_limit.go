@@ -71,25 +71,7 @@ func (r *SlidingWindowRateLimiter) getShard(key string) *slidingWindowShard {
 }
 
 func newSlidingWindowCleanup(limiter *SlidingWindowRateLimiter) {
-	go limiter.slidingWindowCleanupLoop()
-}
-
-func (r *SlidingWindowRateLimiter) slidingWindowCleanupLoop() {
-	defer func() {
-		if rec := recover(); rec != nil {
-			fmt.Printf("[rate_limit] sliding window cleanup panic: %v\n", rec)
-		}
-	}()
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			r.Cleanup()
-		case <-r.done:
-			return
-		}
-	}
+	go runCleanupLoop(1*time.Minute, limiter.done, limiter.Cleanup, "sliding window")
 }
 
 // Allow 检查指定 key 的请求是否允许通过（滑动窗口算法）。
